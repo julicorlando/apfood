@@ -247,3 +247,96 @@ def test_websocket_com_jwt(loja, operador):
 
     assert async_to_sync(conectar)(str(AccessToken.for_user(operador))) is True
     assert async_to_sync(conectar)("invalido") is False
+
+
+# --- NF-e modelo 55 -----------------------------------------------------------
+DEST = {"documento": "11.222.333/0001-81", "nome": "Empresa Cliente Ltda", "ie": "110042490114",
+        "logradouro": "Av. Paulista", "numero": "1000", "bairro": "Bela Vista", "municipio": "São Paulo",
+        "uf": "SP", "cep": "01310-100", "email": "fin@cliente.com"}
+
+
+def test_nfe_55_assincrona_com_destinatario(loja_fiscal, cardapio, operador, provedor,
+                                            django_capture_on_commit_callbacks):
+    loja_fiscal.uf = "SP"
+    loja_fiscal.save()
+    caixa.abrir_turno(operador, loja_fiscal, 0)
+    p = venda(loja_fiscal, cardapio, operador)
+    ps.registrar_pagamento(usuario=operador, pedido=p, forma=FormaPagamento.PIX, valor_centavos=1400)
+    provedor.rotas[("POST", "/v2/nfe")] = (202, {"status": "processando_autorizacao"})
+    with django_capture_on_commit_callbacks(execute=True):
+        nota = fiscal.emitir_nfe(p, {**DEST, "uf": "RJ"})  # outra UF → CFOP interestadual
+    assert nota.modelo == "NFE" and nota.status == "PROCESSANDO"
+    enviado = json.loads(provedor.chamadas[-1].content)
+    assert "/v2/nfe" in provedor.chamadas[-1].url.path and "nfce" not in provedor.chamadas[-1].url.path
+    assert enviado["cnpj_destinatario"] == "11222333000181" and enviado["local_destino"] == "2"
+    assert enviado["indicador_inscricao_estadual_destinatario"] == "1"
+    assert {i["cfop"] for i in enviado["items"]} == {"6102"}
+    # a tarefa de consulta acompanha até autorizar
+    provedor.rotas[("GET", "/v2/nfe/")] = (200, {"status": "autorizado", "numero": "88", "serie": "1",
+                                                 "chave_nfe": "NFe" + "5" * 44, "caminho_danfe": "/d.pdf"})
+    from django.utils import timezone
+
+    Tarefa.objects.filter(tipo="fiscal.consultar").update(executar_em=timezone.now())
+    processar_lote()
+    nota.refresh_from_db()
+    assert nota.status == "AUTORIZADA" and nota.numero == 88 and nota.url_danfe.endswith("/d.pdf")
+    with pytest.raises(Exception, match="já tem nota"):
+        fiscal.emitir_nfe(p, DEST)
+
+
+def test_nfe_valida_destinatario(loja_fiscal, cardapio, operador, provedor):
+    caixa.abrir_turno(operador, loja_fiscal, 0)
+    p = venda(loja_fiscal, cardapio, operador)
+    ps.registrar_pagamento(usuario=operador, pedido=p, forma=FormaPagamento.PIX, valor_centavos=1400)
+    with pytest.raises(Exception, match="municipio"):
+        fiscal.emitir_nfe(p, {**DEST, "municipio": ""})
+    with pytest.raises(Exception, match="inválido"):
+        fiscal.emitir_nfe(p, {**DEST, "documento": "123"})
+
+
+def test_sat_vedado():
+    from django.core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError, match="SAT"):
+        ConfiguracaoFiscal(modelo_padrao="SAT").clean()
+
+
+# --- geocodificação -----------------------------------------------------------
+def test_taxa_por_raio_geocodificando_endereco(loja, cardapio, provedor):
+    from django.core.cache import cache
+
+    from apps.clientes.services import calcular_taxa_entrega
+
+    cache.clear()
+    integracao(loja, "MAPAS", "nominatim", {}, {"email": "contato@loja.com"})
+    # loja em -23.55,-46.63; endereço a ~2 km → faixa "Até 5 km" (R$ 8,00)
+    provedor.rotas[("GET", "/search")] = (200, [{"lat": "-23.5680", "lon": "-46.6300"}])
+    end = {"logradouro": "Rua Vergueiro", "numero": "100", "bairro": "Liberdade"}
+    zona, dist = calcular_taxa_entrega(loja, bairro="Liberdade", endereco=end)
+    assert zona.taxa_centavos == 800 and 1.5 < dist < 2.5
+    assert end["latitude"] == -23.568 and "User-Agent" in provedor.chamadas[-1].headers
+    assert "contato@loja.com" in provedor.chamadas[-1].headers["User-Agent"]
+    n = len(provedor.chamadas)
+    calcular_taxa_entrega(loja, bairro="Liberdade", endereco=dict(end, latitude=None, longitude=None))
+    assert len(provedor.chamadas) == n  # cache: não consulta de novo
+    # bairro cadastrado tem prioridade e nem geocodifica
+    zona, _ = calcular_taxa_entrega(loja, bairro="Centro", endereco={"logradouro": "Rua X", "numero": "1"})
+    assert zona.taxa_centavos == 500 and len(provedor.chamadas) == n
+
+
+def test_sem_integracao_de_mapas_fora_da_area(loja, cardapio):
+    from apps.clientes.services import calcular_taxa_entrega
+    from apps.core.excecoes import ErroNegocio
+
+    with pytest.raises(ErroNegocio, match="fora da área"):
+        calcular_taxa_entrega(loja, bairro="Longe", endereco={"logradouro": "Rua Y", "numero": "2"})
+
+
+# --- versão do PDV ------------------------------------------------------------
+def test_versao_do_pdv(operador, settings):
+    settings.APFOOD = {**settings.APFOOD, "PDV_VERSAO": "0.3.0", "PDV_URL": "https://x/ApFoodPDV.exe",
+                       "PDV_SHA256": "ABC", "PDV_OBRIGATORIA_ATE": ""}
+    api = APIClient()
+    api.force_authenticate(operador)
+    r = api.get("/api/pdv/versao/").json()
+    assert r == {"versao": "0.3.0", "url": "https://x/ApFoodPDV.exe", "sha256": "abc", "obrigatoria_ate": ""}

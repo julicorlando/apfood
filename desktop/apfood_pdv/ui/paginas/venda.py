@@ -370,7 +370,9 @@ class PaginaVenda(QWidget):
         if not self.bairro.text().strip():
             return
         try:
-            r = self.ctx.api.post("/api/taxa-entrega/", {"bairro": self.bairro.text().strip()})
+            r = self.ctx.api.post("/api/taxa-entrega/", {
+                "bairro": self.bairro.text().strip(), "logradouro": self.logradouro.text().strip(),
+                "numero": self.numero.text().strip()})
             self.taxa.setText(reais(r["taxa_centavos"]).replace("R$ ", ""))
             self.ctx.status(f"Zona {r['nome']} — taxa {reais(r['taxa_centavos'])}")
         except SemConexao:

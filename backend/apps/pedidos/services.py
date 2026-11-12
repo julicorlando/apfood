@@ -247,8 +247,9 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
         else:
             from apps.clientes.services import calcular_taxa_entrega
 
+            end = dict(end)
             zona, _ = calcular_taxa_entrega(
-                loja, bairro=end.get("bairro"), latitude=end.get("latitude"), longitude=end.get("longitude")
+                loja, bairro=end.get("bairro"), latitude=end.get("latitude"), longitude=end.get("longitude"), endereco=end
             )
             taxa = zona.taxa_centavos
     elif dados.canal == CanalVenda.MARKETPLACE and dados.taxa_entrega_centavos:

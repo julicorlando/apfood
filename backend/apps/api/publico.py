@@ -80,9 +80,12 @@ class TaxaEntregaPublicaView(Publica):
 
     def post(self, request, slug):
         loja = loja_publica(slug)
+        endereco = {k: request.data.get(k, "") or "" for k in ("logradouro", "numero", "bairro", "cidade", "cep")}
         zona, dist = calcular_taxa_entrega(loja, bairro=request.data.get("bairro"),
-                                           latitude=request.data.get("latitude"), longitude=request.data.get("longitude"))
-        return Response({"taxa_centavos": zona.taxa_centavos, "tempo_estimado_min": zona.tempo_estimado_min})
+                                           latitude=request.data.get("latitude"), longitude=request.data.get("longitude"),
+                                           endereco=endereco if endereco["logradouro"] else None)
+        return Response({"taxa_centavos": zona.taxa_centavos, "tempo_estimado_min": zona.tempo_estimado_min,
+                         "latitude": endereco.get("latitude"), "longitude": endereco.get("longitude")})
 
 
 class PedidoPublicoView(Publica):

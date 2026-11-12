@@ -140,10 +140,40 @@ class JanelaPrincipal(QMainWindow):
         self.menu.setCurrentRow(0)
 
     def iniciar_servicos(self):
+        QTimer.singleShot(4000, self.verificar_atualizacao)
         self.ctx.iniciar_sync()
         if self.ctx.loja.get("id"):
             self.tempo_real.iniciar(self.ctx.cfg.ws_url, self.ctx.loja["id"], lambda: self.ctx.api.access)
         self.vigia.start()
+
+    def verificar_atualizacao(self):
+        from .. import atualizador
+
+        try:
+            at = atualizador.verificar(self.ctx.api)
+        except Exception:  # noqa: BLE001 — sem internet/servidor antigo: tenta na próxima abertura
+            return
+        if at is None:
+            return
+        texto = (f"Há uma nova versão do PDV: {at.versao} (instalada: {__version__}).\n\n"
+                 + ("Esta atualização é OBRIGATÓRIA." if at.obrigatoria else "Atualizar agora? Leva cerca de 1 minuto."))
+        if not at.obrigatoria and QMessageBox.question(self, "Atualização", texto) != QMessageBox.Yes:
+            return
+        if at.obrigatoria:
+            QMessageBox.information(self, "Atualização", texto)
+        from .util import seguro
+
+        self.ctx.status("Baixando atualização…")
+        novo = seguro(self, atualizador.baixar, at)
+        if novo is None:
+            return
+        if atualizador.aplicar(novo):
+            self.ctx.status("Reiniciando para atualizar…")
+            self._atualizando = True
+            self.close()
+        else:
+            QMessageBox.information(self, "Atualização", f"Versão {at.versao} baixada em:\n{novo}\n"
+                                                         "(rodando pelo código-fonte: atualize com git pull)")
 
     # ---------------------------------------------------------------- navegação
     def ir_para(self, linha: int):
@@ -234,7 +264,8 @@ class JanelaPrincipal(QMainWindow):
             aviso.append(f"{pend} operação(ões) ainda não enviada(s) ao servidor — serão enviadas na próxima abertura.")
         if turno:
             aviso.append("O caixa continua ABERTO.")
-        if aviso and QMessageBox.question(self, "Sair", "\n".join(aviso) + "\n\nSair mesmo assim?") != QMessageBox.Yes:
+        if aviso and not getattr(self, "_atualizando", False) and \
+                QMessageBox.question(self, "Sair", "\n".join(aviso) + "\n\nSair mesmo assim?") != QMessageBox.Yes:
             ev.ignore()
             return
         self.tempo_real.parar()

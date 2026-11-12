@@ -125,3 +125,16 @@ jobs:
           name: ApFoodPDV-windows
           path: dist/ApFoodPDV.exe
           retention-days: 30
+      - name: Publicar release (main) — base da atualização automática
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $versao = (Select-String -Path desktop/apfood_pdv/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $tag = "pdv-v$versao"
+          $sha = (Get-FileHash dist/ApFoodPDV.exe -Algorithm SHA256).Hash.ToLower()
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { "Release $tag já existe — suba __version__ para publicar outra"; exit 0 }
+          $notas = "PDV $versao`n`nSHA-256: $sha`n`nNo servidor:`nAPFOOD_PDV_VERSAO=$versao`nAPFOOD_PDV_URL=https://github.com/${{ github.repository }}/releases/download/$tag/ApFoodPDV.exe`nAPFOOD_PDV_SHA256=$sha"
+          gh release create $tag dist/ApFoodPDV.exe --title "ApFood PDV $versao" --notes $notas

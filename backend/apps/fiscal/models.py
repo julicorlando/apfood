@@ -35,6 +35,12 @@ class ConfiguracaoFiscal(ModeloBase):
     )
     informacoes_complementares = models.TextField(blank=True)
 
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.modelo_padrao == ModeloDocumentoFiscal.SAT:
+            raise ValidationError({"modelo_padrao": "CF-e SAT está vedado em SP desde 01/01/2026 — use NFC-e."})
+
     class Meta:
         db_table = "configuracoes_fiscais"
         verbose_name = "configuração fiscal"
@@ -62,6 +68,7 @@ class NotaFiscal(DaLoja, ModeloBase):
     protocolo = models.CharField(max_length=30, blank=True)
     valor_total_centavos = models.PositiveIntegerField()
     cpf_cnpj_consumidor = models.CharField(max_length=14, blank=True)
+    destinatario = models.JSONField(default=dict, blank=True, help_text="NF-e 55: dados do destinatário")
     provedor = models.CharField(max_length=30, blank=True)
     referencia_provedor = models.CharField(max_length=80, help_text="id enviado ao provedor (idempotência)")
     url_xml = models.URLField(max_length=500, blank=True)

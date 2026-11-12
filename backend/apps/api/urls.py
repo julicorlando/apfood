@@ -20,6 +20,7 @@ for prefixo, vs in [
 urlpatterns = [
     path("eu/", views.EuView.as_view()),
     path("auth/pin/", views.PinView.as_view()),
+    path("pdv/versao/", views.VersaoPdvView.as_view()),
     path("taxa-entrega/", views.TaxaEntregaView.as_view()),
     path("sync/pull/", sync.PullView.as_view()),
     path("sync/push/", sync.PushView.as_view()),

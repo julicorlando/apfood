@@ -171,3 +171,38 @@ def test_config_salva_e_carrega(tmp_path):
     c.salvar(tmp_path / "c.json")
     c2 = Config.carregar(tmp_path / "c.json")
     assert c2.impressora_caixa == "10.0.0.5:9100" and c2.largura_bobina == 32 and c2.ws_url == "wss://apfood.app"
+
+
+# --- atualização automática -------------------------------------------------
+def test_comparacao_de_versoes():
+    from apfood_pdv.atualizador import mais_nova, versao_tupla
+
+    assert versao_tupla("v1.10.0") == (1, 10) and versao_tupla("1.2.0-beta") == (1, 2)
+    assert mais_nova("1.10.0", "1.9.9") and not mais_nova("1.0", "1.0.0") and not mais_nova("", "0.1")
+
+
+def test_verificar_baixar_e_conferir_sha(tmp_path):
+    import hashlib
+
+    from apfood_pdv.atualizador import ErroAtualizacao, baixar, script_troca, verificar
+
+    class Api:
+        def __init__(self, info):
+            self.info = info
+
+        def get(self, caminho):
+            assert caminho == "/api/pdv/versao/"
+            return self.info
+
+    exe = b"MZ novo executavel"
+    sha = hashlib.sha256(exe).hexdigest()
+    assert verificar(Api({"versao": "0.1.0", "url": "x", "sha256": sha}), "0.1.0") is None
+    at = verificar(Api({"versao": "0.2.0", "url": "https://s/ApFoodPDV.exe", "sha256": sha.upper(),
+                        "obrigatoria_ate": "0.2.0"}), "0.1.0")
+    assert at and at.obrigatoria and at.sha256 == sha
+    destino = baixar(at, destino=tmp_path / "novo.exe", baixador=lambda url: exe)
+    assert destino.read_bytes() == exe
+    with pytest.raises(ErroAtualizacao, match="não confere"):
+        baixar(at, destino=tmp_path / "x.exe", baixador=lambda url: b"adulterado")
+    cmd = script_troca(tmp_path / "novo.exe", tmp_path / "ApFoodPDV.exe", 1234)
+    assert 'PID eq 1234' in cmd and ".old" in cmd and "start" in cmd

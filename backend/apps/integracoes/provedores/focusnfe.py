@@ -1,6 +1,8 @@
-"""Focus NFe — emissão de NFC-e (modelo 65).
+"""Focus NFe — emissão de NFC-e (modelo 65) e NF-e (modelo 55).
 
-API: POST /v2/nfce?ref=REF · GET /v2/nfce/REF · DELETE /v2/nfce/REF
+API: POST /v2/{nfce|nfe}?ref=REF · GET /v2/{nfce|nfe}/REF · DELETE /v2/{nfce|nfe}/REF
+NFC-e costuma autorizar na hora; NF-e é assíncrona (consultar até sair do
+"processando_autorizacao"). CF-e SAT não existe aqui: vedado em SP desde 01/01/2026.
 Auth: HTTP Basic (token como usuário, senha vazia).
 Hosts: homologacao.focusnfe.com.br | api.focusnfe.com.br
 
@@ -12,7 +14,7 @@ Configuração: {"cnpj_emitente": "...", "pis_cst": "07", "cofins_cst": "07"}.
 
 from decimal import Decimal
 
-from apfood_core.enums import AmbienteFiscal, FormaPagamento
+from apfood_core.enums import AmbienteFiscal, FormaPagamento, ModeloDocumentoFiscal
 
 from .base import checar, cliente
 
@@ -45,15 +47,30 @@ class FocusNFe:
     def __init__(self, token: str, ambiente: str = AmbienteFiscal.HOMOLOGACAO):
         self.http = cliente(HOSTS[AmbienteFiscal(ambiente)], auth=(token, ""))
 
+    @staticmethod
+    def _rota(modelo) -> str:
+        return "nfe" if modelo == ModeloDocumentoFiscal.NFE else "nfce"
+
+    def emitir(self, modelo, referencia: str, dados: dict) -> dict:
+        return checar(self.http.post(f"/v2/{self._rota(modelo)}", params={"ref": referencia}, json=dados),
+                      "Focus NFe emitir")
+
+    def consultar(self, modelo, referencia: str) -> dict:
+        return checar(self.http.get(f"/v2/{self._rota(modelo)}/{referencia}"), "Focus NFe consultar")
+
+    def cancelar(self, modelo, referencia: str, justificativa: str) -> dict:
+        return checar(self.http.request("DELETE", f"/v2/{self._rota(modelo)}/{referencia}",
+                                        json={"justificativa": justificativa}), "Focus NFe cancelar")
+
+    # compatibilidade (NFC-e)
     def emitir_nfce(self, referencia: str, dados: dict) -> dict:
-        return checar(self.http.post("/v2/nfce", params={"ref": referencia}, json=dados), "Focus NFe emitir")
+        return self.emitir(ModeloDocumentoFiscal.NFCE, referencia, dados)
 
     def consultar_nfce(self, referencia: str) -> dict:
-        return checar(self.http.get(f"/v2/nfce/{referencia}"), "Focus NFe consultar")
+        return self.consultar(ModeloDocumentoFiscal.NFCE, referencia)
 
     def cancelar_nfce(self, referencia: str, justificativa: str) -> dict:
-        return checar(self.http.request("DELETE", f"/v2/nfce/{referencia}", json={"justificativa": justificativa}),
-                      "Focus NFe cancelar")
+        return self.cancelar(ModeloDocumentoFiscal.NFCE, referencia, justificativa)
 
 
 def montar_nfce(*, itens: list[dict], pagamentos: list[dict], desconto_centavos: int, outras_centavos: int,
@@ -94,4 +111,48 @@ def montar_nfce(*, itens: list[dict], pagamentos: list[dict], desconto_centavos:
     }
     if cpf:
         dados["cpf_destinatario"] = cpf
+    return dados
+
+
+def montar_nfe(*, itens: list[dict], pagamentos: list[dict], desconto_centavos: int, outras_centavos: int,
+               cnpj_emitente: str, uf_emitente: str, destinatario: dict, config: dict | None = None,
+               data_emissao: str, entrega: bool = False) -> dict:
+    """NF-e modelo 55 (ex.: venda para empresa, evento, coffee break).
+
+    `destinatario`: {documento (CNPJ/CPF), nome, ie ("" = não contribuinte / "ISENTO"),
+    logradouro, numero, complemento, bairro, municipio, uf, cep, email, telefone}.
+    CFOP: 5102 (mesma UF) ou 6102/6108 (outra UF, contribuinte/não contribuinte),
+    salvo quando o produto tem CFOP próprio diferente de 5102.
+    """
+    base = montar_nfce(itens=itens, pagamentos=pagamentos, desconto_centavos=desconto_centavos,
+                       outras_centavos=outras_centavos, cnpj_emitente=cnpj_emitente, entrega=entrega,
+                       config=config, data_emissao=data_emissao)
+    d = destinatario
+    doc = "".join(c for c in d.get("documento", "") if c.isdigit())
+    if len(doc) not in (11, 14):
+        raise ValueError("CPF/CNPJ do destinatário inválido")
+    uf = (d.get("uf") or uf_emitente or "").upper()
+    interestadual = bool(uf and uf_emitente and uf != uf_emitente.upper())
+    ie = (d.get("ie") or "").strip().upper()
+    indicador = "1" if ie and ie != "ISENTO" else "2" if ie == "ISENTO" else "9"
+    for item in base["items"]:
+        if interestadual and item["cfop"] == "5102":
+            item["cfop"] = "6102" if indicador == "1" else "6108"
+    dados = {
+        **{k: v for k, v in base.items() if k not in ("cpf_destinatario",)},
+        "natureza_operacao": (config or {}).get("natureza_operacao", "Venda de mercadoria"),
+        "tipo_documento": "1", "finalidade_emissao": "1", "consumidor_final": "1",
+        "local_destino": "2" if interestadual else "1",
+        ("cnpj_destinatario" if len(doc) == 14 else "cpf_destinatario"): doc,
+        "nome_destinatario": d.get("nome", "")[:60],
+        "logradouro_destinatario": d.get("logradouro", "")[:60], "numero_destinatario": d.get("numero", "") or "S/N",
+        "bairro_destinatario": d.get("bairro", "")[:60], "municipio_destinatario": d.get("municipio", "")[:60],
+        "uf_destinatario": uf, "cep_destinatario": "".join(c for c in d.get("cep", "") if c.isdigit()),
+        "indicador_inscricao_estadual_destinatario": indicador,
+    }
+    if indicador == "1":
+        dados["inscricao_estadual_destinatario"] = "".join(c for c in ie if c.isdigit())
+    for campo in ("complemento", "email", "telefone"):
+        if d.get(campo):
+            dados[f"{campo}_destinatario"] = d[campo]
     return dados

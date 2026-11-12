@@ -52,6 +52,19 @@ class EuView(APIView):
         return Response(dados)
 
 
+class VersaoPdvView(APIView):
+    """O PDV consulta ao abrir: há versão nova para baixar?"""
+
+    permission_classes = [UsuarioLiberado]
+
+    def get(self, request):
+        from django.conf import settings
+
+        cfg = settings.APFOOD
+        return Response({"versao": cfg["PDV_VERSAO"], "url": cfg["PDV_URL"], "sha256": cfg["PDV_SHA256"].lower(),
+                         "obrigatoria_ate": cfg["PDV_OBRIGATORIA_ATE"]})
+
+
 class PinView(APIView):
     """Troca rápida de operador no PDV: confere o PIN de outro usuário da mesma empresa."""
 
@@ -236,9 +249,10 @@ class TaxaEntregaView(APIView):
 
     def post(self, request):
         loja = loja_da_requisicao(request)
+        endereco = {k: request.data.get(k, "") or "" for k in ("logradouro", "numero", "bairro", "cidade", "cep")}
         zona, dist = clientes_srv.calcular_taxa_entrega(
             loja, bairro=request.data.get("bairro"), latitude=request.data.get("latitude"),
-            longitude=request.data.get("longitude"),
+            longitude=request.data.get("longitude"), endereco=endereco if endereco["logradouro"] else None,
         )
         return Response({"zona": str(zona.id), "nome": zona.nome, "taxa_centavos": zona.taxa_centavos,
                          "tempo_estimado_min": zona.tempo_estimado_min,
@@ -623,6 +637,18 @@ class DocumentosPedidoMixin:
         return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_venda(pedido, _largura(request)))})
 
     @action(detail=True, methods=["post"])
+    def nfe(self, request, pk=None):
+        """NF-e modelo 55 (venda para empresa). Corpo: {"destinatario": {documento, nome, ie, logradouro,
+        numero, complemento, bairro, municipio, uf, cep, email, telefone}}."""
+        destinatario = request.data.get("destinatario")
+        if not isinstance(destinatario, dict):
+            raise ErroNegocio("informe os dados do destinatário", "destinatario")
+        nota = fiscal_srv.emitir_nfe(self.get_object(), {k: str(v or "") for k, v in destinatario.items()})
+        return Response({"id": str(nota.id), "modelo": nota.modelo, "status": nota.status, "numero": nota.numero,
+                         "chave": nota.chave, "url_danfe": nota.url_danfe, "mensagem": nota.mensagem_retorno},
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
     def pix(self, request, pk=None):
         pg = pedidos_srv.cobrar_pix(pedido=self.get_object(), valor_centavos=request.data.get("valor_centavos"))
         return Response(_pix_out(pg), status=status.HTTP_201_CREATED)
@@ -631,6 +657,7 @@ class DocumentosPedidoMixin:
 PedidoViewSet.documento = DocumentosPedidoMixin.documento
 PedidoViewSet.cupom = DocumentosPedidoMixin.cupom
 PedidoViewSet.pix = DocumentosPedidoMixin.pix
+PedidoViewSet.nfe = DocumentosPedidoMixin.nfe
 
 
 def _anexar(viewset, nome, metodos, fn):
@@ -688,6 +715,8 @@ class NotaFiscalViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveM
         nota = self.get_object()
         if nota.status != "AUTORIZADA" or not nota.pedido_id:
             raise ErroNegocio("só notas autorizadas têm DANFE")
+        if nota.modelo == "NFE":  # DANFE da NF-e é A4 (PDF do provedor), não cabe na térmica
+            return Response({"url_danfe": nota.url_danfe, "linhas": []})
         return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.danfe(nota, _largura(request)))})
 
     @action(detail=True, methods=["post"])
@@ -695,4 +724,6 @@ class NotaFiscalViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveM
         nota = self.get_object()
         if nota.status != "REJEITADA" or not nota.pedido_id:
             raise ErroNegocio("só notas rejeitadas podem ser reemitidas")
+        if nota.modelo == "NFE":
+            return Response(NotaFiscalSerializer(fiscal_srv.emitir_nfe(nota.pedido, nota.destinatario)).data)
         return Response(NotaFiscalSerializer(fiscal_srv.emitir_nfce(nota.pedido, cpf=nota.cpf_cnpj_consumidor)).data)

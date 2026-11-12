@@ -151,6 +151,11 @@ STORAGES = {
 
 APFOOD = {
     "URL_PUBLICA": env("APFOOD_URL_PUBLICA", default="http://localhost:8000"),
+    # Atualização automática do PDV: versão publicada, link do .exe e SHA-256 (gerados pela CI)
+    "PDV_VERSAO": env("APFOOD_PDV_VERSAO", default=""),
+    "PDV_URL": env("APFOOD_PDV_URL", default=""),
+    "PDV_SHA256": env("APFOOD_PDV_SHA256", default=""),
+    "PDV_OBRIGATORIA_ATE": env("APFOOD_PDV_OBRIGATORIA_ATE", default=""),  # versões abaixo desta: atualizar já
 }
 APFOOD_CHAVE_CRIPTO = env("APFOOD_CHAVE_CRIPTO", default="")  # manage.py gerar_chave_cripto
 APFOOD_IFOOD_CLIENT_ID = env("APFOOD_IFOOD_CLIENT_ID", default="")

@@ -205,6 +205,60 @@ def emitir_nfce(pedido, *, cpf: str = "") -> NotaFiscal:
     return nota
 
 
+@transaction.atomic
+def emitir_nfe(pedido, destinatario: dict) -> NotaFiscal:
+    """NF-e modelo 55 para venda a CNPJ/CPF identificado (empresa, evento).
+    Assíncrona: volta PROCESSANDO e a tarefa `fiscal.consultar` acompanha."""
+    from apps.integracoes.provedores.base import ErroProvedor
+    from apps.integracoes.provedores.focusnfe import FocusNFe, montar_nfe
+
+    par = emissor_da_loja(pedido.loja)
+    if par is None:
+        raise ErroNegocio("loja sem emissor fiscal configurado")
+    cfg, integ = par
+    if pedido.status in ("CANCELADO", "RECUSADO"):
+        raise ErroNegocio("pedido cancelado não gera nota")
+    if pedido.notas_fiscais.filter(status__in=[StatusNotaFiscal.AUTORIZADA, StatusNotaFiscal.PROCESSANDO]).exists():
+        raise ErroNegocio("este pedido já tem nota fiscal emitida ou em processamento")
+    pagos = list(pedido.pagamentos.filter(status=StatusPagamento.CONFIRMADO))
+    if sum(p.valor_centavos for p in pagos) < pedido.total_centavos:
+        raise ErroNegocio("registre o pagamento completo antes de emitir a nota")
+    for campo in ("documento", "nome", "logradouro", "bairro", "municipio", "uf", "cep"):
+        if not (destinatario.get(campo) or "").strip():
+            raise ErroNegocio(f"destinatário: informe {campo}", "destinatario")
+    try:
+        dados = montar_nfe(
+            itens=_itens_fiscais(pedido),
+            pagamentos=[{"forma": p.forma, "valor_centavos": p.valor_centavos} for p in pagos],
+            desconto_centavos=pedido.desconto_centavos,
+            outras_centavos=pedido.taxa_entrega_centavos + pedido.acrescimo_centavos,
+            cnpj_emitente="".join(c for c in (integ.configuracao.get("cnpj_emitente") or pedido.loja.cnpj or "") if c.isdigit()),
+            uf_emitente=pedido.loja.uf, destinatario=destinatario, config=integ.configuracao,
+            data_emissao=timezone.localtime().isoformat(timespec="seconds"),
+            entrega=pedido.tipo_atendimento == "ENTREGA",
+        )
+    except ValueError as exc:
+        raise ErroNegocio(str(exc), "destinatario") from exc
+    doc = "".join(c for c in destinatario["documento"] if c.isdigit())
+    nota = NotaFiscal.objects.create(
+        loja=pedido.loja, pedido=pedido, modelo=ModeloDocumentoFiscal.NFE, ambiente=cfg.ambiente,
+        status=StatusNotaFiscal.PROCESSANDO, valor_total_centavos=pedido.total_centavos, cpf_cnpj_consumidor=doc,
+        destinatario=destinatario, provedor="focusnfe",
+        referencia_provedor=f"apf55-{str(pedido.id)[:8]}-{pedido.notas_fiscais.count() + 1}",
+    )
+    try:
+        resp = FocusNFe(integ.obter_credenciais()["token"], cfg.ambiente).emitir(
+            ModeloDocumentoFiscal.NFE, nota.referencia_provedor, dados)
+        aplicar_retorno(nota, resp)
+        integ.registrar_sucesso()
+    except ErroProvedor as exc:
+        nota.status, nota.mensagem_retorno = StatusNotaFiscal.REJEITADA, str(exc)
+        nota.tentativas += 1
+        nota.save()
+        integ.registrar_erro(str(exc))
+    return nota
+
+
 def aplicar_retorno(nota, resp: dict) -> None:
     from apps.integracoes.provedores.focusnfe import HOSTS
 
@@ -268,7 +322,8 @@ def cancelar_nota(nota, justificativa: str) -> NotaFiscal:
     _, integ = emissor_da_loja(nota.loja) or (None, None)
     if integ is None:
         raise ErroNegocio("emissor fiscal indisponível")
-    resp = FocusNFe(integ.obter_credenciais()["token"], nota.ambiente).cancelar_nfce(nota.referencia_provedor, justificativa)
+    resp = FocusNFe(integ.obter_credenciais()["token"], nota.ambiente).cancelar(nota.modelo, nota.referencia_provedor,
+                                                                               justificativa)
     nota.motivo_cancelamento = justificativa
     aplicar_retorno(nota, resp)
     return nota
@@ -291,6 +346,7 @@ def _tarefa_consultar(nota_id: str):
     if nota.status != StatusNotaFiscal.PROCESSANDO:
         return
     _, integ = emissor_da_loja(nota.loja)
-    aplicar_retorno(nota, FocusNFe(integ.obter_credenciais()["token"], nota.ambiente).consultar_nfce(nota.referencia_provedor))
+    aplicar_retorno(nota, FocusNFe(integ.obter_credenciais()["token"], nota.ambiente).consultar(nota.modelo,
+                                                                                               nota.referencia_provedor))
     if nota.status == StatusNotaFiscal.PROCESSANDO:
         raise RuntimeError("ainda processando")
