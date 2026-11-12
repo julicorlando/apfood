@@ -1,6 +1,7 @@
 """Alerta sonoro de novo pedido: toca em loop até alguém aceitar/recusar."""
 
 import math
+import os
 import struct
 import wave
 from pathlib import Path
@@ -33,6 +34,8 @@ class AlertaSonoro(QObject):
         super().__init__(parent)
         self.efeito = None
         try:
+            if os.environ.get("APFOOD_SEM_SOM"):  # testes/CI: sem backend de áudio
+                raise RuntimeError("som desativado")
             from PySide6.QtMultimedia import QSoundEffect
 
             self.efeito = QSoundEffect(self)

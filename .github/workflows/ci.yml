@@ -94,7 +94,9 @@ jobs:
       - name: Instalar
         run: pip install -e core -e desktop pytest
       - name: Testes do PDV
-        run: pytest desktop/tests -q
+        env:
+          APFOOD_SEM_SOM: "1"
+        run: pytest desktop/tests -q -p no:faulthandler
 
   pdv-windows:
     name: Instalador Windows (ApFoodPDV.exe)

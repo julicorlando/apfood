@@ -8,6 +8,7 @@ import re
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("APFOOD_SEM_SOM", "1")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 
 from apfood_pdv.api import ApiClient, SemConexao  # noqa: E402
@@ -90,7 +91,18 @@ class ServidorFalso:
 
 @pytest.fixture
 def app():
-    return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    a = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    yield a
+    # desmonta tudo antes do fim do processo (evita segfault do Qt no encerramento)
+    from PySide6.QtCore import QTimer
+
+    for w in a.topLevelWidgets():
+        for t in w.findChildren(QTimer):
+            t.stop()
+        w.close()
+        w.deleteLater()
+    a.processEvents()
+    a.sendPostedEvents(None, 0)
 
 
 @pytest.fixture
