@@ -1,0 +1,102 @@
+# Produção (Coolify → "Docker Compose", arquivo: docker-compose.prod.yml).
+# Domínio: no Coolify, em "web", informe https://apfood.axionwebdigital.com.br:8000
+# Variáveis SERVICE_* são geradas pelo próprio Coolify na primeira implantação.
+services:
+  web:
+    build: .
+    command: ["web"]
+    restart: unless-stopped
+    environment: &ambiente
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_SECRET_KEY: ${SERVICE_BASE64_64_DJANGO}
+      DJANGO_ALLOWED_HOSTS: ${APFOOD_DOMINIO:-apfood.axionwebdigital.com.br},localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: https://${APFOOD_DOMINIO:-apfood.axionwebdigital.com.br}
+      CORS_ALLOWED_ORIGINS: https://${APFOOD_DOMINIO:-apfood.axionwebdigital.com.br}
+      APFOOD_URL_PUBLICA: https://${APFOOD_DOMINIO:-apfood.axionwebdigital.com.br}
+      DATABASE_URL: postgres://apfood:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/apfood
+      REDIS_URL: redis://redis:6379/0
+      APFOOD_SERVIR_MEDIA: "1"
+      APFOOD_CHAVE_CRIPTO: ${APFOOD_CHAVE_CRIPTO:-}
+      APFOOD_MP_TOKEN_PLATAFORMA: ${APFOOD_MP_TOKEN_PLATAFORMA:-}
+      APFOOD_IFOOD_CLIENT_ID: ${APFOOD_IFOOD_CLIENT_ID:-}
+      APFOOD_IFOOD_CLIENT_SECRET: ${APFOOD_IFOOD_CLIENT_SECRET:-}
+      APFOOD_DIAS_TOLERANCIA: ${APFOOD_DIAS_TOLERANCIA:-10}
+      APFOOD_PDV_VERSAO: ${APFOOD_PDV_VERSAO:-}
+      APFOOD_PDV_URL: ${APFOOD_PDV_URL:-}
+      APFOOD_PDV_SHA256: ${APFOOD_PDV_SHA256:-}
+      APFOOD_PDV_OBRIGATORIA_ATE: ${APFOOD_PDV_OBRIGATORIA_ATE:-}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-master}
+      DJANGO_SUPERUSER_PASSWORD: ${SERVICE_PASSWORD_MASTER}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    volumes:
+      - media:/app/backend/media
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  tarefas:
+    build: .
+    command: ["tarefas"]
+    restart: unless-stopped
+    environment: *ambiente
+    volumes:
+      - media:/app/backend/media
+    depends_on: [web]
+    healthcheck:
+      disable: true
+
+  ifood:
+    build: .
+    command: ["ifood"]
+    restart: unless-stopped
+    environment: *ambiente
+    depends_on: [web]
+    healthcheck:
+      disable: true
+
+  cobranca:
+    build: .
+    command: ["cobranca"]
+    restart: unless-stopped
+    environment: *ambiente
+    depends_on: [web]
+    healthcheck:
+      disable: true
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apfood
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: apfood
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apfood -d apfood"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+volumes:
+  media:
+  pgdata:
+  redisdata:

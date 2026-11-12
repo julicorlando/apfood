@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -23,3 +25,9 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+elif os.environ.get("APFOOD_SERVIR_MEDIA") == "1":
+    # Fotos dos produtos e logos (volume "media"). Para muito tráfego, troque por S3/CDN.
+    from django.urls import re_path
+    from django.views.static import serve
+
+    urlpatterns.insert(0, re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}))
