@@ -33,13 +33,19 @@
 - Funciona offline (fila local + cupom não fiscal local)
 - `ApFoodPDV.exe` gerado pela CI
 
-### Próximas melhorias
-- Geocodificação de endereço (Google/OSM) para taxa por raio sem coordenadas
-- SAT/CF-e (SP) e NF-e modelo 55
-- Instalador com atualização automática (hoje: baixar o novo `.exe`)
-- Painel web de retaguarda próprio (hoje: Django admin)
+## ✅ Passo 4 — Cardápio digital
+- `/<slug>/` mobile-first: busca, categorias, produto com tamanho, meio a meio e adicionais, carrinho salvo no navegador
+- Checkout: entrega/retirada, CEP, taxa na hora, cupom, Pix agora ou pagamento na entrega com troco
+- `/pedido/<token>/`: linha do tempo em tempo real, Pix copia e cola, WhatsApp da loja
+- Aberta/fechada pelos horários; servidor recusa pedido fora do horário
 
-## Passo 4 — Cardápio digital
-- Cardápio mobile-first por slug, carrinho, adicionais com mín/máx
-- Endereço com cálculo de taxa, retirada, forma de pagamento e troco
-- Acompanhamento em tempo real pelo link do pedido
+## ✅ Extras
+- NF-e modelo 55 (venda para empresa); SAT descartado (vedado em SP desde 2026)
+- Geocodificação (Google/Nominatim) para taxa por raio
+- Atualização automática do PDV com conferência de SHA-256
+
+### Próximas melhorias
+- Painel web de retaguarda próprio (hoje: Django admin) e app do entregador
+- Programa de fidelidade/cashback e campanhas por WhatsApp
+- Outros emissores fiscais (PlugNotas, NFE.io) e outros gateways Pix
+- Contingência offline da NFC-e (emissão em contingência no PDV)

@@ -44,6 +44,9 @@ Ao receber o pagamento, o PDV pede ao servidor o **documento da venda**:
 - Se o servidor recusar uma operação ao sincronizar (por exemplo, um produto excluído no meio do caminho), o PDV avisa. A lista fica em *Configurações → Operações recusadas*.
 - O que **precisa** de internet: pedidos online e do iFood (eles chegam ao servidor e aparecem quando a conexão voltar), mesas, cozinha, relatórios, Pix dinâmico e NFC-e.
 
+## Atualizações
+Ao abrir, o PDV pergunta ao servidor se há versão nova. Ele baixa, confere a assinatura (SHA-256) e reinicia já atualizado. A versão anterior fica guardada como `ApFoodPDV.exe.old`. Atualizações marcadas como obrigatórias não podem ser adiadas. A configuração no servidor está em [INTEGRACOES.md](INTEGRACOES.md#atualização-automática-do-pdv).
+
 ## Desenvolvimento
 ```bash
 pip install -e core -e desktop

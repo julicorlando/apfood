@@ -27,7 +27,7 @@ cd backend
 pip install -r requirements/dev.txt
 python manage.py migrate
 python manage.py seed_demo         # usuários demo, senha apfood123 (ver tabela abaixo)
-python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/
+python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/  (cardápio)
 ```
 
 Usuários criados pelo `seed_demo`, para testar o isolamento entre empresas:
@@ -63,4 +63,11 @@ A CI (GitHub Actions) roda tudo isso num PostgreSQL a cada push, valida as migra
 - [x] **Passo 2** — regras de negócio, API, sincronização e tempo real
 - [x] **Integrações** — NFC-e (Focus NFe) ou cupom não fiscal, Pix, WhatsApp, iFood, cobrança das empresas
 - [x] **Passo 3** — App PC (PDV) com impressão e modo offline
-- [ ] **Passo 4** — Cardápio digital
+- [x] **Passo 4** — Cardápio digital com acompanhamento em tempo real
+- [x] NF-e 55, geocodificação para taxa por raio e atualização automática do PDV
+
+### Cardápio digital (`/<slug-da-loja>/`)
+
+![Cardápio, montagem do item, carrinho e checkout](docs/img/cardapio.png)
+
+<img src="docs/img/acompanhar.png" width="260" alt="Acompanhamento do pedido">

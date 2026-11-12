@@ -51,6 +51,7 @@ main { max-width: 760px; margin: 0 auto; padding: 8px 16px 120px; }
 .btn { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; max-width: 728px; margin: 0 auto; border: 0; border-radius: 12px; padding: 14px 18px; font-weight: 700; background: var(--cor); color: var(--cor-texto); font-size: 16px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.secundario { background: var(--cartao); color: var(--texto); border: 1px solid var(--borda); justify-content: center; }
+a.btn { text-decoration: none; }
 .btn .qtd { background: rgba(255,255,255,.25); border-radius: 8px; padding: 2px 8px; }
 
 /* folhas (bottom sheet) */
