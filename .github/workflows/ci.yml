@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: ["**"]
-  pull_request:
 
 permissions:
   contents: write  # para commitar migrations geradas em branches de trabalho
