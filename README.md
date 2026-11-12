@@ -8,7 +8,9 @@ Sistema de gestão e PDV **multiempresa** para restaurantes e hamburguerias, com
 | `desktop/` | PDV Windows: pedidos online, balcão, delivery, caixa, estoque, relatórios | PySide6 + SQLite local |
 | `core/` | Regras compartilhadas: caixa, totais, status do pedido, dinheiro, enums | Python puro |
 
-📐 [Arquitetura](docs/ARQUITETURA.md) · 🗄️ [Banco de dados](docs/BANCO_DE_DADOS.md) · 🗺️ [Roadmap](docs/ROADMAP.md)
+📐 [Arquitetura](docs/ARQUITETURA.md) · 🗄️ [Banco de dados](docs/BANCO_DE_DADOS.md) · 🔌 [API](docs/API.md) · 🗺️ [Roadmap](docs/ROADMAP.md)
+
+[![CI](https://github.com/julicorlando/apfood/actions/workflows/ci.yml/badge.svg)](https://github.com/julicorlando/apfood/actions/workflows/ci.yml)
 
 ## Rodando localmente
 
@@ -23,7 +25,6 @@ docker compose up -d               # PostgreSQL + Redis
 
 cd backend
 pip install -r requirements/dev.txt
-python manage.py makemigrations    # primeira vez: gera as migrations iniciais
 python manage.py migrate
 python manage.py seed_demo         # usuários demo, senha apfood123 (ver tabela abaixo)
 python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/
@@ -46,16 +47,18 @@ pip install -r requirements.txt
 python -m apfood_pdv
 ```
 
-Testes (na raiz do repositório):
+Testes:
 
 ```bash
-pip install pytest
-pytest core/tests desktop/tests
+pytest core/tests desktop/tests     # regras puras e PDV (na raiz)
+cd backend && pytest                # backend (precisa do PostgreSQL do docker compose)
 ```
+
+A CI (GitHub Actions) roda tudo isso num PostgreSQL a cada push, valida as migrations e executa o `seed_demo`.
 
 ## Status
 
-- [x] **Passo 1** — arquitetura, modelagem do banco, estrutura do projeto
-- [ ] **Passo 2** — API e sincronização em tempo real
+- [x] **Passo 1** — arquitetura, modelagem do banco, estrutura do projeto, multiempresa
+- [x] **Passo 2** — regras de negócio, API, sincronização e tempo real
 - [ ] **Passo 3** — App PC (PDV)
 - [ ] **Passo 4** — Cardápio digital
