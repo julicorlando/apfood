@@ -18,7 +18,8 @@ class LeituraInline(EscopoInlineMixin):
 
 class ItemInline(LeituraInline, admin.TabularInline):
     model = ItemPedido
-    fields = ["quantidade", "nome_produto", "preco_unitario_centavos", "total_adicionais_centavos", "total_centavos", "observacao"]
+    fields = ["quantidade", "nome_produto", "nome_variacao", "preco_unitario_centavos", "total_adicionais_centavos",
+              "total_centavos", "observacao", "setor", "status_producao"]
     readonly_fields = fields
 
 
@@ -40,8 +41,8 @@ class PedidoAdmin(EscopoAdmin):
 
     caminho_loja = "loja"
     list_display = ["__str__", "data_referencia", "loja", "canal", "tipo_atendimento", "status", "total_centavos"]
-    list_filter = ["canal", "status", "data_referencia"]
-    search_fields = ["nome_cliente", "telefone_cliente", "token_rastreio"]
+    list_filter = ["canal", "status", "marketplace", "data_referencia"]
+    search_fields = ["nome_cliente", "telefone_cliente", "token_rastreio", "id_externo", "codigo_externo"]
     date_hierarchy = "criado_em"
     inlines = [ItemInline, PagamentoInline, HistoricoInline]
 

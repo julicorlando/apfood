@@ -44,6 +44,12 @@ INSTALLED_APPS = [
     "apps.pedidos",
     "apps.estoque",
     "apps.financeiro",
+    "apps.salao",
+    "apps.fiscal",
+    "apps.compras",
+    "apps.marketing",
+    "apps.plataforma",
+    "apps.integracoes",
     "apps.realtime",
     "apps.vitrine",  # cardápio digital público (Passo 4)
 ]

@@ -3,9 +3,11 @@ import secrets
 from apfood_core.enums import (
     CanalVenda,
     FormaPagamento,
+    Marketplace,
     OrigemContato,
     StatusPagamento,
     StatusPedido,
+    StatusProducao,
     TipoAtendimento,
 )
 from django.conf import settings
@@ -47,6 +49,16 @@ class Pedido(DaLoja, ModeloBase):
         help_text="link público de acompanhamento do cliente",
     )
 
+    # Marketplace (iFood, 99Food...): id do pedido lá = idempotência da importação
+    marketplace = models.CharField(max_length=max_len(Marketplace), choices=choices(Marketplace), blank=True)
+    id_externo = models.CharField(max_length=80, blank=True)
+    codigo_externo = models.CharField(max_length=20, blank=True, help_text="código curto exibido no app")
+
+    # Salão: cada rodada de pedidos de uma mesa é um Pedido ligado à comanda
+    comanda = models.ForeignKey(
+        "salao.Comanda", on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
+    )
+
     # Identificação (balcão: nome/senha/mesa)
     cliente = models.ForeignKey(
         "clientes.Cliente", on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
@@ -80,6 +92,11 @@ class Pedido(DaLoja, ModeloBase):
     acrescimo_centavos = models.PositiveIntegerField(default=0)
     total_centavos = models.PositiveIntegerField(default=0)
     troco_para_centavos = models.PositiveIntegerField(null=True, blank=True)
+
+    cupom = models.ForeignKey(
+        "marketing.Cupom", on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
+    )
+    cpf_nota = models.CharField("CPF/CNPJ na nota", max_length=14, blank=True)
 
     observacao = models.TextField(blank=True)
     motivo_cancelamento = models.CharField(max_length=255, blank=True)
@@ -120,8 +137,14 @@ class Pedido(DaLoja, ModeloBase):
                 name="pedido_numero_unico_dia",
             ),
             models.CheckConstraint(
-                condition=~Q(tipo_atendimento=TipoAtendimento.ENTREGA) | ~Q(entrega_logradouro=""),
+                condition=~Q(tipo_atendimento=TipoAtendimento.ENTREGA) | ~Q(entrega_logradouro="")
+                | Q(canal=CanalVenda.MARKETPLACE),  # entrega do marketplace pode vir sem endereço
                 name="pedido_entrega_tem_endereco",
+            ),
+            models.UniqueConstraint(
+                fields=["loja", "marketplace", "id_externo"],
+                condition=~Q(id_externo=""),
+                name="pedido_externo_unico",
             ),
         ]
 
@@ -135,11 +158,25 @@ class ItemPedido(ModeloBase):
         "cardapio.Produto", on_delete=models.SET_NULL, null=True, blank=True, related_name="itens_pedido"
     )
     nome_produto = models.CharField(max_length=120, help_text="snapshot")
+    variacao = models.ForeignKey(
+        "cardapio.ProdutoVariacao", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    nome_variacao = models.CharField(max_length=40, blank=True, help_text="snapshot")
     quantidade = models.PositiveIntegerField()
     preco_unitario_centavos = models.PositiveIntegerField(help_text="snapshot")
     total_adicionais_centavos = models.PositiveIntegerField(default=0, help_text="por unidade")
     total_centavos = models.PositiveIntegerField(help_text="(unitário + adicionais) × quantidade")
     observacao = models.CharField(max_length=255, blank=True, help_text='"sem cebola"')
+
+    # Produção (cozinha / KDS)
+    setor = models.ForeignKey(
+        "cardapio.SetorProducao", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    status_producao = models.CharField(
+        max_length=max_len(StatusProducao), choices=choices(StatusProducao), default=StatusProducao.AGUARDANDO
+    )
+    producao_iniciada_em = models.DateTimeField(null=True, blank=True)
+    pronto_em = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "itens_pedido"
@@ -152,6 +189,23 @@ class ItemPedido(ModeloBase):
 
     def __str__(self):
         return f"{self.quantidade}× {self.nome_produto}"
+
+
+class ItemPedidoSabor(models.Model):
+    """Sabores de um item fracionado (pizza 1/2 + 1/2). O preço do item vem
+    de apfood_core.precos.preco_sabores com a regra da categoria."""
+
+    item = models.ForeignKey(ItemPedido, on_delete=models.CASCADE, related_name="sabores")
+    produto = models.ForeignKey(
+        "cardapio.Produto", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    nome = models.CharField(max_length=120, help_text="snapshot")
+    preco_unitario_centavos = models.PositiveIntegerField(help_text="preço do sabor no tamanho escolhido")
+
+    class Meta:
+        db_table = "itens_pedido_sabores"
+        verbose_name = "sabor do item"
+        verbose_name_plural = "sabores do item"
 
 
 class ItemPedidoAdicional(models.Model):
@@ -170,9 +224,15 @@ class ItemPedidoAdicional(models.Model):
 
 
 class Pagamento(ModeloBase):
-    """Um pedido pode ter vários pagamentos (parte Pix, parte dinheiro)."""
+    """Vários pagamentos por pedido (parte Pix, parte dinheiro). No salão, o
+    pagamento é da COMANDA (conta dividida = vários pagamentos)."""
 
-    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="pagamentos")
+    pedido = models.ForeignKey(
+        Pedido, on_delete=models.CASCADE, null=True, blank=True, related_name="pagamentos"
+    )
+    comanda = models.ForeignKey(
+        "salao.Comanda", on_delete=models.CASCADE, null=True, blank=True, related_name="pagamentos"
+    )
     forma = models.CharField(max_length=max_len(FormaPagamento), choices=choices(FormaPagamento))
     status = models.CharField(
         max_length=max_len(StatusPagamento), choices=choices(StatusPagamento), default=StatusPagamento.PENDENTE
@@ -184,6 +244,10 @@ class Pagamento(ModeloBase):
     troco_centavos = models.PositiveIntegerField(default=0)
     pago_online = models.BooleanField(default=False)
     referencia_externa = models.CharField(max_length=80, blank=True, help_text="txid Pix, NSU")
+    bandeira = models.CharField(max_length=30, blank=True, help_text="Visa, Master, Elo...")
+    # Recebimento líquido (taxa da maquininha/gateway), base do fluxo de caixa
+    taxa_centavos = models.PositiveIntegerField(default=0)
+    previsao_recebimento = models.DateField(null=True, blank=True)
     # Turno em que o dinheiro efetivamente entrou (definido ao CONFIRMAR)
     turno = models.ForeignKey(
         "caixa.TurnoCaixa", on_delete=models.SET_NULL, null=True, blank=True, related_name="pagamentos"
@@ -199,6 +263,11 @@ class Pagamento(ModeloBase):
         indexes = [models.Index(fields=["turno", "forma"])]
         constraints = [
             models.CheckConstraint(condition=Q(valor_centavos__gt=0), name="pagamento_valor_positivo"),
+            models.CheckConstraint(
+                condition=(Q(pedido__isnull=False) & Q(comanda__isnull=True))
+                | (Q(pedido__isnull=True) & Q(comanda__isnull=False)),
+                name="pagamento_de_pedido_ou_comanda",
+            ),
             models.CheckConstraint(
                 condition=~Q(status=StatusPagamento.CONFIRMADO) | Q(confirmado_em__isnull=False),
                 name="pagamento_confirmado_tem_data",

@@ -20,11 +20,14 @@ class EmpresaAdmin(EscopoAdmin):
 
     caminho_empresa = "id"
     edicao_minima = "admin"
-    list_display = ["nome", "cnpj", "responsavel", "ativa", "limite_lojas", "qtd_lojas", "criado_em"]
-    list_filter = ["ativa"]
+    list_display = ["nome", "cnpj", "plano", "status_assinatura", "ativa", "qtd_lojas", "criado_em"]
+    list_filter = ["ativa", "status_assinatura", "plano"]
     search_fields = ["nome", "razao_social", "cnpj", "email"]
     inlines = [LojaInline]
-    campos_do_master = ["ativa", "motivo_bloqueio", "limite_lojas", "limite_usuarios", "observacoes"]
+    campos_do_master = [
+        "ativa", "motivo_bloqueio", "plano", "status_assinatura", "trial_ate", "dia_vencimento",
+        "limite_lojas", "limite_usuarios", "observacoes",
+    ]
 
     @admin.display(description="lojas")
     def qtd_lojas(self, obj):
@@ -62,7 +65,7 @@ class LojaAdmin(EscopoAdmin):
         if u.eh_master:
             return True
         e = u.empresa
-        return permissoes.pode_criar_loja(u.acesso(), str(e.id), e.lojas.count(), e.limite_lojas)
+        return permissoes.pode_criar_loja(u.acesso(), str(e.id), e.lojas.count(), e.limite_lojas_efetivo)
 
 
 @admin.register(Dispositivo)

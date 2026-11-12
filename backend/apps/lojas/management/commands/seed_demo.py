@@ -11,7 +11,16 @@
 
 from decimal import Decimal
 
-from apfood_core.enums import PapelUsuario, TipoProduto, TipoZonaEntrega, UnidadeMedida
+from apfood_core.enums import (
+    FormaPagamento,
+    PapelUsuario,
+    RegraPrecoSabores,
+    StatusAssinatura,
+    TipoCupom,
+    TipoProduto,
+    TipoZonaEntrega,
+    UnidadeMedida,
+)
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -22,10 +31,17 @@ from apps.cardapio.models import (
     GrupoAdicional,
     Produto,
     ProdutoGrupoAdicional,
+    ProdutoVariacao,
+    SetorProducao,
 )
 from apps.clientes.models import Entregador, ZonaEntrega
 from apps.contas.models import Usuario
-from apps.financeiro.models import CategoriaDespesa
+from apps.compras.models import Fornecedor
+from apps.financeiro.models import CategoriaDespesa, TaxaFormaPagamento
+from apps.fiscal.models import ConfiguracaoFiscal
+from apps.marketing.models import Cupom
+from apps.plataforma.models import Plano
+from apps.salao.models import Mesa
 from apps.lojas.models import Empresa, Loja
 
 
@@ -51,8 +67,19 @@ class Command(BaseCommand):
 
         usuario("master", "Master da plataforma", PapelUsuario.MASTER)
 
+        basico = Plano.objects.create(
+            nome="Básico", preco_mensal_centavos=9900, limite_lojas=1, limite_usuarios=5,
+            recursos=["pix"], ordem=1,
+        )
+        Plano.objects.create(
+            nome="Completo", preco_mensal_centavos=24900, limite_lojas=3, limite_usuarios=30,
+            recursos=["fiscal", "mesas", "marketplace", "pix", "whatsapp", "multiloja", "kds"], ordem=2,
+        )
+        completo = Plano.objects.get(nome="Completo")
+
         empresa = Empresa.objects.create(
-            nome="Burger Demo", razao_social="Burger Demo Ltda", limite_lojas=3, responsavel="Fulano"
+            nome="Burger Demo", razao_social="Burger Demo Ltda", responsavel="Fulano",
+            plano=completo, status_assinatura=StatusAssinatura.ATIVA,
         )
         loja, criada = Loja.objects.get_or_create(
             slug="burger-demo",
@@ -72,7 +99,7 @@ class Command(BaseCommand):
         usuario("gerente", "Gerente", PapelUsuario.GERENTE, empresa, [loja])
         usuario("caixa1", "Operador 1", PapelUsuario.OPERADOR, empresa, [loja])
 
-        pizza = Empresa.objects.create(nome="Pizza Teste", limite_lojas=1)
+        pizza = Empresa.objects.create(nome="Pizza Teste", plano=basico)
         Loja.objects.create(empresa=pizza, slug="pizza-teste", nome="Pizza Teste")
         usuario("admin.pizza", "Administrador Pizza", PapelUsuario.ADMIN, pizza)
 
@@ -88,8 +115,16 @@ class Command(BaseCommand):
         bacon = insumo("Bacon", UnidadeMedida.KG, "5", "1")
         insumo("Embalagem delivery", UnidadeMedida.UN, "300", "50")
 
-        lanches = Categoria.objects.create(loja=loja, nome="Lanches", ordem=1)
-        bebidas = Categoria.objects.create(loja=loja, nome="Bebidas", ordem=2)
+        chapa = SetorProducao.objects.create(loja=loja, nome="Chapa", impressora="COZINHA", ordem=1)
+        bar = SetorProducao.objects.create(loja=loja, nome="Bar", impressora="192.168.0.50:9100", ordem=2)
+        forno = SetorProducao.objects.create(loja=loja, nome="Forno", impressora="COZINHA", ordem=3)
+
+        lanches = Categoria.objects.create(loja=loja, nome="Lanches", ordem=1, setor=chapa)
+        bebidas = Categoria.objects.create(loja=loja, nome="Bebidas", ordem=2, setor=bar)
+        pizzas = Categoria.objects.create(
+            loja=loja, nome="Pizzas", ordem=3, setor=forno, max_sabores=2,
+            regra_preco_sabores=RegraPrecoSabores.MAIOR,
+        )
 
         def lanche(nome, preco, ficha):
             p = Produto.objects.create(
@@ -101,10 +136,22 @@ class Command(BaseCommand):
 
         x_burger = lanche("X-Burger", 2990, [(pao, "1"), (carne, "1"), (queijo, "1")])
         x_bacon = lanche("X-Bacon", 3490, [(pao, "1"), (carne, "1"), (queijo, "1"), (bacon, "0.040")])
-        Produto.objects.create(
+        lata = Produto.objects.create(
             loja=loja, categoria=bebidas, nome="Refrigerante lata 350 ml", preco_centavos=700,
             controla_estoque=True, estoque_atual=Decimal("48"), estoque_minimo=Decimal("12"),
+            ncm="22021000", cest="0300700", cst_csosn="500",
         )
+        for nome, precos in [("Calabresa", (4490, 5990)), ("Marguerita", (4690, 6290)), ("Portuguesa", (4990, 6690))]:
+            p = Produto.objects.create(loja=loja, categoria=pizzas, nome=f"Pizza {nome}", preco_centavos=precos[0])
+            ProdutoVariacao.objects.create(produto=p, nome="Média", preco_centavos=precos[0], ordem=0)
+            ProdutoVariacao.objects.create(
+                produto=p, nome="Grande", preco_centavos=precos[1], fator_insumos=Decimal("1.5"), ordem=1
+            )
+
+        combo = Produto.objects.create(loja=loja, categoria=lanches, nome="Combo X-Burger + bebida", preco_centavos=3490)
+        g_bebida = GrupoAdicional.objects.create(loja=loja, nome="Escolha a bebida", min_selecao=1, max_selecao=1)
+        Adicional.objects.create(grupo=g_bebida, nome="Refrigerante lata", insumo=lata, quantidade_insumo=Decimal("1"))
+        ProdutoGrupoAdicional.objects.create(produto=combo, grupo=g_bebida)
 
         ponto = GrupoAdicional.objects.create(loja=loja, nome="Ponto da carne", min_selecao=1, max_selecao=1)
         for i, n in enumerate(["Mal passado", "Ao ponto", "Bem passado"]):
@@ -124,6 +171,24 @@ class Command(BaseCommand):
         Entregador.objects.create(loja=loja, nome="Motoboy João", telefone="11999990000")
         for n in ["Fornecedores", "Motoboys", "Aluguel", "Energia", "Outros"]:
             CategoriaDespesa.objects.create(loja=loja, nome=n)
+
+        for i in range(1, 11):
+            Mesa.objects.create(loja=loja, nome=f"Mesa {i:02d}", area="Salão" if i <= 8 else "Varanda", ordem=i)
+        for forma, pct, prazo in [
+            (FormaPagamento.CARTAO_DEBITO, "1.39", 1),
+            (FormaPagamento.CARTAO_CREDITO, "3.19", 30),
+            (FormaPagamento.PIX, "0.99", 0),
+            (FormaPagamento.VOUCHER, "6.50", 30),
+        ]:
+            TaxaFormaPagamento.objects.create(
+                loja=loja, forma_pagamento=forma, taxa_percentual=Decimal(pct), prazo_recebimento_dias=prazo
+            )
+        Cupom.objects.create(
+            loja=loja, codigo="BEMVINDO10", tipo=TipoCupom.PERCENTUAL, valor=Decimal("10"),
+            desconto_maximo_centavos=1500, somente_primeira_compra=True,
+        )
+        Fornecedor.objects.create(loja=loja, nome="Distribuidora de Bebidas Exemplo")
+        ConfiguracaoFiscal.objects.create(loja=loja)
 
         self.stdout.write(self.style.SUCCESS(
             f"Demo criada (senha {senha}, PIN 1234): master | Burger Demo: admin, gerente, caixa1 "

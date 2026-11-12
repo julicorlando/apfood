@@ -15,7 +15,13 @@ class Cliente(DaLoja, ModeloSincronizavel):
     nome = models.CharField(max_length=120)
     telefone = models.CharField(max_length=13, help_text="só dígitos com DDD: 11987654321")
     email = models.EmailField(blank=True)
+    cpf = models.CharField("CPF (nota fiscal)", max_length=11, blank=True)
+    data_nascimento = models.DateField(null=True, blank=True)
     observacoes = models.TextField(blank=True)
+    # LGPD
+    aceita_marketing = models.BooleanField(default=False)
+    consentimento_em = models.DateTimeField(null=True, blank=True)
+    anonimizado_em = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "clientes"

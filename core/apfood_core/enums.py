@@ -32,6 +32,15 @@ class CanalVenda(_Rotulado):
     ONLINE = "ONLINE"  # cardápio digital
     BALCAO = "BALCAO"  # consumo no local / retirada no balcão
     DELIVERY = "DELIVERY"  # telefone/WhatsApp lançado pelo atendente
+    MESA = "MESA"  # comanda/mesa no salão
+    MARKETPLACE = "MARKETPLACE"  # iFood, 99Food, Rappi...
+
+
+class Marketplace(_Rotulado):
+    IFOOD = "IFOOD"
+    NOVENTA_E_NOVE_FOOD = "99FOOD"
+    RAPPI = "RAPPI"
+    OUTRO = "OUTRO"
 
 
 class OrigemContato(_Rotulado):
@@ -63,7 +72,8 @@ class FormaPagamento(_Rotulado):
     PIX = "PIX"
     CARTAO_CREDITO = "CARTAO_CREDITO"
     CARTAO_DEBITO = "CARTAO_DEBITO"
-    VOUCHER = "VOUCHER"
+    VOUCHER = "VOUCHER"  # vale-refeição/alimentação
+    MARKETPLACE = "MARKETPLACE"  # pago no app do marketplace
     OUTRO = "OUTRO"
 
 
@@ -89,6 +99,89 @@ class TipoMovimentacaoCaixa(_Rotulado):
     SUPRIMENTO = "SUPRIMENTO"  # reforço de troco
     SANGRIA = "SANGRIA"  # retirada
     DESPESA = "DESPESA"  # despesa paga com dinheiro do caixa
+
+
+class StatusComanda(_Rotulado):
+    ABERTA = "ABERTA"
+    FECHANDO = "FECHANDO"  # conta pedida, aguardando pagamento
+    FECHADA = "FECHADA"
+    CANCELADA = "CANCELADA"
+
+
+class StatusProducao(_Rotulado):
+    """Status de cada item na cozinha (KDS / setores de produção)."""
+
+    AGUARDANDO = "AGUARDANDO"
+    EM_PREPARO = "EM_PREPARO"
+    PRONTO = "PRONTO"
+    ENTREGUE = "ENTREGUE"
+
+
+class RegraPrecoSabores(_Rotulado):
+    """Preço de item com vários sabores (pizza meio a meio)."""
+
+    MAIOR = "MAIOR"  # cobra o sabor mais caro
+    MEDIA = "MEDIA"  # média dos sabores
+
+
+class RegimeTributario(_Rotulado):
+    MEI = "MEI"
+    SIMPLES_NACIONAL = "SIMPLES_NACIONAL"
+    SIMPLES_EXCESSO = "SIMPLES_EXCESSO"  # excesso de sublimite
+    NORMAL = "NORMAL"  # lucro presumido / real
+
+
+class AmbienteFiscal(_Rotulado):
+    HOMOLOGACAO = "HOMOLOGACAO"
+    PRODUCAO = "PRODUCAO"
+
+
+class ModeloDocumentoFiscal(_Rotulado):
+    NFCE = "NFCE"  # modelo 65
+    SAT = "SAT"  # CF-e SAT (SP)
+    NFE = "NFE"  # modelo 55
+
+
+class StatusNotaFiscal(_Rotulado):
+    PENDENTE = "PENDENTE"
+    PROCESSANDO = "PROCESSANDO"
+    AUTORIZADA = "AUTORIZADA"
+    REJEITADA = "REJEITADA"
+    CONTINGENCIA = "CONTINGENCIA"  # emitida offline, aguardando transmissão
+    CANCELADA = "CANCELADA"
+
+
+class StatusCompra(_Rotulado):
+    RASCUNHO = "RASCUNHO"
+    LANCADA = "LANCADA"  # deu entrada no estoque
+    CANCELADA = "CANCELADA"
+
+
+class TipoCupom(_Rotulado):
+    PERCENTUAL = "PERCENTUAL"
+    VALOR_FIXO = "VALOR_FIXO"
+    FRETE_GRATIS = "FRETE_GRATIS"
+
+
+class StatusAssinatura(_Rotulado):
+    TRIAL = "TRIAL"
+    ATIVA = "ATIVA"
+    INADIMPLENTE = "INADIMPLENTE"
+    CANCELADA = "CANCELADA"
+
+
+class StatusFatura(_Rotulado):
+    ABERTA = "ABERTA"
+    PAGA = "PAGA"
+    CANCELADA = "CANCELADA"
+
+
+class TipoIntegracao(_Rotulado):
+    MARKETPLACE = "MARKETPLACE"
+    PAGAMENTO = "PAGAMENTO"  # Pix dinâmico / link de pagamento
+    FISCAL = "FISCAL"  # emissor de NFC-e/SAT
+    WHATSAPP = "WHATSAPP"
+    MAPAS = "MAPAS"  # geocodificação / distância
 
 
 class TipoProduto(_Rotulado):
@@ -146,5 +239,25 @@ _ROTULOS: dict[tuple[type, str], str] = {
         (UnidadeMedida.UN, "Unidade"),
         (UnidadeMedida.CX, "Caixa"),
         (TipoZonaEntrega.RAIO_KM, "Raio (km)"),
+        (Marketplace.NOVENTA_E_NOVE_FOOD, "99Food"),
+        (Marketplace.IFOOD, "iFood"),
+        (FormaPagamento.MARKETPLACE, "Pago no marketplace"),
+        (FormaPagamento.VOUCHER, "Vale-refeição"),
+        (CanalVenda.MARKETPLACE, "Marketplace"),
+        (StatusProducao.EM_PREPARO, "Em preparo"),
+        (RegraPrecoSabores.MAIOR, "Sabor mais caro"),
+        (RegraPrecoSabores.MEDIA, "Média dos sabores"),
+        (RegimeTributario.SIMPLES_EXCESSO, "Simples (excesso de sublimite)"),
+        (RegimeTributario.NORMAL, "Regime normal"),
+        (AmbienteFiscal.HOMOLOGACAO, "Homologação"),
+        (AmbienteFiscal.PRODUCAO, "Produção"),
+        (ModeloDocumentoFiscal.NFCE, "NFC-e"),
+        (ModeloDocumentoFiscal.SAT, "CF-e SAT"),
+        (ModeloDocumentoFiscal.NFE, "NF-e"),
+        (StatusNotaFiscal.CONTINGENCIA, "Contingência"),
+        (StatusCompra.LANCADA, "Lançada"),
+        (TipoCupom.VALOR_FIXO, "Valor fixo"),
+        (TipoCupom.FRETE_GRATIS, "Frete grátis"),
+        (TipoIntegracao.MAPAS, "Mapas"),
     ]
 }

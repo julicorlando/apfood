@@ -109,7 +109,7 @@ class Usuario(AbstractUser):
             papel=PapelUsuario(self.papel),
             empresa_id=str(self.empresa_id) if self.empresa_id else None,
             lojas_ids=lojas_ids,
-            empresa_ativa=bool(self.empresa and self.empresa.ativa),
+            empresa_ativa=bool(self.empresa and self.empresa.liberada),
             usuario_ativo=self.is_active,
         )
 

@@ -1,6 +1,6 @@
 import secrets
 
-from apfood_core.enums import MomentoBaixaEstoque
+from apfood_core.enums import MomentoBaixaEstoque, StatusAssinatura
 from django.db import models, transaction
 from django.db.models import F
 
@@ -21,14 +21,22 @@ class Empresa(ModeloBase):
     email = models.EmailField(blank=True)
     telefone = models.CharField(max_length=20, blank=True)
     responsavel = models.CharField(max_length=120, blank=True)
-    ativa = models.BooleanField(default=True)
+    ativa = models.BooleanField(default=True, help_text="desmarcar bloqueia todos os usuários")
     motivo_bloqueio = models.CharField(max_length=255, blank=True)
-    limite_lojas = models.PositiveSmallIntegerField(
-        null=True, blank=True, default=1, help_text="vazio = ilimitado"
+
+    # Assinatura
+    plano = models.ForeignKey(
+        "plataforma.Plano", on_delete=models.PROTECT, null=True, blank=True, related_name="empresas"
     )
-    limite_usuarios = models.PositiveSmallIntegerField(
-        null=True, blank=True, help_text="vazio = ilimitado"
+    status_assinatura = models.CharField(
+        max_length=max_len(StatusAssinatura), choices=choices(StatusAssinatura),
+        default=StatusAssinatura.TRIAL,
     )
+    trial_ate = models.DateField(null=True, blank=True)
+    dia_vencimento = models.PositiveSmallIntegerField(default=10)
+    # Limites: vazio = usa o do plano (e plano sem limite = ilimitado)
+    limite_lojas = models.PositiveSmallIntegerField(null=True, blank=True)
+    limite_usuarios = models.PositiveSmallIntegerField(null=True, blank=True)
     observacoes = models.TextField(blank=True)
 
     class Meta:
@@ -37,6 +45,27 @@ class Empresa(ModeloBase):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def liberada(self) -> bool:
+        """Usuários da empresa podem entrar?"""
+        return self.ativa and self.status_assinatura != StatusAssinatura.CANCELADA
+
+    @property
+    def limite_lojas_efetivo(self) -> int | None:
+        if self.limite_lojas is not None:
+            return self.limite_lojas
+        return self.plano.limite_lojas if self.plano_id else None
+
+    @property
+    def limite_usuarios_efetivo(self) -> int | None:
+        if self.limite_usuarios is not None:
+            return self.limite_usuarios
+        return self.plano.limite_usuarios if self.plano_id else None
+
+    def tem_recurso(self, recurso: str) -> bool:
+        """Recursos do plano: "fiscal", "mesas", "marketplace", "pix", "whatsapp"..."""
+        return bool(self.plano_id) and recurso in (self.plano.recursos or [])
 
 
 class Loja(ModeloBase):
@@ -70,6 +99,9 @@ class Loja(ModeloBase):
         help_text='[{"dia_semana": 0-6, "abre": "18:00", "fecha": "23:30"}]',
     )
     pedido_minimo_centavos = models.PositiveIntegerField(default=0)
+    taxa_servico_percentual = models.DecimalField(
+        max_digits=5, decimal_places=2, default=10, help_text="taxa de serviço padrão das comandas"
+    )
     tempo_preparo_min = models.PositiveSmallIntegerField(default=30)
     aceite_automatico = models.BooleanField(default=False)
     momento_baixa_estoque = models.CharField(
