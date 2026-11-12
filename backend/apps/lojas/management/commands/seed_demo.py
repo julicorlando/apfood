@@ -65,7 +65,8 @@ class Command(BaseCommand):
             u.lojas.set(lojas)
             return u
 
-        usuario("master", "Master da plataforma", PapelUsuario.MASTER)
+        if not Usuario.objects.filter(username="master").exists():  # no deploy, o master já é criado
+            usuario("master", "Master da plataforma", PapelUsuario.MASTER)
 
         basico = Plano.objects.create(
             nome="Básico", preco_mensal_centavos=9900, limite_lojas=1, limite_usuarios=5,
