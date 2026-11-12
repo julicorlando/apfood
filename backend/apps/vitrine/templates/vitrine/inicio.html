@@ -1,0 +1,46 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e4572e">
+  <title>ApFood — gestão, PDV e cardápio digital</title>
+  <style>
+    :root { --cor: #e4572e; --texto: #1d1d1f; --suave: #6b6b70; --fundo: #faf7f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texto); background: var(--fundo); min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
+    .cartao { max-width: 520px; width: 100%; text-align: center; }
+    .marca { font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 0; }
+    .marca span { color: var(--cor); }
+    .sub { color: var(--suave); font-size: 18px; margin: 8px 0 32px; line-height: 1.5; }
+    .botoes { display: flex; flex-direction: column; gap: 12px; }
+    a.botao { display: block; padding: 16px 20px; border-radius: 12px; font-size: 17px; font-weight: 600; text-decoration: none; }
+    a.primario { background: var(--cor); color: #fff; }
+    a.secundario { background: #fff; color: var(--texto); border: 1px solid #e3ddd8; }
+    a.botao:focus-visible { outline: 3px solid #1d1d1f; outline-offset: 2px; }
+    ul { list-style: none; padding: 0; margin: 36px 0 0; display: grid; gap: 10px; text-align: left; }
+    li { background: #fff; border: 1px solid #eee7e1; border-radius: 12px; padding: 14px 16px; color: var(--suave); }
+    li strong { color: var(--texto); display: block; margin-bottom: 2px; }
+    footer { text-align: center; color: var(--suave); font-size: 13px; padding: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="cartao">
+      <h1 class="marca">Ap<span>Food</span></h1>
+      <p class="sub">Gestão, PDV e cardápio digital para restaurantes e hamburguerias.</p>
+      <div class="botoes">
+        <a class="botao primario" href="{% url 'admin:index' %}">Entrar no painel</a>
+        {% if url_pdv %}<a class="botao secundario" href="{{ url_pdv }}">Baixar o PDV para Windows</a>{% endif %}
+      </div>
+      <ul>
+        <li><strong>Painel</strong>Produtos, pedidos, caixa, estoque, financeiro e relatórios de cada loja.</li>
+        <li><strong>PDV</strong>Vendas no balcão, funciona offline e imprime cupom.</li>
+        <li><strong>Cardápio digital</strong>Cada loja tem o seu endereço: {{ request.get_host }}/<em>nome-da-loja</em>/</li>
+      </ul>
+    </div>
+  </main>
+  <footer>ApFood</footer>
+</body>
+</html>
