@@ -20,20 +20,24 @@
 - Sincronização do PDV (pull por cursor, push idempotente) e cardápio público
 - CI no GitHub Actions com PostgreSQL
 
-### Pendências do Passo 2 (entram junto com os passos 3/4)
-- Integrações reais: emissor fiscal, Pix com webhook, iFood/99Food, WhatsApp, geocodificação
-- Criptografia das credenciais de integração
-- Cobrança automática das faturas das empresas e bloqueio por inadimplência
-- WebSocket: autenticação por JWT (hoje usa sessão)
+## ✅ Passo 2b — Integrações e plataforma
+- NFC-e via Focus NFe (emissão, consulta, cancelamento, DANFE na térmica com QR Code); sem emissor → cupom não fiscal
+- Pix dinâmico (Mercado Pago) com webhook; WhatsApp (Z-API) a cada etapa; iFood (polling, importação, ações)
+- Credenciais cifradas, fila de tarefas com retentativa, WebSocket por JWT
+- Cobrança das empresas: faturas, inadimplência, bloqueio e reativação automáticos
 
-## Passo 3 — PDV desktop (PySide6)
-- Login por usuário/PIN, pareamento do dispositivo
-- Fila de pedidos online com alerta sonoro/visual, aceitar/recusar, cupom de cozinha ESC/POS
-- Balcão (nome/senha/mesa) e Delivery (busca por telefone, endereço, taxa, motoboy)
-- Abertura, sangria, suprimento e fechamento (cego ou detalhado) com relatório de quebra/sobra
-- Estoque: entradas, ajustes, alertas de mínimo, kardex
-- Relatórios e dashboard
-- Instalador Windows (PyInstaller + Inno Setup)
+## ✅ Passo 3 — PDV desktop (PySide6)
+- Login, escolha de loja, sessão salva e troca de operador por PIN
+- Fila em tempo real com alerta sonoro, balcão, delivery por telefone, mesas/comandas, caixa com fechamento cego, KDS, estoque, relatórios
+- Impressão ESC/POS (rede, Windows, arquivo) por setor; DANFE NFC-e ou cupom não fiscal
+- Funciona offline (fila local + cupom não fiscal local)
+- `ApFoodPDV.exe` gerado pela CI
+
+### Próximas melhorias
+- Geocodificação de endereço (Google/OSM) para taxa por raio sem coordenadas
+- SAT/CF-e (SP) e NF-e modelo 55
+- Instalador com atualização automática (hoje: baixar o novo `.exe`)
+- Painel web de retaguarda próprio (hoje: Django admin)
 
 ## Passo 4 — Cardápio digital
 - Cardápio mobile-first por slug, carrinho, adicionais com mín/máx

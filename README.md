@@ -39,18 +39,19 @@ Usuários criados pelo `seed_demo`, para testar o isolamento entre empresas:
 | `gerente`, `caixa1` | GERENTE / OPERADOR | só a loja burger-demo |
 | `admin.pizza` | ADMIN da Pizza Teste | só a Pizza Teste |
 
-PDV desktop (outro terminal, mesmo venv):
+PDV desktop: baixe o **`ApFoodPDV.exe`** gerado pela CI (Actions → Artifacts) ou rode pelo código:
 
 ```bash
-cd desktop
-pip install -r requirements.txt
+pip install -e core -e desktop
 python -m apfood_pdv
 ```
+
+Guia completo do PDV (impressoras, atalhos, offline, fiscal × não fiscal): [docs/PDV.md](docs/PDV.md). Integrações e rotinas do servidor: [docs/INTEGRACOES.md](docs/INTEGRACOES.md).
 
 Testes:
 
 ```bash
-pytest core/tests desktop/tests     # regras puras e PDV (na raiz)
+pytest core/tests desktop/tests     # regras puras e PDV (na raiz; interface exige PySide6)
 cd backend && pytest                # backend (precisa do PostgreSQL do docker compose)
 ```
 
@@ -60,5 +61,6 @@ A CI (GitHub Actions) roda tudo isso num PostgreSQL a cada push, valida as migra
 
 - [x] **Passo 1** — arquitetura, modelagem do banco, estrutura do projeto, multiempresa
 - [x] **Passo 2** — regras de negócio, API, sincronização e tempo real
-- [ ] **Passo 3** — App PC (PDV)
+- [x] **Integrações** — NFC-e (Focus NFe) ou cupom não fiscal, Pix, WhatsApp, iFood, cobrança das empresas
+- [x] **Passo 3** — App PC (PDV) com impressão e modo offline
 - [ ] **Passo 4** — Cardápio digital
