@@ -3,12 +3,14 @@
 ## ✅ Passo 1 — Arquitetura, banco e estrutura
 - Stack 100% Python: Django + DRF + Channels, PySide6 no desktop, pacote `apfood_core` compartilhado
 - Models de todo o domínio com constraints no banco
+- Multiempresa: MASTER da plataforma, empresas com limite de lojas e bloqueio, isolamento na retaguarda e no WebSocket
 - Esqueleto do WebSocket, do cardápio público e do PDV (SQLite local + outbox)
 - Comando `seed_demo`
 - Testes das regras de caixa, totais, status e fila offline
 
 ## Passo 2 — API e tempo real
-- Autenticação JWT + permissões por papel (ADMIN / GERENTE / OPERADOR) e filtro por loja
+- Autenticação JWT + permissões por papel (MASTER / ADMIN / GERENTE / OPERADOR) e mixin de escopo multiempresa em todos os endpoints
+- Painel do MASTER: empresas, bloqueio, limites, visão consolidada
 - `services.py` por app: criar pedido (validação de adicionais, totais, numeração), transição de status, pagamentos, abertura/sangria/suprimento/fechamento de caixa, baixa e estorno de estoque
 - Endpoints REST (cardápio, clientes por telefone, zonas/taxa, pedidos, caixa, estoque, relatórios)
 - `POST /api/sync/push/` (idempotente por UUID) e `GET /api/sync/pull/`

@@ -1,4 +1,10 @@
-"""Cria a loja demo "burger-demo" com cardápio, insumos, zonas e usuários.
+"""Cria um cenário multiempresa de demonstração:
+
+  • usuário MASTER da plataforma ("master")
+  • empresa "Burger Demo" com a loja "burger-demo" (cardápio, insumos, zonas)
+    e os usuários admin / gerente / caixa1
+  • empresa "Pizza Teste" com a loja "pizza-teste" e o usuário admin.pizza,
+    para conferir que uma empresa não enxerga a outra
 
     python manage.py seed_demo            # senha padrão: apfood123
 """
@@ -20,7 +26,7 @@ from apps.cardapio.models import (
 from apps.clientes.models import Entregador, ZonaEntrega
 from apps.contas.models import Usuario
 from apps.financeiro.models import CategoriaDespesa
-from apps.lojas.models import Loja
+from apps.lojas.models import Empresa, Loja
 
 
 class Command(BaseCommand):
@@ -31,9 +37,27 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, senha, **opts):
+        if Loja.objects.filter(slug="burger-demo").exists():
+            self.stdout.write(self.style.WARNING("Dados demo já existem — nada a fazer."))
+            return
+
+        def usuario(login, nome, papel, empresa=None, lojas=()):
+            u = Usuario(username=login, first_name=nome, papel=papel, empresa=empresa)
+            u.set_password(senha)
+            u.definir_pin("1234")
+            u.save()
+            u.lojas.set(lojas)
+            return u
+
+        usuario("master", "Master da plataforma", PapelUsuario.MASTER)
+
+        empresa = Empresa.objects.create(
+            nome="Burger Demo", razao_social="Burger Demo Ltda", limite_lojas=3, responsavel="Fulano"
+        )
         loja, criada = Loja.objects.get_or_create(
             slug="burger-demo",
             defaults=dict(
+                empresa=empresa,
                 nome="Burger Demo",
                 cidade="São Paulo",
                 uf="SP",
@@ -44,21 +68,13 @@ class Command(BaseCommand):
                 horarios=[{"dia_semana": d, "abre": "18:00", "fecha": "23:30"} for d in range(7)],
             ),
         )
-        if not criada:
-            self.stdout.write(self.style.WARNING("Loja demo já existe — nada a fazer."))
-            return
+        usuario("admin", "Administrador Burger", PapelUsuario.ADMIN, empresa)
+        usuario("gerente", "Gerente", PapelUsuario.GERENTE, empresa, [loja])
+        usuario("caixa1", "Operador 1", PapelUsuario.OPERADOR, empresa, [loja])
 
-        for login, nome, papel in [
-            ("admin", "Administrador", PapelUsuario.ADMIN),
-            ("gerente", "Gerente", PapelUsuario.GERENTE),
-            ("caixa1", "Operador 1", PapelUsuario.OPERADOR),
-        ]:
-            u = Usuario(username=login, first_name=nome, loja=loja, papel=papel)
-            u.is_staff = papel != PapelUsuario.OPERADOR
-            u.is_superuser = papel == PapelUsuario.ADMIN
-            u.set_password(senha)
-            u.definir_pin("1234")
-            u.save()
+        pizza = Empresa.objects.create(nome="Pizza Teste", limite_lojas=1)
+        Loja.objects.create(empresa=pizza, slug="pizza-teste", nome="Pizza Teste")
+        usuario("admin.pizza", "Administrador Pizza", PapelUsuario.ADMIN, pizza)
 
         def insumo(nome, unidade, estoque, minimo):
             return Produto.objects.create(
@@ -110,5 +126,6 @@ class Command(BaseCommand):
             CategoriaDespesa.objects.create(loja=loja, nome=n)
 
         self.stdout.write(self.style.SUCCESS(
-            f"Loja demo criada: /burger-demo/ — usuários admin, gerente, caixa1 (senha {senha}, PIN 1234)"
+            f"Demo criada (senha {senha}, PIN 1234): master | Burger Demo: admin, gerente, caixa1 "
+            f"| Pizza Teste: admin.pizza"
         ))

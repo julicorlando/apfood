@@ -1,27 +1,31 @@
 from django.contrib import admin
 
+from apps.core.admin import EscopoAdmin, EscopoInlineMixin
+
 from .models import Cliente, EnderecoCliente, Entregador, ZonaEntrega
 
 
-class EnderecoInline(admin.StackedInline):
+class EnderecoInline(EscopoInlineMixin, admin.StackedInline):
     model = EnderecoCliente
     extra = 0
 
 
 @admin.register(Cliente)
-class ClienteAdmin(admin.ModelAdmin):
+class ClienteAdmin(EscopoAdmin):
+    caminho_loja = "loja"
     list_display = ["nome", "telefone", "loja"]
     search_fields = ["nome", "telefone"]
-    list_filter = ["loja"]
     inlines = [EnderecoInline]
 
 
 @admin.register(ZonaEntrega)
-class ZonaEntregaAdmin(admin.ModelAdmin):
+class ZonaEntregaAdmin(EscopoAdmin):
+    caminho_loja = "loja"
     list_display = ["nome", "loja", "tipo", "raio_max_km", "taxa_centavos", "ativa"]
-    list_filter = ["loja", "tipo", "ativa"]
+    list_filter = ["tipo", "ativa"]
 
 
 @admin.register(Entregador)
-class EntregadorAdmin(admin.ModelAdmin):
+class EntregadorAdmin(EscopoAdmin):
+    caminho_loja = "loja"
     list_display = ["nome", "telefone", "loja", "ativo"]

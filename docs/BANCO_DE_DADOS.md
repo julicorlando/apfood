@@ -9,7 +9,7 @@ Convenções de todas as tabelas:
 | `id` | UUID (pode ser gerado no PDV offline) |
 | `criado_em` / `atualizado_em` | timestamps; `atualizado_em` é indexado e serve de cursor de sincronização |
 | `excluido_em` | soft delete nos cadastros que o PDV replica |
-| `loja_id` | tenant |
+| `loja_id` | loja dona do registro (a loja pertence a uma empresa) |
 | `*_centavos` | dinheiro em centavos (inteiro) |
 | quantidades de estoque | `numeric(12,3)` |
 
@@ -17,7 +17,9 @@ Convenções de todas as tabelas:
 
 ```mermaid
 erDiagram
-    lojas ||--o{ usuarios : ""
+    empresas ||--o{ lojas : "filiais"
+    empresas ||--o{ usuarios : ""
+    usuarios }o--o{ lojas : "acessa"
     lojas ||--o{ dispositivos : ""
     lojas ||--o{ sequencias_pedido : ""
     usuarios ||--o{ turnos_caixa : "abre"
@@ -46,14 +48,16 @@ erDiagram
 
 ## Tabelas por módulo
 
-### Lojas e acesso
+### Empresas, lojas e acesso
 | Tabela | Conteúdo |
 |---|---|
-| `lojas` | dados, slug público, endereço + lat/long, horários (JSON), pedido mínimo, aceite automático, momento da baixa de estoque |
+| `empresas` | cliente da plataforma: nome, CNPJ, responsável, `ativa`/motivo do bloqueio, `limite_lojas`, `limite_usuarios` |
+| `lojas` | empresa dona, dados, slug público, endereço + lat/long, horários (JSON), pedido mínimo, aceite automático, momento da baixa de estoque |
 | `sequencias_pedido` | contador por loja/dia → número do pedido |
 | `dispositivos` | PCs com o PDV, hash do token, último sync |
-| `usuarios` | login, senha (Argon2), `papel` ADMIN/GERENTE/OPERADOR, PIN, loja |
-| `logs_auditoria` | ação, entidade, dados JSON |
+| `usuarios` | login, senha (Argon2), `papel` MASTER/ADMIN/GERENTE/OPERADOR, PIN, empresa |
+| `usuarios_lojas` | lojas que GERENTE/OPERADOR acessam |
+| `logs_auditoria` | empresa, loja, ação, entidade, dados JSON |
 
 ### Caixa
 | Tabela | Conteúdo |
@@ -99,6 +103,7 @@ erDiagram
 
 Declaradas em `Meta.constraints`, então viram SQL na migration:
 
+- `usuario_vinculo_empresa`: MASTER sem empresa; demais papéis com empresa
 - `turno_aberto_por_usuario`: índice único parcial, no máximo 1 turno ABERTO por operador
 - `mov_caixa_valor_positivo` e `mov_caixa_gaveta_so_dinheiro`: sangria, suprimento e despesa só em dinheiro
 - `pagamento_valor_positivo`, `pagamento_confirmado_tem_data`

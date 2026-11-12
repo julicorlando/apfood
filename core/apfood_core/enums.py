@@ -22,7 +22,8 @@ class _Rotulado(StrEnum):
 
 
 class PapelUsuario(_Rotulado):
-    ADMIN = "ADMIN"
+    MASTER = "MASTER"  # dono da plataforma: todas as empresas
+    ADMIN = "ADMIN"  # administrador de UMA empresa (todas as lojas dela)
     GERENTE = "GERENTE"
     OPERADOR = "OPERADOR"
 
@@ -127,7 +128,8 @@ class TipoZonaEntrega(_Rotulado):
 _ROTULOS: dict[tuple[type, str], str] = {
     (m.__class__, m.value): rotulo
     for m, rotulo in [
-        (PapelUsuario.ADMIN, "Administrador"),
+        (PapelUsuario.MASTER, "Master (plataforma)"),
+        (PapelUsuario.ADMIN, "Administrador da empresa"),
         (PapelUsuario.OPERADOR, "Operador de caixa"),
         (CanalVenda.BALCAO, "Balcão"),
         (TipoAtendimento.CONSUMO_LOCAL, "Consumo no local"),

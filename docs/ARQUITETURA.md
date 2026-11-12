@@ -49,7 +49,7 @@ apfood/
 │   ├── config/              # settings (base/dev/prod), urls, asgi, wsgi
 │   ├── apps/
 │   │   ├── core/            # ModeloBase (UUID, timestamps), soft delete, mixin de loja
-│   │   ├── lojas/           # Loja, SequenciaPedido, Dispositivo, comando seed_demo
+│   │   ├── lojas/           # Empresa, Loja, SequenciaPedido, Dispositivo, seed_demo
 │   │   ├── contas/          # Usuario (papéis), LogAuditoria
 │   │   ├── cardapio/        # Categoria, Produto/Insumo, FichaTecnica, Adicionais
 │   │   ├── clientes/        # Cliente, Endereço, ZonaEntrega, Entregador
@@ -69,7 +69,7 @@ Cada app Django segue o mesmo padrão a partir do Passo 2: `models.py`, `service
 
 ## Decisões importantes
 
-**Multi-loja desde o início.** Todo model operacional tem `loja`. A API sempre filtra pela loja do usuário autenticado (Passo 2: mixin de queryset).
+**Multiempresa (SaaS).** Ver a seção abaixo.
 
 **UUID gerado no cliente.** O PDV cria o UUID do pedido/pagamento/movimentação offline; o servidor faz *upsert* pelo id. Reenviar uma operação depois de uma queda de rede não duplica nada.
 
@@ -82,6 +82,32 @@ Cada app Django segue o mesmo padrão a partir do Passo 2: `models.py`, `service
 **Caixa como livro-razão.** Cada venda, sangria, suprimento, despesa ou estorno é uma `MovimentacaoCaixa` com valor positivo e tipo. O esperado por forma de pagamento é calculado por `apfood_core.caixa.calcular_esperado`, e o fechamento grava uma `ConferenciaCaixa` por forma (esperado × informado × diferença). Conferência **cega** esconde o esperado do operador até ele confirmar.
 
 **Estoque opcional por produto.** `controla_estoque` (o próprio item tem saldo) e/ou `baixar_insumos` (baixa a ficha técnica). Adicionais também podem consumir insumo. A baixa acontece no aceite ou na conclusão (configurável por loja) e é idempotente (`Pedido.estoque_baixado`). Cancelamento estorna.
+
+## Multiempresa
+
+```
+MASTER (plataforma)
+ ├── Empresa A  (ativa, limite 3 lojas)
+ │    ├── ADMIN da A ........ todas as lojas da A
+ │    ├── Loja A1 ── GERENTE / OPERADOR vinculados à A1
+ │    └── Loja A2 ── GERENTE / OPERADOR vinculados à A2
+ └── Empresa B  (bloqueada) → nenhum usuário da B entra
+```
+
+| Papel | Enxerga | Pode cadastrar |
+|---|---|---|
+| **MASTER** | todas as empresas e lojas | empresas, limites do plano, bloqueio, qualquer usuário |
+| **ADMIN** | todas as lojas da própria empresa | lojas (até `limite_lojas`), ADMIN/GERENTE/OPERADOR da empresa |
+| **GERENTE** | só as lojas atribuídas | operadores |
+| **OPERADOR** | só as lojas atribuídas | — |
+
+Como o isolamento é garantido:
+- **Regras** em `apfood_core.permissoes` (Python puro, testado): acesso a empresa/loja, limite de lojas, quem gerencia quem, empresa bloqueada.
+- **Banco**: `Empresa → Loja → dados`. Todo dado operacional tem `loja`. A constraint `usuario_vinculo_empresa` obriga o MASTER a não ter empresa e todos os outros a ter uma. Um sinal impede vincular usuário a loja de outra empresa.
+- **Retaguarda (admin)**: todo `ModelAdmin` herda `apps.core.admin.EscopoAdmin`, que filtra listas, buscas e selects pelo escopo do usuário e bloqueia salvar dados de loja alheia. O ADMIN da empresa vê os dados da própria empresa, mas não altera plano, limites ou bloqueio.
+- **API e WebSocket**: tudo passa por `Usuario.lojas_permitidas()`. O WebSocket do PDV recusa conexão em loja fora do escopo. No Passo 2, um mixin de viewset aplica o mesmo filtro em todos os endpoints.
+
+`createsuperuser` cria um MASTER.
 
 ## Tempo real
 

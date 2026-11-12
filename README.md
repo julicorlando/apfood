@@ -1,6 +1,6 @@
 # ApFood
 
-Sistema de gestão e PDV para restaurantes e hamburguerias, com cardápio digital e sincronização em tempo real. Feito em **Python**.
+Sistema de gestão e PDV **multiempresa** para restaurantes e hamburguerias, com cardápio digital e sincronização em tempo real. Feito em **Python**.
 
 | Pasta | O que é | Stack |
 |---|---|---|
@@ -25,9 +25,18 @@ cd backend
 pip install -r requirements/dev.txt
 python manage.py makemigrations    # primeira vez: gera as migrations iniciais
 python manage.py migrate
-python manage.py seed_demo         # loja "burger-demo" + admin/gerente/caixa1 (senha apfood123, PIN 1234)
+python manage.py seed_demo         # usuários demo, senha apfood123 (ver tabela abaixo)
 python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/
 ```
+
+Usuários criados pelo `seed_demo`, para testar o isolamento entre empresas:
+
+| Login | Papel | Vê |
+|---|---|---|
+| `master` | MASTER | todas as empresas |
+| `admin` | ADMIN da Burger Demo | só a Burger Demo |
+| `gerente`, `caixa1` | GERENTE / OPERADOR | só a loja burger-demo |
+| `admin.pizza` | ADMIN da Pizza Teste | só a Pizza Teste |
 
 PDV desktop (outro terminal, mesmo venv):
 

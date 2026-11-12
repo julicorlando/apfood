@@ -7,9 +7,43 @@ from django.db.models import F
 from apps.core.models import DaLoja, ModeloBase, choices, max_len
 
 
-class Loja(ModeloBase):
-    """Estabelecimento (tenant). Um ApFood pode atender várias lojas."""
+class Empresa(ModeloBase):
+    """Cliente da plataforma (tenant de topo). Cadastrada só pelo MASTER.
 
+    Uma empresa tem uma ou mais lojas (filiais). Usuários de uma empresa nunca
+    enxergam dados de outra. `ativa=False` bloqueia o acesso de todos os
+    usuários da empresa (ex.: inadimplência), sem apagar nada.
+    """
+
+    nome = models.CharField("nome fantasia", max_length=120)
+    razao_social = models.CharField(max_length=160, blank=True)
+    cnpj = models.CharField("CNPJ/CPF", max_length=18, unique=True, null=True, blank=True)
+    email = models.EmailField(blank=True)
+    telefone = models.CharField(max_length=20, blank=True)
+    responsavel = models.CharField(max_length=120, blank=True)
+    ativa = models.BooleanField(default=True)
+    motivo_bloqueio = models.CharField(max_length=255, blank=True)
+    limite_lojas = models.PositiveSmallIntegerField(
+        null=True, blank=True, default=1, help_text="vazio = ilimitado"
+    )
+    limite_usuarios = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="vazio = ilimitado"
+    )
+    observacoes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "empresas"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class Loja(ModeloBase):
+    """Estabelecimento (filial) de uma empresa. É a unidade de operação:
+    cardápio, caixa, estoque e pedidos são sempre por loja."""
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="lojas")
     nome = models.CharField(max_length=120)
     slug = models.SlugField(unique=True, help_text="URL pública: apfood.app/<slug>/")
     cnpj = models.CharField(max_length=18, blank=True)
@@ -44,9 +78,12 @@ class Loja(ModeloBase):
         default=MomentoBaixaEstoque.CONCLUSAO,
     )
 
+    ativa = models.BooleanField(default=True)
+
     class Meta:
         db_table = "lojas"
         ordering = ["nome"]
+        indexes = [models.Index(fields=["empresa", "ativa"])]
 
     def __str__(self):
         return self.nome
