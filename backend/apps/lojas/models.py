@@ -1,6 +1,7 @@
 import secrets
 
 from apfood_core.enums import MomentoBaixaEstoque, StatusAssinatura
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.db.models import F
 
@@ -188,7 +189,7 @@ class OperacaoSincronizada(models.Model):
     usuario = models.ForeignKey("contas.Usuario", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     operacao = models.CharField(max_length=40)
     ok = models.BooleanField()
-    resultado = models.JSONField(default=dict)
+    resultado = models.JSONField(default=dict, encoder=DjangoJSONEncoder)
     recebida_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
