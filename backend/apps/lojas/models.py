@@ -176,3 +176,21 @@ class Dispositivo(DaLoja, ModeloBase):
         token = _gerar_token()
         self.token_hash = make_password(token)
         return token
+
+
+class OperacaoSincronizada(models.Model):
+    """Registro de cada operação recebida do PDV via /api/sync/push/. Reenviar
+    a mesma operação (mesmo `id`) devolve o resultado gravado, sem reexecutar."""
+
+    id = models.UUIDField(primary_key=True)
+    loja = models.ForeignKey(Loja, on_delete=models.CASCADE, related_name="+")
+    dispositivo = models.ForeignKey(Dispositivo, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    usuario = models.ForeignKey("contas.Usuario", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    operacao = models.CharField(max_length=40)
+    ok = models.BooleanField()
+    resultado = models.JSONField(default=dict)
+    recebida_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "operacoes_sincronizadas"
+        indexes = [models.Index(fields=["loja", "recebida_em"])]

@@ -16,6 +16,7 @@ urlpatterns = [
     # API REST (Passo 2) — consumida pelo PDV desktop
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("api/", include("apps.api.urls")),
     # Cardápio digital público (Passo 4): /<slug-da-loja>/
     path("", include("apps.vitrine.urls")),
 ]

@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.marketing",
     "apps.plataforma",
     "apps.integracoes",
+    "apps.api",
     "apps.realtime",
     "apps.vitrine",  # cardápio digital público (Passo 4)
 ]
@@ -109,7 +110,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.core.api.UsuarioLiberado"],
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {"publico": "60/min", "publico_pedido": "20/hour"},
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 100,

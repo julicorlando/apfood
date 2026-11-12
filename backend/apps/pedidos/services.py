@@ -5,6 +5,7 @@ pode enviar o `id` (UUID) gerado offline: reenviar o mesmo pedido devolve o
 existente em vez de duplicar.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
@@ -215,6 +216,8 @@ def _cupom(loja, codigo: str, subtotal: int, taxa: int, dados: PedidoIn):
 # =============================================================================
 @transaction.atomic
 def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
+    if dados.id:
+        dados.id = uuid.UUID(str(dados.id))
     if dados.id and (existente := Pedido.objects.filter(pk=dados.id).first()):
         if existente.loja_id != loja.id:
             raise ErroNegocio("id de pedido já usado")
