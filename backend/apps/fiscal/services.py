@@ -67,7 +67,19 @@ def dados_pedido(pedido) -> dict:
 
 def linhas_para_json(linhas) -> list[dict]:
     return [{"texto": l.texto, "negrito": l.negrito, "grande": l.grande, "alinhamento": l.alinhamento,
-             "corte": l.corte} for l in linhas]
+             "corte": l.corte, "qrcode": l.qrcode} for l in linhas]
+
+
+def dados_nota(nota) -> dict:
+    return {"numero": nota.numero, "serie": nota.serie, "chave": nota.chave or "", "protocolo": nota.protocolo,
+            "autorizada_em": timezone.localtime(nota.autorizada_em) if nota.autorizada_em else None,
+            "url_consulta": nota.url_consulta, "qrcode": nota.qrcode, "ambiente": nota.ambiente,
+            "cpf_cnpj_consumidor": nota.cpf_cnpj_consumidor}
+
+
+def danfe(nota, largura=48):
+    """DANFE NFC-e para a impressora térmica (nota AUTORIZADA)."""
+    return cupom.danfe_nfce(dados_pedido(nota.pedido), dados_loja(nota.loja), dados_nota(nota), largura)
 
 
 def cupom_venda(pedido, largura=48):
@@ -206,6 +218,8 @@ def aplicar_retorno(nota, resp: dict) -> None:
         nota.numero = int(resp["numero"]) if resp.get("numero") else None
         nota.serie = int(resp["serie"]) if resp.get("serie") else nota.serie
         nota.protocolo = resp.get("protocolo", "")
+        nota.qrcode = resp.get("qrcode_url") or resp.get("qr_code") or ""
+        nota.url_consulta = resp.get("url_consulta_nf") or ""
         for campo, chave in (("url_xml", "caminho_xml_nota_fiscal"), ("url_danfe", "caminho_danfe")):
             if resp.get(chave):
                 setattr(nota, campo, resp[chave] if resp[chave].startswith("http") else host + resp[chave])
@@ -223,9 +237,14 @@ def documento_da_venda(pedido, *, cpf: str = "", largura: int = 48) -> dict:
     """O que imprimir ao finalizar a venda."""
     if emissor_da_loja(pedido.loja):
         nota = emitir_nfce(pedido, cpf=cpf)
-        if nota.status in (StatusNotaFiscal.AUTORIZADA, StatusNotaFiscal.PROCESSANDO):
-            return {"tipo": "NFCE", "nota": {"id": str(nota.id), "status": nota.status, "numero": nota.numero,
-                                             "chave": nota.chave, "url_danfe": nota.url_danfe}}
+        info = {"id": str(nota.id), "status": nota.status, "numero": nota.numero, "chave": nota.chave,
+                "url_danfe": nota.url_danfe}
+        if nota.status == StatusNotaFiscal.AUTORIZADA:
+            return {"tipo": "NFCE", "nota": info, "linhas": linhas_para_json(danfe(nota, largura))}
+        if nota.status == StatusNotaFiscal.PROCESSANDO:
+            # SEFAZ demorando: entrega o comprovante agora; o DANFE pode ser reimpresso depois
+            return {"tipo": "NFCE", "nota": info, "aviso": "NFC-e em processamento na SEFAZ",
+                    "linhas": linhas_para_json(cupom_venda(pedido, largura))}
         # rejeitada: entrega o comprovante para o cliente não ficar sem nada
         return {"tipo": "NAO_FISCAL", "aviso": f"NFC-e rejeitada: {nota.mensagem_retorno}",
                 "linhas": linhas_para_json(cupom_venda(pedido, largura))}

@@ -669,13 +669,26 @@ class NotaFiscalSerializer(s.serializers.ModelSerializer):
 class NotaFiscalViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = NotaFiscal.objects.all()
     serializer_class = NotaFiscalSerializer
-    permission_classes = [EhGerente]
+    permission_classes = [UsuarioLiberado]  # operador reimprime; cancelar exige gerente
+
+    def get_permissions(self):
+        if self.action == "cancelar":
+            return [EhGerente()]
+        return super().get_permissions()
     filterset_fields = ["status", "modelo", "pedido"]
 
     @action(detail=True, methods=["post"])
     def cancelar(self, request, pk=None):
         nota = fiscal_srv.cancelar_nota(self.get_object(), request.data.get("justificativa", ""))
         return Response(NotaFiscalSerializer(nota).data)
+
+    @action(detail=True, methods=["get"])
+    def danfe(self, request, pk=None):
+        """Reimpressão do DANFE NFC-e na térmica."""
+        nota = self.get_object()
+        if nota.status != "AUTORIZADA" or not nota.pedido_id:
+            raise ErroNegocio("só notas autorizadas têm DANFE")
+        return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.danfe(nota, _largura(request)))})
 
     @action(detail=True, methods=["post"])
     def reemitir(self, request, pk=None):

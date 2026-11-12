@@ -50,3 +50,23 @@ def test_fechamento():
                               "diferenca_centavos": 0}]}
     texto = para_texto(fechamento_caixa(dados, LOJA))
     assert "FECHAMENTO DE CAIXA" in texto and "QUEBRA" in texto and "-5,00" in texto
+
+
+def test_danfe_nfce_com_chave_e_qrcode():
+    from datetime import datetime
+
+    from apfood_core.cupom import comprovante_venda, danfe_nfce, para_texto
+
+    pedido = {"numero": 7, "data": datetime(2026, 11, 12, 20, 0), "tipo_atendimento": "RETIRADA",
+              "itens": [{"quantidade": 1, "nome": "X-Burger", "total_centavos": 3000}],
+              "subtotal_centavos": 3000, "total_centavos": 3000,
+              "pagamentos": [{"forma": "PIX", "valor_centavos": 3000}]}
+    nota = {"numero": 15, "serie": 1, "chave": "35" + "1" * 42, "protocolo": "135260000000001",
+            "autorizada_em": "2026-11-12T20:01:02-03:00", "url_consulta": "https://www.nfce.fazenda.sp.gov.br/consulta",
+            "qrcode": "https://www.nfce.fazenda.sp.gov.br/qrcode?p=351111|2|1|1|ABC", "ambiente": "HOMOLOGACAO"}
+    linhas = danfe_nfce(pedido, {"nome": "Burger"}, nota)
+    txt = para_texto(linhas)
+    assert "DANFE NFC-e" in txt and "NAO E DOCUMENTO FISCAL" not in txt
+    assert "NFC-e n 15" in txt and "3511 1111" in txt and "HOMOLOGACAO" in txt
+    assert any(l.qrcode for l in linhas)
+    assert len(linhas) > len(comprovante_venda(pedido, {"nome": "Burger"}))

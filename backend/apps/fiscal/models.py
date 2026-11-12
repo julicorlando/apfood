@@ -66,6 +66,8 @@ class NotaFiscal(DaLoja, ModeloBase):
     referencia_provedor = models.CharField(max_length=80, help_text="id enviado ao provedor (idempotência)")
     url_xml = models.URLField(max_length=500, blank=True)
     url_danfe = models.URLField(max_length=500, blank=True)
+    url_consulta = models.URLField(max_length=500, blank=True, help_text="consulta pública da SEFAZ")
+    qrcode = models.TextField(blank=True, help_text="conteúdo do QR Code da NFC-e (impresso no DANFE)")
     mensagem_retorno = models.TextField(blank=True)
     tentativas = models.PositiveSmallIntegerField(default=0)
     autorizada_em = models.DateTimeField(null=True, blank=True)

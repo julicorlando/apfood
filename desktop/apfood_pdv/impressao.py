@@ -25,7 +25,19 @@ GAVETA = ESC + b"p\x00\x19\xfa"  # pulso no pino 2: abre a gaveta de dinheiro
 
 def _linha(l) -> dict:
     return l if isinstance(l, dict) else {"texto": l.texto, "negrito": l.negrito, "grande": l.grande,
-                                         "alinhamento": l.alinhamento, "corte": l.corte}
+                                         "alinhamento": l.alinhamento, "corte": l.corte,
+                                         "qrcode": getattr(l, "qrcode", False)}
+
+
+def qrcode_escpos(conteudo: str, tamanho: int = 6) -> bytes:
+    """QR Code nativo da impressora (GS ( k, modelo 2) — Epson, Elgin, Bematech, Daruma."""
+    dados = conteudo.encode("ascii", errors="ignore")
+    n = len(dados) + 3
+    return (GS + b"(k\x04\x00\x31\x41\x32\x00"          # modelo 2
+            + GS + b"(k\x03\x001C" + bytes([tamanho])     # tamanho do módulo
+            + GS + b"(k\x03\x001E0"                      # correção de erro L
+            + GS + b"(k" + bytes([n % 256, n // 256]) + b"1P0" + dados  # armazena
+            + GS + b"(k\x03\x001Q0")                     # imprime
 
 
 def para_escpos(linhas, *, abrir_gaveta: bool = False, codificacao: str = "cp860") -> bytes:
@@ -38,6 +50,9 @@ def para_escpos(linhas, *, abrir_gaveta: bool = False, codificacao: str = "cp860
             out += AVANCA_E_CORTA
             continue
         out += ALINHA.get(l.get("alinhamento", "esquerda"), ALINHA["esquerda"])
+        if l.get("qrcode"):
+            out += ALINHA["centro"] + qrcode_escpos(l.get("texto") or "") + b"\n"
+            continue
         out += NEGRITO[bool(l.get("negrito"))] + TAMANHO[bool(l.get("grande"))]
         out += (l.get("texto") or "").encode(codificacao, errors="replace") + b"\n"
     out += NEGRITO[0] + TAMANHO[0] + ALINHA["esquerda"]
@@ -49,7 +64,7 @@ def para_texto(linhas, largura: int = 48) -> str:
     for l in map(_linha, linhas):
         if l.get("corte"):
             continue
-        t = l.get("texto") or ""
+        t = ("[QR Code] " if l.get("qrcode") else "") + (l.get("texto") or "")
         saida.append(t.center(largura).rstrip() if l.get("alinhamento") == "centro" else t)
     return "\n".join(saida)
 

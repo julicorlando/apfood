@@ -24,6 +24,7 @@ class Linha:
     grande: bool = False  # altura e largura duplas
     alinhamento: str = "esquerda"  # esquerda | centro | direita
     corte: bool = False  # cortar o papel depois desta linha
+    qrcode: bool = False  # imprime `texto` como QR Code
 
 
 def _r(c: int) -> str:
@@ -145,6 +146,52 @@ def comprovante_venda(pedido: dict, loja: dict, largura: int = 48) -> list[Linha
                 Linha(pedido["link_acompanhamento"], alinhamento="centro")]
     out += [Linha("Obrigado pela preferencia!", alinhamento="centro"), Linha(), Linha(corte=True)]
     return out
+
+
+def danfe_nfce(pedido: dict, loja: dict, nota: dict, largura: int = 48) -> list[Linha]:
+    """DANFE NFC-e simplificado para a térmica (NFC-e AUTORIZADA).
+
+    `nota`: numero, serie, chave, protocolo, autorizada_em (datetime|str),
+    url_consulta, qrcode (conteúdo do QR da SEFAZ), ambiente, cpf_cnpj_consumidor.
+    Mesmo corpo do comprovante; muda o título e o rodapé fiscal (chave + QR Code).
+    """
+    L = largura
+    corpo = comprovante_venda(pedido, loja, largura)
+    # troca o título "COMPROVANTE / NAO E DOCUMENTO FISCAL" pelo do DANFE
+    titulo = [Linha("DANFE NFC-e - Documento Auxiliar da", negrito=True, alinhamento="centro"),
+              Linha("Nota Fiscal de Consumidor Eletronica", negrito=True, alinhamento="centro")]
+    i = next(n for n, l in enumerate(corpo) if l.texto == "COMPROVANTE DE VENDA")
+    corpo = corpo[:i] + titulo + corpo[i + 2:]
+    # rodapé fiscal antes do agradecimento
+    fim = next(n for n, l in enumerate(corpo) if l.texto == "Obrigado pela preferencia!")
+    chave = nota.get("chave") or ""
+    autorizada = nota.get("autorizada_em")
+    if isinstance(autorizada, datetime):
+        autorizada = autorizada.strftime("%d/%m/%Y %H:%M:%S")
+    elif isinstance(autorizada, str) and len(autorizada) >= 19:
+        autorizada = f"{autorizada[8:10]}/{autorizada[5:7]}/{autorizada[:4]} {autorizada[11:19]}"
+    doc = nota.get("cpf_cnpj_consumidor") or ""
+    fiscal = [
+        Linha(f"NFC-e n {nota.get('numero') or ''}  Serie {nota.get('serie') or ''}", negrito=True,
+              alinhamento="centro"),
+        Linha(f"Emissao {autorizada or ''}", alinhamento="centro"),
+        Linha(f"CONSUMIDOR CPF/CNPJ {doc}" if doc else "CONSUMIDOR NAO IDENTIFICADO", alinhamento="centro"),
+        Linha("Consulte pela chave de acesso em", alinhamento="centro"),
+    ]
+    if nota.get("url_consulta"):
+        fiscal += [Linha(t, alinhamento="centro") for t in _quebrar(nota["url_consulta"], L)]
+    fiscal += [Linha(" ".join(chave[n:n + 4] for n in range(0, len(chave), 4))[:L], alinhamento="centro")]
+    if len(" ".join(chave[n:n + 4] for n in range(0, len(chave), 4))) > L:
+        resto = " ".join(chave[n:n + 4] for n in range(0, len(chave), 4))[L:].strip()
+        fiscal.append(Linha(resto, alinhamento="centro"))
+    if nota.get("protocolo"):
+        fiscal.append(Linha(f"Protocolo de autorizacao {nota['protocolo']}", alinhamento="centro"))
+    if nota.get("qrcode"):
+        fiscal.append(Linha(nota["qrcode"], qrcode=True, alinhamento="centro"))
+    if nota.get("ambiente") == "HOMOLOGACAO":
+        fiscal.append(Linha("EMITIDA EM HOMOLOGACAO - SEM VALOR FISCAL", negrito=True, alinhamento="centro"))
+    fiscal.append(_sep(L, "="))
+    return corpo[:fim] + fiscal + corpo[fim:]
 
 
 def cupom_cozinha(pedido: dict, setor: str = "", largura: int = 48) -> list[Linha]:

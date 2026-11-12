@@ -89,9 +89,15 @@ def test_nfce_autorizada(loja_fiscal, cardapio, operador, provedor):
     provedor.rotas[("POST", "/v2/nfce")] = (201, {
         "status": "autorizado", "numero": "15", "serie": "1", "chave_nfe": "NFe" + "3" * 44,
         "caminho_danfe": "/arquivos/danfe.html", "mensagem_sefaz": "Autorizado o uso da NF-e",
+        "protocolo": "135260000000001", "qrcode_url": "https://sefaz.exemplo/qrcode?p=333|2|1",
+        "url_consulta_nf": "https://sefaz.exemplo/consulta",
     })
     doc = fiscal.documento_da_venda(p, cpf="123.456.789-09")
     assert doc["tipo"] == "NFCE" and doc["nota"]["status"] == "AUTORIZADA" and doc["nota"]["numero"] == 15
+    # DANFE NFC-e pronto para a térmica: chave, protocolo e QR Code
+    textos = " ".join(l["texto"] for l in doc["linhas"])
+    assert "DANFE NFC-e" in textos and "3333 3333" in textos and "135260000000001" in textos
+    assert [l["texto"] for l in doc["linhas"] if l["qrcode"]] == ["https://sefaz.exemplo/qrcode?p=333|2|1"]
     enviado = json.loads(provedor.chamadas[-1].content)
     assert enviado["cpf_destinatario"] == "12345678909" and enviado["cnpj_emitente"] == "12345678000190"
     assert enviado["formas_pagamento"] == [{"forma_pagamento": "17", "valor_pagamento": "14.00"}]
