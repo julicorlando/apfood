@@ -1,0 +1,28 @@
+{% extends "vitrine/base.html" %}{% load static %}
+{% block titulo %}{{ loja.nome }} — cardápio e pedidos{% endblock %}
+{% block meta %}
+  <meta name="description" content="Peça online em {{ loja.nome }}: cardápio, entrega e retirada.">
+  <meta property="og:title" content="{{ loja.nome }} — peça online">
+  <meta property="og:type" content="website">
+  {% if loja.logo %}<meta property="og:image" content="{{ dados.loja.logo }}">{% endif %}
+{% endblock %}
+{% block conteudo %}
+  <header class="topo" id="topo">
+    <div class="topo-linha"><div><h1>{{ loja.nome }}</h1></div></div>
+  </header>
+  <nav class="categorias" aria-label="Categorias">
+    <div class="trilho" id="trilho"></div>
+    <div class="busca"><label class="sr" for="busca">Buscar no cardápio</label>
+      <input id="busca" type="search" placeholder="Buscar no cardápio…" autocomplete="off"></div>
+  </nav>
+  <main id="lista" aria-live="polite">
+    {# conteúdo inicial sem JavaScript (e para buscadores) #}
+    {% for c in dados.categorias %}<section class="secao"><h2>{{ c.nome }}</h2>
+      {% for p in c.produtos %}<div class="produto"><div class="txt"><strong>{{ p.nome }}</strong>
+        {% if p.descricao %}<div class="d">{{ p.descricao }}</div>{% endif %}</div></div>{% endfor %}
+    </section>{% empty %}<p class="vazio">Cardápio vazio no momento.</p>{% endfor %}
+  </main>
+  <div class="barra oculto" id="barra"></div>
+  {{ dados|json_script:"dados-cardapio" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vitrine/cardapio.js' %}"></script>{% endblock %}

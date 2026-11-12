@@ -1,85 +1,125 @@
 # Modelagem do banco de dados
 
-Fonte da verdade: [`packages/database/prisma/schema.prisma`](../packages/database/prisma/schema.prisma). Restrições extras (índice parcial, CHECKs, trigram): [`extras.sql`](../packages/database/prisma/extras.sql).
+PostgreSQL, gerado pelos models Django em `backend/apps/*/models.py`. As tabelas têm nomes em português e snake_case (`db_table`).
 
-## Convenções
-- **UUID** em todas as PKs, gerado no cliente quando possível (sync offline idempotente).
-- **Dinheiro em centavos** (`Int`). Quantidades de estoque em `Decimal(12,3)`.
-- **Snapshots** em itens de pedido (nome e preço) e endereço de entrega — o histórico não muda se o cadastro mudar.
-- **Multi-loja** desde o início (`loja_id` nas tabelas raiz) — custa pouco agora e evita uma migração dolorosa depois.
-- `updated_at` indexado + `deleted_at` nas tabelas que o desktop sincroniza.
+Convenções de todas as tabelas:
 
-## Diagrama ER (principais relações)
+| Coluna | Significado |
+|---|---|
+| `id` | UUID (pode ser gerado no PDV offline) |
+| `criado_em` / `atualizado_em` | timestamps; `atualizado_em` é indexado e serve de cursor de sincronização |
+| `excluido_em` | soft delete nos cadastros que o PDV replica |
+| `loja_id` | loja dona do registro (a loja pertence a uma empresa) |
+| `*_centavos` | dinheiro em centavos (inteiro) |
+| quantidades de estoque | `numeric(12,3)` |
+
+## Diagrama
 
 ```mermaid
 erDiagram
-  LOJA ||--o{ USUARIO : tem
-  LOJA ||--o{ PRODUTO : tem
-  LOJA ||--o{ CATEGORIA : tem
-  LOJA ||--o{ PEDIDO : recebe
-  LOJA ||--o{ CLIENTE : atende
-  LOJA ||--o{ ZONA_ENTREGA : define
-  LOJA ||--o{ ENTREGADOR : tem
-
-  USUARIO ||--o{ TURNO_CAIXA : abre
-  TURNO_CAIXA ||--o{ MOVIMENTACAO_CAIXA : registra
-  TURNO_CAIXA ||--o{ CONFERENCIA_CAIXA : "fecha com"
-  TURNO_CAIXA ||--o{ PAGAMENTO : recebe
-
-  CATEGORIA ||--o{ PRODUTO : agrupa
-  PRODUTO ||--o{ FICHA_TECNICA : "é composto por"
-  PRODUTO ||--o{ FICHA_TECNICA : "é insumo de"
-  PRODUTO }o--o{ GRUPO_ADICIONAL : oferece
-  GRUPO_ADICIONAL ||--o{ ADICIONAL : contem
-  PRODUTO ||--o{ MOVIMENTACAO_ESTOQUE : kardex
-
-  CLIENTE ||--o{ ENDERECO_CLIENTE : possui
-  CLIENTE ||--o{ PEDIDO : faz
-  PEDIDO ||--o{ ITEM_PEDIDO : contem
-  ITEM_PEDIDO ||--o{ ITEM_PEDIDO_ADICIONAL : leva
-  PEDIDO ||--o{ PAGAMENTO : "pago com"
-  PEDIDO ||--o{ HISTORICO_STATUS : registra
-  PAGAMENTO ||--o| MOVIMENTACAO_CAIXA : gera
-  ENTREGADOR ||--o{ PEDIDO : entrega
-  ZONA_ENTREGA ||--o{ PEDIDO : "define taxa"
-
-  DESPESA ||--o| MOVIMENTACAO_CAIXA : "sai do caixa"
-  CATEGORIA_DESPESA ||--o{ DESPESA : classifica
+    empresas ||--o{ lojas : "filiais"
+    empresas ||--o{ usuarios : ""
+    usuarios }o--o{ lojas : "acessa"
+    lojas ||--o{ dispositivos : ""
+    lojas ||--o{ sequencias_pedido : ""
+    usuarios ||--o{ turnos_caixa : "abre"
+    turnos_caixa ||--o{ movimentacoes_caixa : ""
+    turnos_caixa ||--o{ conferencias_caixa : "fechamento"
+    categorias ||--o{ produtos : ""
+    produtos ||--o{ fichas_tecnicas : "composição"
+    produtos ||--o{ produtos_grupos_adicionais : ""
+    grupos_adicionais ||--o{ produtos_grupos_adicionais : ""
+    grupos_adicionais ||--o{ adicionais : ""
+    clientes ||--o{ enderecos_cliente : ""
+    clientes ||--o{ pedidos : ""
+    zonas_entrega ||--o{ pedidos : ""
+    entregadores ||--o{ pedidos : ""
+    turnos_caixa ||--o{ pedidos : ""
+    pedidos ||--o{ itens_pedido : ""
+    itens_pedido ||--o{ itens_pedido_adicionais : ""
+    pedidos ||--o{ pagamentos : ""
+    pedidos ||--o{ historico_status_pedido : ""
+    pagamentos ||--o| movimentacoes_caixa : "gera"
+    produtos ||--o{ movimentacoes_estoque : "kardex"
+    pedidos ||--o{ movimentacoes_estoque : "baixa"
+    categorias_despesa ||--o{ despesas : ""
+    despesas ||--o| movimentacoes_caixa : "paga da gaveta"
 ```
 
-## Tabelas
+## Tabelas por módulo
 
-| Tabela | Finalidade | Campos-chave |
-|---|---|---|
-| `lojas` | Tenant + configurações (slug público, geolocalização, horários, pedido mínimo, aceite automático, momento da baixa de estoque) | `slug` único |
-| `sequencias_pedido` | Contador atômico do número diário do pedido | PK (`loja_id`, `data`) |
-| `usuarios` | Login, papel (ADMIN/GERENTE/OPERADOR), senha argon2, PIN | único (`loja_id`, `login`) |
-| `dispositivos` | PCs com o PDV instalado; token e último sync | |
-| `logs_auditoria` | Ações sensíveis (cancelamentos, alteração de preço, reabertura de caixa) | |
-| `turnos_caixa` | Turno por operador: fundo de troco, abertura, fechamento, totais esperado/informado/diferença | índice parcial: 1 ABERTO por usuário |
-| `movimentacoes_caixa` | Livro-razão do turno: VENDA, ESTORNO_VENDA, SUPRIMENTO, SANGRIA, DESPESA — por forma de pagamento | `pagamento_id`/`despesa_id` únicos |
-| `conferencias_caixa` | Fechamento por forma: esperado × informado × diferença | único (`turno_id`, `forma`) |
-| `categorias` | Seções do cardápio | |
-| `produtos` | Itens de venda **e** insumos (`tipo`). Flags `controla_estoque` e `baixar_insumos`, saldo e mínimo | |
-| `fichas_tecnicas` | Composição: produto → insumo × quantidade | |
-| `grupos_adicionais` | "Ponto da carne" (1..1), "Adicionais" (0..5) | `min_selecao`, `max_selecao` |
-| `produtos_grupos_adicionais` | N:N produto ↔ grupo, com ordem | |
-| `adicionais` | Opções do grupo, preço, máx. por item, insumo consumido opcional | |
-| `clientes` | Cadastro por telefone (auto-preenchimento no delivery) | único (`loja_id`, `telefone`) |
-| `enderecos_cliente` | Vários endereços por cliente | |
-| `zonas_entrega` | Taxa por bairro ou por raio (km) | |
-| `entregadores` | Motoboys | |
-| `pedidos` | Canal, tipo de atendimento, status, identificação (nome/senha/mesa), endereço snapshot, valores, turno/atendente/dispositivo, linha do tempo | `token_rastreio` único |
-| `itens_pedido` | Snapshot de nome e preço, quantidade, observação | |
-| `itens_pedido_adicionais` | Adicionais escolhidos por item | |
-| `pagamentos` | Múltiplos por pedido; troco; status; turno em que entrou | |
-| `historico_status_pedido` | Auditoria de cada transição | |
-| `movimentacoes_estoque` | Kardex: ENTRADA, SAIDA_VENDA, ESTORNO_VENDA, AJUSTE, PERDA, com saldos | |
-| `categorias_despesa` / `despesas` | Saídas para o fluxo de caixa | |
+### Empresas, lojas e acesso
+| Tabela | Conteúdo |
+|---|---|
+| `empresas` | cliente da plataforma: nome, CNPJ, responsável, `ativa`/motivo do bloqueio, `limite_lojas`, `limite_usuarios` |
+| `lojas` | empresa dona, dados, slug público, endereço + lat/long, horários (JSON), pedido mínimo, aceite automático, momento da baixa de estoque |
+| `sequencias_pedido` | contador por loja/dia → número do pedido |
+| `dispositivos` | PCs com o PDV, hash do token, último sync |
+| `usuarios` | login, senha (Argon2), `papel` MASTER/ADMIN/GERENTE/OPERADOR, PIN, empresa |
+| `usuarios_lojas` | lojas que GERENTE/OPERADOR acessam |
+| `logs_auditoria` | empresa, loja, ação, entidade, dados JSON |
 
-## Como os relatórios saem do modelo
-- **Faturamento diário/semanal/mensal e por canal:** `pedidos` CONCLUIDO agrupados por `date_trunc(created_at)` e `canal`.
-- **Ticket médio:** `SUM(total_centavos) / COUNT(*)` dos concluídos no período.
-- **Curva ABC:** `itens_pedido` agrupados por `produto_id`, ordenados por receita, com percentual acumulado (A ≤ 80%, B ≤ 95%, C restante).
-- **Fechamentos por operador:** `turnos_caixa` + `conferencias_caixa`.
-- **Fluxo de caixa:** entradas = `pagamentos` confirmados; saídas = `despesas` (por competência ou pagamento).
+### Caixa
+| Tabela | Conteúdo |
+|---|---|
+| `turnos_caixa` | operador, fundo de troco, abertura/fechamento, tipo de conferência (CEGA/DETALHADA), totais esperado/informado, diferença (quebra/sobra) |
+| `movimentacoes_caixa` | VENDA, ESTORNO_VENDA, SUPRIMENTO, SANGRIA, DESPESA × forma de pagamento × valor (> 0) |
+| `conferencias_caixa` | uma linha por forma de pagamento no fechamento |
+
+### Cardápio e estoque
+| Tabela | Conteúdo |
+|---|---|
+| `categorias` | ordem, ativa |
+| `produtos` | VENDA ou INSUMO, preço, custo, `controla_estoque`, `baixar_insumos`, unidade, saldo, mínimo |
+| `fichas_tecnicas` | produto → insumo × quantidade |
+| `grupos_adicionais` / `adicionais` | mín/máx de seleção; adicional pode consumir insumo |
+| `produtos_grupos_adicionais` | quais grupos cada produto oferece |
+| `movimentacoes_estoque` | kardex: ENTRADA, SAIDA_VENDA, ESTORNO_VENDA, AJUSTE, PERDA, com saldo anterior/posterior |
+
+### Clientes e entrega
+| Tabela | Conteúdo |
+|---|---|
+| `clientes` | nome, telefone (único por loja, só dígitos) |
+| `enderecos_cliente` | vários por cliente, um principal |
+| `zonas_entrega` | taxa por BAIRRO ou por faixa de RAIO_KM |
+| `entregadores` | motoboys |
+
+### Pedidos
+| Tabela | Conteúdo |
+|---|---|
+| `pedidos` | canal (ONLINE/BALCAO/DELIVERY), atendimento (CONSUMO_LOCAL/RETIRADA/ENTREGA), status, token de rastreio, mesa/senha, endereço (snapshot), valores, turno, atendente, linha do tempo |
+| `itens_pedido` | snapshot do nome e preço, quantidade, observação |
+| `itens_pedido_adicionais` | snapshot dos adicionais escolhidos |
+| `pagamentos` | forma, status, valor, valor recebido, troco, turno em que entrou |
+| `historico_status_pedido` | de → para, usuário |
+
+### Financeiro
+| Tabela | Conteúdo |
+|---|---|
+| `categorias_despesa` | Fornecedores, Aluguel, Motoboys... |
+| `despesas` | competência, pagamento, forma; se paga da gaveta, vinculada ao turno |
+
+## Regras garantidas pelo banco
+
+Declaradas em `Meta.constraints`, então viram SQL na migration:
+
+- `usuario_vinculo_empresa`: MASTER sem empresa; demais papéis com empresa
+- `turno_aberto_por_usuario`: índice único parcial, no máximo 1 turno ABERTO por operador
+- `mov_caixa_valor_positivo` e `mov_caixa_gaveta_so_dinheiro`: sangria, suprimento e despesa só em dinheiro
+- `pagamento_valor_positivo`, `pagamento_confirmado_tem_data`
+- `pedido_numero_unico_dia`, `pedido_entrega_tem_endereco`
+- `item_quantidade_positiva`
+- `grupo_min_max`, `ficha_nao_recursiva`, `adicional_insumo_com_quantidade`
+- `mov_estoque_saida_negativa` / `mov_estoque_entrada_positiva`
+- `um_endereco_principal`, `cliente_telefone_unico`, `produto_codigo_unico`
+
+## Como os relatórios saem dessas tabelas
+
+| Relatório | Fonte |
+|---|---|
+| Faturamento diário/semanal/mensal, ticket médio | `pedidos` CONCLUIDO, `total_centavos` agrupado por `data_referencia` |
+| Canais de venda | `pedidos.canal` |
+| Mais vendidos / Curva ABC | `itens_pedido` agrupado por `produto_id`, ordenado pelo faturamento acumulado (A ≈ 80%, B ≈ 15%, C ≈ 5%) |
+| Fechamentos por operador | `turnos_caixa` + `conferencias_caixa` |
+| Fluxo de caixa | entradas: `pagamentos` CONFIRMADO; saídas: `despesas` |
+| Estoque mínimo | `produtos` com `controla_estoque` e `estoque_atual <= estoque_minimo` |

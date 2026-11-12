@@ -1,0 +1,10 @@
+{% extends "vitrine/base.html" %}{% load static %}
+{% block titulo %}Pedido #{{ pedido.numero }} — {{ pedido.loja.nome }}{% endblock %}
+{% block meta %}<meta name="robots" content="noindex">{% endblock %}
+{% block conteudo %}
+  <header class="topo"><div class="topo-linha"><div><h1>{{ pedido.loja.nome }}</h1>
+    <div class="info">Acompanhe seu pedido #{{ pedido.numero }}</div></div></div></header>
+  <div class="acomp" id="conteudo" aria-live="polite"><div class="cartao">Carregando…</div></div>
+  {{ pedido.token_rastreio|json_script:"token-pedido" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vitrine/acompanhar.js' %}"></script>{% endblock %}
