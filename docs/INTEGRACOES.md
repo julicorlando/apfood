@@ -14,8 +14,8 @@ O certificado A1 e o CSC ficam cadastrados **no painel da Focus NFe**: o ApFood 
 ## Rotinas (rodar como serviço/cron no servidor)
 | Comando | Frequência | O que faz |
 |---|---|---|
-| `python manage.py processar_tarefas --loop` | contínuo | fila de tarefas: WhatsApp, consulta de NFC-e em processamento, ações no iFood, emissão automática, com retentativa |
-| `python manage.py ifood_polling --loop` | contínuo (30 s) | busca pedidos novos e cancelamentos no iFood |
+| `python manage.py processar_tarefas` | contínuo (`--uma-vez` para cron) | fila de tarefas: WhatsApp, consulta de NFC-e em processamento, ações no iFood, emissão automática, com retentativa |
+| `python manage.py ifood_polling` | contínuo (`--uma-vez` para cron) | busca pedidos novos e cancelamentos no iFood |
 | `python manage.py cobranca_diaria` | 1×/dia | gera as faturas mensais das empresas, marca inadimplência, **bloqueia** após a tolerância e reativa ao pagar |
 
 ## Limitações conhecidas
