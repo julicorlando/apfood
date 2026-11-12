@@ -245,6 +245,7 @@ class Pagamento(ModeloBase):
     pago_online = models.BooleanField(default=False)
     referencia_externa = models.CharField(max_length=80, blank=True, help_text="txid Pix, NSU")
     bandeira = models.CharField(max_length=30, blank=True, help_text="Visa, Master, Elo...")
+    dados_externos = models.JSONField(default=dict, blank=True, help_text="Pix: qr_code, ticket_url, expira_em")
     # Recebimento líquido (taxa da maquininha/gateway), base do fluxo de caixa
     taxa_centavos = models.PositiveIntegerField(default=0)
     previsao_recebimento = models.DateField(null=True, blank=True)

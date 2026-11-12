@@ -589,3 +589,94 @@ class CompraViewSet(EscopoLojaMixin, viewsets.ModelViewSet):
         if not motivo:
             raise ErroNegocio("informe o motivo", "motivo")
         return Response(s.CompraSerializer(compras_srv.cancelar(self.get_object(), request.user, motivo)).data)
+
+
+# =============================================================================
+# Documento da venda, cupons e Pix
+# =============================================================================
+from apps.fiscal import services as fiscal_srv  # noqa: E402
+from apps.fiscal.models import NotaFiscal  # noqa: E402
+
+
+def _largura(request) -> int:
+    return 32 if str(request.query_params.get("largura") or request.data.get("largura") or "") == "32" else 48
+
+
+def _pix_out(pg):
+    return {"pagamento": str(pg.id), "valor_centavos": pg.valor_centavos, "status": pg.status,
+            "referencia_externa": pg.referencia_externa, **pg.dados_externos}
+
+
+class DocumentosPedidoMixin:
+    @action(detail=True, methods=["post"])
+    def documento(self, request, pk=None):
+        """Finalizou a venda: NFC-e se houver emissor; senão, cupom não fiscal."""
+        return Response(fiscal_srv.documento_da_venda(self.get_object(), cpf=request.data.get("cpf", ""),
+                                                      largura=_largura(request)))
+
+    @action(detail=True, methods=["get"])
+    def cupom(self, request, pk=None):
+        """?tipo=venda (comprovante não fiscal) | cozinha (uma via por setor)."""
+        pedido = self.get_object()
+        if request.query_params.get("tipo") == "cozinha":
+            return Response({"vias": fiscal_srv.cupons_cozinha(pedido, _largura(request))})
+        return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_venda(pedido, _largura(request)))})
+
+    @action(detail=True, methods=["post"])
+    def pix(self, request, pk=None):
+        pg = pedidos_srv.cobrar_pix(pedido=self.get_object(), valor_centavos=request.data.get("valor_centavos"))
+        return Response(_pix_out(pg), status=status.HTTP_201_CREATED)
+
+
+PedidoViewSet.documento = DocumentosPedidoMixin.documento
+PedidoViewSet.cupom = DocumentosPedidoMixin.cupom
+PedidoViewSet.pix = DocumentosPedidoMixin.pix
+
+
+@action(detail=True, methods=["get"], url_path="cupom", url_name="cupom")
+def _cupom_comanda(self, request, pk=None):
+    return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_comanda(self.get_object(), _largura(request)))})
+
+
+@action(detail=True, methods=["post"], url_path="pix", url_name="pix")
+def _pix_comanda(self, request, pk=None):
+    pg = pedidos_srv.cobrar_pix(comanda=self.get_object(), valor_centavos=request.data.get("valor_centavos"))
+    return Response(_pix_out(pg), status=status.HTTP_201_CREATED)
+
+
+@action(detail=True, methods=["get"], url_path="cupom", url_name="cupom")
+def _cupom_turno(self, request, pk=None):
+    turno = self.get_object()
+    if turno.status != "FECHADO" and not request.user.eh_gerente:
+        raise PermissionDenied("o relatório do caixa sai após o fechamento")
+    return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_fechamento(turno, _largura(request)))})
+
+
+ComandaViewSet.cupom = _cupom_comanda
+ComandaViewSet.pix = _pix_comanda
+TurnoViewSet.cupom = _cupom_turno
+
+
+class NotaFiscalSerializer(s.serializers.ModelSerializer):
+    class Meta:
+        model = NotaFiscal
+        fields = "__all__"
+
+
+class NotaFiscalViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    queryset = NotaFiscal.objects.all()
+    serializer_class = NotaFiscalSerializer
+    permission_classes = [EhGerente]
+    filterset_fields = ["status", "modelo", "pedido"]
+
+    @action(detail=True, methods=["post"])
+    def cancelar(self, request, pk=None):
+        nota = fiscal_srv.cancelar_nota(self.get_object(), request.data.get("justificativa", ""))
+        return Response(NotaFiscalSerializer(nota).data)
+
+    @action(detail=True, methods=["post"])
+    def reemitir(self, request, pk=None):
+        nota = self.get_object()
+        if nota.status != "REJEITADA" or not nota.pedido_id:
+            raise ErroNegocio("só notas rejeitadas podem ser reemitidas")
+        return Response(NotaFiscalSerializer(fiscal_srv.emitir_nfce(nota.pedido, cpf=nota.cpf_cnpj_consumidor)).data)

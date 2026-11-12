@@ -152,3 +152,8 @@ STORAGES = {
 APFOOD = {
     "URL_PUBLICA": env("APFOOD_URL_PUBLICA", default="http://localhost:8000"),
 }
+APFOOD_CHAVE_CRIPTO = env("APFOOD_CHAVE_CRIPTO", default="")  # manage.py gerar_chave_cripto
+APFOOD_IFOOD_CLIENT_ID = env("APFOOD_IFOOD_CLIENT_ID", default="")
+APFOOD_IFOOD_CLIENT_SECRET = env("APFOOD_IFOOD_CLIENT_SECRET", default="")
+APFOOD_MP_TOKEN_PLATAFORMA = env("APFOOD_MP_TOKEN_PLATAFORMA", default="")  # cobrança das empresas
+APFOOD_DIAS_TOLERANCIA = env.int("APFOOD_DIAS_TOLERANCIA", default=10)

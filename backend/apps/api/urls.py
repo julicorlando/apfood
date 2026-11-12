@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import publico, relatorios, sync, views
+from . import publico, relatorios, sync, views, webhooks
 
 r = DefaultRouter()
 for prefixo, vs in [
@@ -13,7 +13,7 @@ for prefixo, vs in [
     ("categorias-despesa", views.CategoriaDespesaViewSet), ("taxas-pagamento", views.TaxaFormaPagamentoViewSet),
     ("despesas", views.DespesaViewSet), ("pedidos", views.PedidoViewSet), ("cozinha", views.CozinhaViewSet),
     ("turnos", views.TurnoViewSet), ("comandas", views.ComandaViewSet), ("estoque", views.EstoqueViewSet),
-    ("compras", views.CompraViewSet),
+    ("compras", views.CompraViewSet), ("notas-fiscais", views.NotaFiscalViewSet),
 ]:
     r.register(prefixo, vs, basename=prefixo)
 
@@ -33,5 +33,7 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/taxa-entrega/", publico.TaxaEntregaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/pedidos/", publico.PedidoPublicoView.as_view()),
     path("publico/pedidos/<str:token>/", publico.AcompanharPedidoView.as_view()),
+    path("webhooks/mercadopago/plataforma/", webhooks.MercadoPagoPlataformaWebhook.as_view()),
+    path("webhooks/mercadopago/<uuid:loja_id>/", webhooks.MercadoPagoLojaWebhook.as_view()),
     path("", include(r.urls)),
 ]

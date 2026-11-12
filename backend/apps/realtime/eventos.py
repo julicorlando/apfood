@@ -7,7 +7,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import transaction
 
-from .grupos import grupo_pdv, grupo_pedido
+from .grupos import grupo_pdv, grupo_pedido  # noqa: F401 (reexportados)
 
 log = logging.getLogger(__name__)
 

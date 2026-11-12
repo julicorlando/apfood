@@ -344,7 +344,8 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
 # Status
 # =============================================================================
 @transaction.atomic
-def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", entregador_id=None) -> Pedido:
+def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", entregador_id=None,
+                 origem_externa: bool = False) -> Pedido:
     p = Pedido.objects.select_for_update().select_related("loja").get(pk=pedido.pk)
     de = StatusPedido(p.status)
     if de == para:
@@ -389,7 +390,34 @@ def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", 
 
             recalcular(p.comanda)
     eventos.pedido_status(p)
+    _ganchos_status(p, para, motivo, origem_externa)
     return p
+
+
+def _ganchos_status(p, para, motivo, origem_externa):
+    """Reflexos fora do sistema (sempre por tarefa, depois do commit)."""
+    from apps.integracoes.models import Integracao
+    from apps.integracoes.tarefas import enfileirar
+
+    if p.canal == CanalVenda.MARKETPLACE and p.marketplace == "IFOOD" and not origem_externa:
+        integ = Integracao.ativa(p.loja, "MARKETPLACE", "ifood")
+        if integ:
+            from apps.integracoes.provedores.ifood import acao_para_status
+
+            if para in (S.CANCELADO, S.RECUSADO):
+                enfileirar("ifood.acao", {"integracao_id": str(integ.id), "order_id": p.id_externo,
+                                          "acao": "requestCancellation",
+                                          "corpo": {"reason": motivo[:250], "cancellationCode": "501"}})
+            elif acao := acao_para_status(para):
+                if not (acao == "readyToPickup" and p.tipo_atendimento == TipoAtendimento.ENTREGA):
+                    enfileirar("ifood.acao", {"integracao_id": str(integ.id), "order_id": p.id_externo, "acao": acao})
+    from apps.integracoes.notificacoes import notificar_status
+
+    notificar_status(p)
+    if para == S.CONCLUIDO:
+        from apps.fiscal.services import agendar_emissao_automatica
+
+        agendar_emissao_automatica(p)
 
 
 def concluir(pedido, usuario=None) -> Pedido:
@@ -494,4 +522,118 @@ def registrar_pagamento(
     )
     if turno is not None:
         caixa.registrar_venda(turno, pg, usuario)
+    return pg
+
+
+# =============================================================================
+# Marketplace e pagamentos online
+# =============================================================================
+@transaction.atomic
+def importar_pedido_externo(loja, d: dict) -> Pedido:
+    """Pedido vindo de marketplace (iFood...): preços e totais são os do app
+    (o cliente já pagou o que viu lá). Produtos são casados pelo `codigo` (SKU)
+    para baixar estoque e rotear para o setor de produção; o que não casar entra
+    só como texto."""
+    if existente := Pedido.objects.filter(loja=loja, marketplace=d["marketplace"], id_externo=d["id_externo"]).first():
+        return existente
+    codigos = {i["codigo"] for i in d["itens"] if i.get("codigo")}
+    produtos = {p.codigo: p for p in Produto.objects.ativos().filter(loja=loja, codigo__in=codigos)} if codigos else {}
+    end = d.get("endereco") or {}
+    pedido = Pedido.objects.create(
+        loja=loja, numero=SequenciaPedido.proximo(loja, timezone.localdate()), canal=CanalVenda.MARKETPLACE,
+        marketplace=d["marketplace"], id_externo=d["id_externo"], codigo_externo=d.get("codigo_externo", ""),
+        tipo_atendimento=d["tipo_atendimento"], status=S.RECEBIDO if loja.aceite_automatico else S.PENDENTE,
+        nome_cliente=d.get("nome_cliente", "")[:120], telefone_cliente="".join(c for c in d.get("telefone_cliente", "") if c.isdigit())[:13],
+        entrega_logradouro=end.get("logradouro", "") or "", entrega_numero=end.get("numero", "") or "",
+        entrega_complemento=end.get("complemento", "") or "", entrega_bairro=end.get("bairro", "") or "",
+        entrega_cidade=end.get("cidade", "") or "", entrega_cep=end.get("cep", "") or "",
+        entrega_referencia=end.get("referencia", "") or "",
+        subtotal_centavos=d["subtotal_centavos"], taxa_entrega_centavos=d.get("taxa_entrega_centavos", 0),
+        desconto_centavos=d.get("desconto_centavos", 0), acrescimo_centavos=d.get("acrescimo_centavos", 0),
+        total_centavos=d["total_centavos"], observacao=d.get("observacao", ""),
+    )
+    for it in d["itens"]:
+        prod = produtos.get(it.get("codigo"))
+        adic_unit = sum(a["unitario_centavos"] * a["quantidade"] for a in it.get("adicionais", []))
+        item = ItemPedido.objects.create(
+            pedido=pedido, produto=prod, nome_produto=it["nome"][:120], quantidade=it["quantidade"],
+            preco_unitario_centavos=it["unitario_centavos"], total_adicionais_centavos=adic_unit,
+            total_centavos=it["total_centavos"], observacao=it.get("observacao", "")[:255],
+            setor=prod.setor_efetivo if prod else None,
+        )
+        ItemPedidoAdicional.objects.bulk_create([
+            ItemPedidoAdicional(item=item, nome=a["nome"][:80], quantidade=a["quantidade"],
+                                preco_unitario_centavos=a["unitario_centavos"]) for a in it.get("adicionais", [])
+        ])
+    for pg in d.get("pagamentos", []):
+        if pg["valor_centavos"] <= 0:
+            continue
+        Pagamento.objects.create(
+            pedido=pedido, forma=pg["forma"], valor_centavos=pg["valor_centavos"], pago_online=pg.get("pago", False),
+            status=StatusPagamento.CONFIRMADO if pg.get("pago") else StatusPagamento.PENDENTE,
+            confirmado_em=timezone.now() if pg.get("pago") else None,
+            valor_recebido_centavos=pg.get("troco_para_centavos"),
+        )
+    HistoricoStatusPedido.objects.create(pedido=pedido, status_para=pedido.status, observacao=d["marketplace"])
+    if pedido.status == S.RECEBIDO and loja.momento_baixa_estoque == MomentoBaixaEstoque.ACEITE:
+        estoque.baixar_pedido(pedido)
+    eventos.pedido_novo(pedido)
+    return pedido
+
+
+@transaction.atomic
+def cobrar_pix(*, pedido=None, comanda=None, valor_centavos: int | None = None, email: str = "") -> Pagamento:
+    """Gera cobrança Pix (QR) no gateway da loja. O pagamento fica PENDENTE até
+    o webhook confirmar."""
+    from django.conf import settings
+
+    from apps.integracoes.models import Integracao
+    from apps.integracoes.provedores.base import ErroProvedor
+    from apps.integracoes.provedores.mercadopago import MercadoPago
+
+    alvo = pedido or comanda
+    integ = Integracao.ativa(alvo.loja, "PAGAMENTO", "mercadopago")
+    if integ is None:
+        raise ErroNegocio("Pix automático não configurado nesta loja")
+    total = alvo.total_centavos
+    restante = total - total_pago(pedido=pedido, comanda=comanda)
+    valor = valor_centavos or restante
+    if valor <= 0 or valor > restante:
+        raise ErroNegocio("valor inválido para a cobrança Pix")
+    if pedido is not None:
+        pedido.pagamentos.filter(status=StatusPagamento.PENDENTE).delete()
+    pg = Pagamento.objects.create(pedido=pedido, comanda=comanda, forma=FormaPagamento.PIX, valor_centavos=valor,
+                                  status=StatusPagamento.PENDENTE, pago_online=True)
+    url = settings.APFOOD["URL_PUBLICA"].rstrip("/") + f"/api/webhooks/mercadopago/{alvo.loja_id}/"
+    try:
+        cobranca = MercadoPago(integ.obter_credenciais()["access_token"]).criar_pix(
+            valor_centavos=valor, descricao=f"{alvo.loja.nome} — {alvo}", email=email, referencia=str(pg.id),
+            notification_url=url if url.startswith("https://") else "",
+        )
+    except (ErroProvedor, KeyError) as exc:
+        integ.registrar_erro(str(exc))
+        raise ErroNegocio(f"falha ao gerar o Pix: {exc}") from exc
+    pg.referencia_externa = cobranca["id"]
+    pg.dados_externos = {k: cobranca[k] for k in ("qr_code", "qr_code_base64", "ticket_url")}
+    pg.save(update_fields=["referencia_externa", "dados_externos", "atualizado_em"])
+    return pg
+
+
+@transaction.atomic
+def confirmar_pagamento_online(pagamento: Pagamento, *, valor_centavos: int | None = None) -> Pagamento:
+    """Webhook do gateway confirmou: idempotente."""
+    pg = Pagamento.objects.select_for_update().get(pk=pagamento.pk)
+    if pg.status == StatusPagamento.CONFIRMADO:
+        return pg
+    if valor_centavos is not None and valor_centavos < pg.valor_centavos:
+        raise ErroNegocio("valor pago menor que o cobrado")
+    loja = (pg.pedido or pg.comanda).loja
+    pg.taxa_centavos, pg.previsao_recebimento = _taxa_e_previsao(loja, pg.forma, pg.bandeira, pg.valor_centavos)
+    pg.status, pg.pago_online, pg.confirmado_em = StatusPagamento.CONFIRMADO, True, timezone.now()
+    pg.save()
+    if pg.pedido_id:
+        p = pg.pedido
+        eventos.publicar(eventos.grupo_pdv(p.loja_id), "pagamento.confirmado",
+                         {"pedido": str(p.id), "valor_centavos": pg.valor_centavos})
+        eventos.publicar(eventos.grupo_pedido(p.token_rastreio), "pagamento.confirmado", {"pago": True})
     return pg

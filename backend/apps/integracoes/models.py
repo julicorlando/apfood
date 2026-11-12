@@ -4,14 +4,15 @@
     FISCAL: focusnfe, plugnotas, nfeio      WHATSAPP: zapi, evolution, meta
     MAPAS: google, osrm
 
-`credenciais` guarda tokens/segredos e NUNCA vai para a API do PDV nem para o
-admin em texto puro (Passo 2: criptografia com chave em variável de ambiente).
+`credenciais` guarda tokens/segredos CIFRADOS (Fernet, ver cripto.py) e nunca
+sai pela API nem aparece no admin. Use `definir_credenciais()` / `obter_credenciais()`.
 """
 
 from apfood_core.enums import TipoIntegracao
 from django.db import models
+from django.utils import timezone
 
-from apps.core.models import DaLoja, ModeloBase, choices, max_len
+from apps.core.models import DaLoja, ModeloBase, choices, max_len  # noqa: I001
 
 
 class Integracao(DaLoja, ModeloBase):
@@ -19,7 +20,7 @@ class Integracao(DaLoja, ModeloBase):
     provedor = models.CharField(max_length=30, help_text='"ifood", "focusnfe", "mercadopago"...')
     ativo = models.BooleanField(default=False)
     configuracao = models.JSONField(default=dict, blank=True, help_text="dados não secretos (ex.: merchant_id)")
-    credenciais = models.JSONField(default=dict, blank=True, editable=False)
+    credenciais_cifradas = models.TextField(blank=True, editable=False)
     ultimo_sucesso_em = models.DateTimeField(null=True, blank=True)
     ultimo_erro = models.TextField(blank=True)
 
@@ -33,6 +34,60 @@ class Integracao(DaLoja, ModeloBase):
 
     def __str__(self):
         return f"{self.get_tipo_display()} — {self.provedor}"
+
+    def definir_credenciais(self, dados: dict) -> None:
+        from .cripto import cifrar
+
+        self.credenciais_cifradas = cifrar(dados) if dados else ""
+
+    def obter_credenciais(self) -> dict:
+        from .cripto import decifrar
+
+        return decifrar(self.credenciais_cifradas) if self.credenciais_cifradas else {}
+
+    def registrar_sucesso(self):
+        Integracao.objects.filter(pk=self.pk).update(ultimo_sucesso_em=timezone.now(), ultimo_erro="")
+
+    def registrar_erro(self, erro: str):
+        Integracao.objects.filter(pk=self.pk).update(ultimo_erro=str(erro)[:2000])
+
+    @classmethod
+    def ativa(cls, loja, tipo, provedor: str | None = None):
+        qs = cls.objects.filter(loja=loja, tipo=tipo, ativo=True)
+        if provedor:
+            qs = qs.filter(provedor=provedor)
+        return qs.first()
+
+
+class Tarefa(ModeloBase):
+    """Fila de trabalho em segundo plano, guardada no banco (sem Redis/Celery).
+    Executada por `python manage.py processar_tarefas` (loop). Falhas são
+    reprocessadas com espera crescente até `max_tentativas`."""
+
+    PENDENTE, EXECUTANDO, CONCLUIDA, FALHOU = "PENDENTE", "EXECUTANDO", "CONCLUIDA", "FALHOU"
+
+    tipo = models.CharField(max_length=60, help_text='"fiscal.emitir", "whatsapp.status", "ifood.sincronizar"...')
+    payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=12, default=PENDENTE, choices=[(s, s) for s in
+                              (PENDENTE, EXECUTANDO, CONCLUIDA, FALHOU)])
+    executar_em = models.DateTimeField(default=timezone.now)
+    tentativas = models.PositiveSmallIntegerField(default=0)
+    max_tentativas = models.PositiveSmallIntegerField(default=5)
+    chave = models.CharField(max_length=120, blank=True, help_text="evita duplicar a mesma tarefa")
+    erro = models.TextField(blank=True)
+    concluida_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tarefas"
+        ordering = ["executar_em"]
+        indexes = [models.Index(fields=["status", "executar_em"])]
+        constraints = [
+            models.UniqueConstraint(fields=["chave"], condition=~models.Q(chave="") &
+                                    models.Q(status__in=["PENDENTE", "EXECUTANDO"]), name="tarefa_chave_unica"),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo} ({self.status})"
 
 
 class WebhookRecebido(ModeloBase):

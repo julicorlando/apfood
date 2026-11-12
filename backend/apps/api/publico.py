@@ -93,10 +93,17 @@ class PedidoPublicoView(Publica):
         entrada = s.PedidoOnlineIn(data=request.data)
         entrada.is_valid(raise_exception=True)
         pedido = pedidos_srv.criar_pedido(loja, pedido_in(entrada.validated_data, loja))
-        return Response({
+        resposta = {
             "token": pedido.token_rastreio, "numero": pedido.numero, "status": pedido.status,
             "total_centavos": pedido.total_centavos, "acompanhar": f"/pedido/{pedido.token_rastreio}/",
-        }, status=status.HTTP_201_CREATED)
+        }
+        if entrada.validated_data.get("forma_pagamento_prevista") == "PIX" and request.data.get("pagar_pix_agora"):
+            from apps.integracoes.models import Integracao
+
+            if Integracao.ativa(loja, "PAGAMENTO", "mercadopago"):
+                pg = pedidos_srv.cobrar_pix(pedido=pedido)
+                resposta["pix"] = {"valor_centavos": pg.valor_centavos, **pg.dados_externos}
+        return Response(resposta, status=status.HTTP_201_CREATED)
 
 
 class AcompanharPedidoView(Publica):
@@ -114,4 +121,7 @@ class AcompanharPedidoView(Publica):
             "desconto_centavos": p.desconto_centavos, "total_centavos": p.total_centavos,
             "criado_em": p.criado_em, "aceito_em": p.aceito_em, "saiu_entrega_em": p.saiu_entrega_em,
             "concluido_em": p.concluido_em, "motivo_cancelamento": p.motivo_cancelamento,
+            "pago": sum(x.valor_centavos for x in p.pagamentos.filter(status="CONFIRMADO")) >= p.total_centavos,
+            "pix": next(({"valor_centavos": x.valor_centavos, **x.dados_externos}
+                         for x in p.pagamentos.filter(status="PENDENTE", forma="PIX") if x.dados_externos), None),
         })

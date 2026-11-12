@@ -26,6 +26,7 @@ jobs:
       DJANGO_SECRET_KEY: ci-nao-e-segredo
       DATABASE_URL: postgres://apfood:apfood@localhost:5432/apfood
       APFOOD_CHANNELS_MEMORIA: "1"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
     steps:
       - uses: actions/checkout@v4
         with:
