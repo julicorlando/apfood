@@ -110,7 +110,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["apps.core.api.UsuarioLiberado"],
+    "DEFAULT_PERMISSION_CLASSES": ["apps.core.permissoes_api.UsuarioLiberado"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES": {"publico": "60/min", "publico_pedido": "20/hour"},
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
