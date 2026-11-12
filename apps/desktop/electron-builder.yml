@@ -1,0 +1,20 @@
+appId: app.apfood.pdv
+productName: ApFood PDV
+directories:
+  output: release
+files:
+  - out/**
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+publish:
+  provider: github
+  owner: julicorlando
+  repo: apfood
