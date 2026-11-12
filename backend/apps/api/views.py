@@ -633,18 +633,21 @@ PedidoViewSet.cupom = DocumentosPedidoMixin.cupom
 PedidoViewSet.pix = DocumentosPedidoMixin.pix
 
 
-@action(detail=True, methods=["get"], url_path="cupom", url_name="cupom")
+def _anexar(viewset, nome, metodos, fn):
+    """Anexa uma action a um ViewSet já definido (DRF exige __name__ == atributo)."""
+    fn.__name__ = nome
+    setattr(viewset, nome, action(detail=True, methods=metodos)(fn))
+
+
 def _cupom_comanda(self, request, pk=None):
     return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_comanda(self.get_object(), _largura(request)))})
 
 
-@action(detail=True, methods=["post"], url_path="pix", url_name="pix")
 def _pix_comanda(self, request, pk=None):
     pg = pedidos_srv.cobrar_pix(comanda=self.get_object(), valor_centavos=request.data.get("valor_centavos"))
     return Response(_pix_out(pg), status=status.HTTP_201_CREATED)
 
 
-@action(detail=True, methods=["get"], url_path="cupom", url_name="cupom")
 def _cupom_turno(self, request, pk=None):
     turno = self.get_object()
     if turno.status != "FECHADO" and not request.user.eh_gerente:
@@ -652,9 +655,9 @@ def _cupom_turno(self, request, pk=None):
     return Response({"linhas": fiscal_srv.linhas_para_json(fiscal_srv.cupom_fechamento(turno, _largura(request)))})
 
 
-ComandaViewSet.cupom = _cupom_comanda
-ComandaViewSet.pix = _pix_comanda
-TurnoViewSet.cupom = _cupom_turno
+_anexar(ComandaViewSet, "cupom", ["get"], _cupom_comanda)
+_anexar(ComandaViewSet, "pix", ["post"], _pix_comanda)
+_anexar(TurnoViewSet, "cupom", ["get"], _cupom_turno)
 
 
 class NotaFiscalSerializer(s.serializers.ModelSerializer):
