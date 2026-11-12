@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: write  # para commitar migrations geradas em branches de trabalho
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: apfood
+          POSTGRES_PASSWORD: apfood
+          POSTGRES_DB: apfood
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U apfood" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_SECRET_KEY: ci-nao-e-segredo
+      DATABASE_URL: postgres://apfood:apfood@localhost:5432/apfood
+      APFOOD_CHANNELS_MEMORIA: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+
+      - name: Instalar dependências
+        working-directory: backend
+        run: pip install -r requirements/dev.txt
+
+      - name: Testes do core e do PDV (sem Django)
+        run: pytest core/tests desktop/tests -q
+
+      - name: Django check
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Gerar migrations faltantes (branches que não são main)
+        if: github.event_name == 'push' && github.ref_name != 'main'
+        working-directory: backend
+        run: |
+          python manage.py makemigrations
+          if [ -n "$(git status --porcelain -- apps)" ]; then
+            git config user.name "apfood-ci"
+            git config user.email "ci@apfood.invalid"
+            git add apps/*/migrations
+            git commit -m "chore: migrations geradas pela CI"
+            git push
+            echo "::notice::Migrations geradas e commitadas — a próxima execução valida."
+          fi
+
+      - name: Migrations em dia
+        working-directory: backend
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Migrate + seed demo
+        working-directory: backend
+        run: |
+          python manage.py migrate --noinput
+          python manage.py seed_demo
+
+      - name: Testes do backend
+        working-directory: backend
+        run: pytest -q

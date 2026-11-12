@@ -2,8 +2,8 @@
 
 [tool.pytest.ini_options]
 pythonpath = ["core", "desktop", "backend"]
-testpaths = ["core/tests", "desktop/tests", "backend"]
-# backend: pytest-django (DJANGO_SETTINGS_MODULE=config.settings.dev)
+testpaths = ["core/tests", "desktop/tests"]
+# backend: rode `pytest` dentro de backend/ (pytest-django, ver backend/pytest.ini)
 
 [tool.ruff]
 line-length = 110
