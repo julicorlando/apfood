@@ -4,12 +4,23 @@ A página já vem com o cardápio em JSON (json_script) — abre rápido no 4G e
 sem uma segunda requisição. Carrinho, checkout e acompanhamento usam a API
 pública (/api/publico/...)."""
 
+from django.conf import settings
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.cache import cache_control
 
 from apps.api.publico import dados_cardapio, loja_publica
 from apps.pedidos.models import Pedido
+
+
+URL_RELEASES_PDV = "https://github.com/julicorlando/apfood/releases/latest"
+
+
+@cache_control(max_age=300, public=True)
+def inicio(request):
+    """Página inicial do domínio: leva ao painel e ao download do PDV."""
+    url_pdv = settings.APFOOD.get("PDV_URL") or URL_RELEASES_PDV
+    return render(request, "vitrine/inicio.html", {"url_pdv": url_pdv})
 
 
 @cache_control(max_age=30, public=True)

@@ -87,3 +87,18 @@ def test_fluxo_completo_pedido_online_e_acompanhamento(loja, cardapio):
     assert st["loja_slug"] == loja.slug and "Rua A" in st["endereco"]
     assert "1/2" in st["itens"][0]["nome"] and st["itens"][0]["observacao"] == "bem assada"
     assert Client().get("/pedido/token-invalido/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_pagina_inicial_leva_ao_painel(client):
+    resposta = client.get("/")
+    assert resposta.status_code == 200
+    html = resposta.content.decode()
+    assert 'href="/admin/"' in html
+    assert "releases/latest" in html
+
+
+@pytest.mark.django_db
+def test_admin_tem_nome_apfood(client):
+    resposta = client.get("/admin/login/")
+    assert "ApFood" in resposta.content.decode()

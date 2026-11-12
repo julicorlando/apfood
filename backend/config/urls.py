@@ -8,6 +8,12 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
+admin.site.site_header = "ApFood — Painel"
+admin.site.site_title = "ApFood"
+admin.site.index_title = "Gestão"
+admin.site.site_url = "/"
+
+
 def health(_request):
     return JsonResponse({"status": "ok", "app": "apfood"})
 
