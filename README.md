@@ -1,45 +1,52 @@
 # ApFood
 
-Sistema de gestão e PDV para restaurantes e hamburguerias, com cardápio digital e sincronização em tempo real.
+Sistema de gestão e PDV para restaurantes e hamburguerias, com cardápio digital e sincronização em tempo real. Feito em **Python**.
 
-| App | Descrição | Stack |
+| Pasta | O que é | Stack |
 |---|---|---|
-| `apps/web` | Cardápio digital mobile-first e acompanhamento do pedido | Next.js + React |
-| `apps/desktop` | PDV Windows: pedidos online, balcão, delivery, caixa, estoque, relatórios | Electron + React + SQLite local |
-| `apps/api` | API REST + tempo real | Fastify + Socket.IO + Prisma |
-| `packages/database` | Schema, migrations e seed | Prisma + PostgreSQL |
-| `packages/shared` | Enums, validação (zod), cálculo de caixa e totais, contrato de eventos | TypeScript |
+| `backend/` | API REST, WebSocket, cardápio digital público e admin | Django 5.2 + DRF + Channels + PostgreSQL + Redis |
+| `desktop/` | PDV Windows: pedidos online, balcão, delivery, caixa, estoque, relatórios | PySide6 + SQLite local |
+| `core/` | Regras compartilhadas: caixa, totais, status do pedido, dinheiro, enums | Python puro |
 
 📐 [Arquitetura](docs/ARQUITETURA.md) · 🗄️ [Banco de dados](docs/BANCO_DE_DADOS.md) · 🗺️ [Roadmap](docs/ROADMAP.md)
 
 ## Rodando localmente
 
-Requisitos: Node 22+, pnpm 10+, Docker.
+Requisitos: Python 3.12+ e Docker.
 
 ```bash
-pnpm install
-cp .env.example .env
-cp .env packages/database/.env   # o Prisma lê o .env da pasta do schema
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+cp .env.example .env               # ajuste DJANGO_SECRET_KEY
 
-pnpm db:up          # sobe o PostgreSQL no Docker
-pnpm db:migrate     # cria as tabelas (nomeie a migration: "inicial")
-pnpm db:extras      # índices parciais e CHECKs
-pnpm db:seed        # loja demo "burger-demo" + usuários admin/gerente/caixa1 (senha: apfood123)
+docker compose up -d               # PostgreSQL + Redis
 
-pnpm dev:api        # http://localhost:3333/health
-pnpm dev:web        # http://localhost:3000/burger-demo
-pnpm dev:desktop    # abre o PDV
+cd backend
+pip install -r requirements/dev.txt
+python manage.py makemigrations    # primeira vez: gera as migrations iniciais
+python manage.py migrate
+python manage.py seed_demo         # loja "burger-demo" + admin/gerente/caixa1 (senha apfood123, PIN 1234)
+python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/
 ```
 
-Testes das regras compartilhadas (caixa, totais, status):
+PDV desktop (outro terminal, mesmo venv):
 
 ```bash
-pnpm --filter @apfood/shared test
+cd desktop
+pip install -r requirements.txt
+python -m apfood_pdv
+```
+
+Testes (na raiz do repositório):
+
+```bash
+pip install pytest
+pytest core/tests desktop/tests
 ```
 
 ## Status
 
-- [x] **Passo 1** — arquitetura, modelagem do banco, estrutura do monorepo
+- [x] **Passo 1** — arquitetura, modelagem do banco, estrutura do projeto
 - [ ] **Passo 2** — API e sincronização em tempo real
 - [ ] **Passo 3** — App PC (PDV)
 - [ ] **Passo 4** — Cardápio digital

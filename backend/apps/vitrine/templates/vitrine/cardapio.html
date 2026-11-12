@@ -1,0 +1,15 @@
+{% extends "vitrine/base.html" %}
+{% block titulo %}{{ loja.nome }} — cardápio{% endblock %}
+{% block conteudo %}
+<h1>{{ loja.nome }}</h1>
+{% for categoria in categorias %}
+  <h2>{{ categoria.nome }}</h2>
+  <ul>
+  {% for produto in categoria.produtos.all %}
+    {% if produto.ativo and produto.disponivel_online and not produto.excluido_em %}
+      <li>{{ produto.nome }}</li>
+    {% endif %}
+  {% endfor %}
+  </ul>
+{% endfor %}
+{% endblock %}

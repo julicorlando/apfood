@@ -1,26 +1,30 @@
 # Roadmap
 
-## Passo 2 — API e tempo real
-- Auth (login, PIN, refresh, guard por papel) e cadastro de dispositivos
-- CRUD de catálogo (categorias, produtos, adicionais, ficha técnica, zonas, entregadores)
-- Pedidos: criação PDV (idempotente), criação pública com recálculo de preço, máquina de estados, cancelamento com estorno
-- Caixa: abrir, suprimento, sangria, fechamento cego/detalhado
-- Estoque: baixa transacional, entradas/ajustes/perdas, kardex, alerta de mínimo
-- Sync: `POST /sync/push` (outbox) e `GET /sync/pull?desde=`
-- Socket.IO autenticado (salas `loja:` e `pedido:`)
-- Testes de integração com PostgreSQL em container
+## ✅ Passo 1 — Arquitetura, banco e estrutura
+- Stack 100% Python: Django + DRF + Channels, PySide6 no desktop, pacote `apfood_core` compartilhado
+- Models de todo o domínio com constraints no banco
+- Esqueleto do WebSocket, do cardápio público e do PDV (SQLite local + outbox)
+- Comando `seed_demo`
+- Testes das regras de caixa, totais, status e fila offline
 
-## Passo 3 — PDV desktop
-- Login/PIN, abertura de caixa obrigatória antes de vender
-- Fila de pedidos online com som, aceitar/recusar, mudança de status
+## Passo 2 — API e tempo real
+- Autenticação JWT + permissões por papel (ADMIN / GERENTE / OPERADOR) e filtro por loja
+- `services.py` por app: criar pedido (validação de adicionais, totais, numeração), transição de status, pagamentos, abertura/sangria/suprimento/fechamento de caixa, baixa e estorno de estoque
+- Endpoints REST (cardápio, clientes por telefone, zonas/taxa, pedidos, caixa, estoque, relatórios)
+- `POST /api/sync/push/` (idempotente por UUID) e `GET /api/sync/pull/`
+- Eventos Channels com `transaction.on_commit`
+- Testes com pytest-django
+
+## Passo 3 — PDV desktop (PySide6)
+- Login por usuário/PIN, pareamento do dispositivo
+- Fila de pedidos online com alerta sonoro/visual, aceitar/recusar, cupom de cozinha ESC/POS
 - Balcão (nome/senha/mesa) e Delivery (busca por telefone, endereço, taxa, motoboy)
-- Impressão ESC/POS (cozinha e cupom)
-- Worker de sync + indicador online/offline
-- Estoque, fechamento de caixa, relatórios e dashboard
-- Instalador Windows (NSIS) + auto-update
+- Abertura, sangria, suprimento e fechamento (cego ou detalhado) com relatório de quebra/sobra
+- Estoque: entradas, ajustes, alertas de mínimo, kardex
+- Relatórios e dashboard
+- Instalador Windows (PyInstaller + Inno Setup)
 
 ## Passo 4 — Cardápio digital
-- Cardápio por categoria, modal de produto com grupos de adicionais (mín./máx.)
-- Carrinho, checkout (retirada/entrega, taxa, pagamento, troco)
-- Página de acompanhamento em tempo real
-- Loja fechada / fora do horário / pedido mínimo
+- Cardápio mobile-first por slug, carrinho, adicionais com mín/máx
+- Endereço com cálculo de taxa, retirada, forma de pagamento e troco
+- Acompanhamento em tempo real pelo link do pedido

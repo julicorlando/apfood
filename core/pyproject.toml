@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apfood-core"
+version = "0.1.0"
+description = "Regras de negócio compartilhadas do ApFood (backend + PDV desktop)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["apfood_core*"]

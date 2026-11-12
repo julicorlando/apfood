@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apfood-pdv"
+version = "0.1.0"
+description = "ApFood PDV — app desktop de frente de caixa"
+requires-python = ">=3.12"
+dependencies = [
+  "PySide6>=6.7",        # interface, sons (QSoundEffect), WebSocket (QtWebSockets)
+  "httpx>=0.27",         # API REST
+  "python-escpos>=3.1",  # impressora térmica (cupom de cozinha)
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.10"]
+
+[project.scripts]
+apfood-pdv = "apfood_pdv.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["apfood_pdv*"]

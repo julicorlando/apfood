@@ -1,17 +1,28 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
 dist/
-out/
-.next/
-.turbo/
-release/
-coverage/
-*.log
+
+# Django
+backend/staticfiles/
+backend/media/
+*.sqlite3
+*.db
+
+# Ambiente
 .env
 .env.*
 !.env.example
-*.db
-*.db-journal
-*.sqlite
+
+# SO / IDE
 .DS_Store
 Thumbs.db
 .idea/
