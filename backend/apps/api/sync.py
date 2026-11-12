@@ -64,6 +64,7 @@ class PullView(APIView):
             qs = model.objects.filter(**{campo: loja}).order_by("atualizado_em")
             desde = q.get(f"desde_{nome}") or q.get("desde")
             if desde:
+                desde = desde.replace(" ", "+")  # "+00:00" sem urlencode chega como espaço
                 dt = parse_datetime(desde)
                 if dt is None:
                     raise ValidationError({"desde": ["data inválida (ISO 8601)"]})
