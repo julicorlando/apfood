@@ -45,6 +45,9 @@ jobs:
       - name: Testes do core e do PDV (sem Django)
         run: pytest core/tests desktop/tests -q
 
+      - name: Testes do carrinho do cardápio (JavaScript)
+        run: node --test backend/apps/vitrine/tests/carrinho.test.js
+
       - name: Django check
         working-directory: backend
         run: python manage.py check

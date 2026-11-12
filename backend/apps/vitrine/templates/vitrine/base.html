@@ -1,12 +1,18 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="{{ cor|default:'#e4572e' }}">
   <title>{% block titulo %}ApFood{% endblock %}</title>
-  {# Passo 4: HTMX + Alpine.js + CSS próprio, mobile-first #}
+  {% block meta %}{% endblock %}
+  <link rel="stylesheet" href="{% static 'vitrine/cardapio.css' %}">
+  {% if cor %}<style>:root { --cor: {{ cor }}; }</style>{% endif %}
 </head>
 <body>
   {% block conteudo %}{% endblock %}
+  <noscript><p style="padding:16px">Ative o JavaScript para fazer seu pedido.</p></noscript>
+  <script src="{% static 'vitrine/carrinho.js' %}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

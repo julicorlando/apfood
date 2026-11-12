@@ -33,6 +33,7 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/", publico.CardapioPublicoView.as_view()),
     path("publico/lojas/<slug:slug>/taxa-entrega/", publico.TaxaEntregaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/pedidos/", publico.PedidoPublicoView.as_view()),
+    path("publico/lojas/<slug:slug>/cupom/", publico.CupomPublicoView.as_view()),
     path("publico/pedidos/<str:token>/", publico.AcompanharPedidoView.as_view()),
     path("webhooks/mercadopago/plataforma/", webhooks.MercadoPagoPlataformaWebhook.as_view()),
     path("webhooks/mercadopago/<uuid:loja_id>/", webhooks.MercadoPagoLojaWebhook.as_view()),

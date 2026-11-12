@@ -230,6 +230,11 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
     online = dados.canal == CanalVenda.ONLINE
     if online and not (loja.aberta_para_pedidos and loja.empresa.liberada and loja.ativa):
         raise ErroNegocio("a loja não está recebendo pedidos agora")
+    if online:
+        from apfood_core.horarios import aberta_em
+
+        if not aberta_em(loja.horarios, timezone.localtime()):
+            raise ErroNegocio("a loja está fora do horário de funcionamento")
     if dados.comanda is not None and dados.comanda.status != "ABERTA":
         raise ErroNegocio("comanda não está aberta")
 

@@ -1,7 +1,10 @@
-{% extends "vitrine/base.html" %}
-{% block titulo %}Pedido {{ pedido }}{% endblock %}
+{% extends "vitrine/base.html" %}{% load static %}
+{% block titulo %}Pedido #{{ pedido.numero }} — {{ pedido.loja.nome }}{% endblock %}
+{% block meta %}<meta name="robots" content="noindex">{% endblock %}
 {% block conteudo %}
-<h1>{{ pedido.loja.nome }} — pedido {{ pedido }}</h1>
-<p>Status: <strong>{{ pedido.get_status_display }}</strong></p>
-{# Passo 4: atualização em tempo real via ws/pedido/{{ pedido.token_rastreio }}/ #}
+  <header class="topo"><div class="topo-linha"><div><h1>{{ pedido.loja.nome }}</h1>
+    <div class="info">Acompanhe seu pedido #{{ pedido.numero }}</div></div></div></header>
+  <div class="acomp" id="conteudo" aria-live="polite"><div class="cartao">Carregando…</div></div>
+  {{ pedido.token_rastreio|json_script:"token-pedido" }}
 {% endblock %}
+{% block scripts %}<script src="{% static 'vitrine/acompanhar.js' %}"></script>{% endblock %}
