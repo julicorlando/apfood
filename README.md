@@ -4,11 +4,11 @@ Sistema de gestão e PDV **multiempresa** para restaurantes e hamburguerias, com
 
 | Pasta | O que é | Stack |
 |---|---|---|
-| `backend/` | API REST, WebSocket, cardápio digital público e admin | Django 5.2 + DRF + Channels + PostgreSQL + Redis |
-| `desktop/` | PDV Windows: pedidos online, balcão, delivery, caixa, estoque, relatórios | PySide6 + SQLite local |
+| `backend/` | API REST, WebSocket, **painel web completo** (gestão + PDV no navegador), cardápio digital público | Django 5.2 + DRF + Channels + PostgreSQL + Redis |
+| `desktop/` | PDV Windows **opcional** (offline e impressão térmica direta): pedidos online, balcão, delivery, caixa | PySide6 + SQLite local |
 | `core/` | Regras compartilhadas: caixa, totais, status do pedido, dinheiro, enums | Python puro |
 
-📐 [Arquitetura](docs/ARQUITETURA.md) · 🗄️ [Banco de dados](docs/BANCO_DE_DADOS.md) · 🔌 [API](docs/API.md) · 🗺️ [Roadmap](docs/ROADMAP.md)
+🖥️ [Painel web](docs/PAINEL.md) · 📐 [Arquitetura](docs/ARQUITETURA.md) · 🗄️ [Banco de dados](docs/BANCO_DE_DADOS.md) · 🔌 [API](docs/API.md) · 🗺️ [Roadmap](docs/ROADMAP.md)
 
 [![CI](https://github.com/julicorlando/apfood/actions/workflows/ci.yml/badge.svg)](https://github.com/julicorlando/apfood/actions/workflows/ci.yml)
 
@@ -27,7 +27,7 @@ cd backend
 pip install -r requirements/dev.txt
 python manage.py migrate
 python manage.py seed_demo         # usuários demo, senha apfood123 (ver tabela abaixo)
-python manage.py runserver         # http://localhost:8000/admin  e  http://localhost:8000/burger-demo/  (cardápio)
+python manage.py runserver         # http://localhost:8000/painel/  e  http://localhost:8000/burger-demo/  (cardápio)
 ```
 
 Usuários criados pelo `seed_demo`, para testar o isolamento entre empresas:
@@ -39,7 +39,7 @@ Usuários criados pelo `seed_demo`, para testar o isolamento entre empresas:
 | `gerente`, `caixa1` | GERENTE / OPERADOR | só a loja burger-demo |
 | `admin.pizza` | ADMIN da Pizza Teste | só a Pizza Teste |
 
-PDV desktop: baixe o **`ApFoodPDV.exe`** gerado pela CI (Actions → Artifacts) ou rode pelo código:
+Tudo funciona pelo navegador em `/painel/` ([guia](docs/PAINEL.md)). O PDV desktop é opcional, para trabalhar offline: baixe o **`ApFoodPDV.exe`** gerado pela CI (Actions → Artifacts) ou rode pelo código:
 
 ```bash
 pip install -e core -e desktop

@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import publico, relatorios, sync, views, webhooks
+from . import gestao, publico, relatorios, sync, views, webhooks
 
 r = DefaultRouter()
 for prefixo, vs in [
@@ -16,12 +16,19 @@ for prefixo, vs in [
     ("compras", views.CompraViewSet), ("notas-fiscais", views.NotaFiscalViewSet),
 ]:
     r.register(prefixo, vs, basename=prefixo)
+for prefixo, vs in [
+    ("lojas", gestao.LojaViewSet), ("empresas", gestao.EmpresaViewSet), ("usuarios", gestao.UsuarioViewSet),
+    ("integracoes", gestao.IntegracaoViewSet), ("planos", gestao.PlanoViewSet), ("faturas", gestao.FaturaViewSet),
+]:
+    r.register(prefixo, vs, basename=prefixo)
 
 urlpatterns = [
     path("eu/", views.EuView.as_view()),
     path("auth/pin/", views.PinView.as_view()),
     path("pdv/versao/", views.VersaoPdvView.as_view()),
     path("taxa-entrega/", views.TaxaEntregaView.as_view()),
+    path("enums/", gestao.EnumsView.as_view()),
+    path("fiscal/configuracao/", gestao.ConfiguracaoFiscalView.as_view()),
     path("sync/pull/", sync.PullView.as_view()),
     path("sync/push/", sync.PushView.as_view()),
     path("relatorios/vendas/", relatorios.VendasView.as_view()),

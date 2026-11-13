@@ -94,7 +94,7 @@ def test_pagina_inicial_leva_ao_painel(client):
     resposta = client.get("/")
     assert resposta.status_code == 200
     html = resposta.content.decode()
-    assert 'href="/admin/"' in html
+    assert 'href="/painel/"' in html
     assert "releases/latest" in html
 
 

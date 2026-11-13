@@ -1,0 +1,41 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e4572e">
+  <title>ApFood — Painel</title>
+  <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="menu" id="menu" aria-label="Menu principal">
+      <div class="menu-topo">
+        <a href="#/" class="marca">Ap<span>Food</span></a>
+        <button type="button" class="botao-icone so-celular" id="fechar-menu" aria-label="Fechar menu">✕</button>
+      </div>
+      <nav id="nav"></nav>
+      <form method="post" action="{% url 'painel:sair' %}" class="menu-sair">
+        {% csrf_token %}
+        <button type="submit" class="botao botao-fantasma botao-bloco">Sair</button>
+      </form>
+    </aside>
+    <div class="fundo-menu" id="fundo-menu"></div>
+    <div class="principal">
+      <header class="topo">
+        <button type="button" class="botao-icone so-celular" id="abrir-menu" aria-label="Abrir menu">☰</button>
+        <h1 class="topo-titulo" id="titulo">Carregando…</h1>
+        <div class="topo-direita">
+          <select id="seletor-loja" class="seletor-loja" aria-label="Loja"></select>
+          <span class="usuario" id="usuario"></span>
+        </div>
+      </header>
+      <main class="conteudo" id="conteudo" tabindex="-1"></main>
+    </div>
+  </div>
+  <div id="avisos" class="avisos" aria-live="polite"></div>
+  <noscript><p style="padding:16px">Ative o JavaScript para usar o painel.</p></noscript>
+  <script src="{% static 'vitrine/carrinho.js' %}"></script>
+  <script type="module" src="{% static 'painel/js/app.js' %}"></script>
+</body>
+</html>

@@ -31,12 +31,12 @@
       <h1 class="marca">Ap<span>Food</span></h1>
       <p class="sub">Gestão, PDV e cardápio digital para restaurantes e hamburguerias.</p>
       <div class="botoes">
-        <a class="botao primario" href="{% url 'admin:index' %}">Entrar no painel</a>
+        <a class="botao primario" href="{% url 'painel:app' %}">Entrar no painel</a>
         {% if url_pdv %}<a class="botao secundario" href="{{ url_pdv }}">Baixar o PDV para Windows</a>{% endif %}
       </div>
       <ul>
         <li><strong>Painel</strong>Produtos, pedidos, caixa, estoque, financeiro e relatórios de cada loja.</li>
-        <li><strong>PDV</strong>Vendas no balcão, funciona offline e imprime cupom.</li>
+        <li><strong>PDV</strong>Vende pelo navegador ou pelo app para Windows (funciona offline) e imprime cupom.</li>
         <li><strong>Cardápio digital</strong>Cada loja tem o seu endereço: {{ request.get_host }}/<em>nome-da-loja</em>/</li>
       </ul>
     </div>

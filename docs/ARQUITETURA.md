@@ -10,7 +10,8 @@
   apfood.app/<slug> │  apps.vitrine  → cardápio digital (HTMX)     │
   WS ws/pedido/<tk> │  /api/...      → API REST p/ o PDV (JWT)     │
                     │  ws/pdv/<loja> → fila de pedidos em tempo real│
-                    │  /admin/       → retaguarda / cadastros       │
+                    │  /painel/      → gestão + PDV no navegador    │
+                    │  /admin/       → suporte técnico (Django)     │
                     └──────────┬───────────────────┬───────────────┘
                                │                   │
                         PostgreSQL 17         Redis 7 (channel layer)
