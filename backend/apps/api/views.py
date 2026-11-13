@@ -367,7 +367,8 @@ class CozinhaViewSet(EscopoLojaMixin, mixins.ListModelMixin, viewsets.GenericVie
         return Response([
             {**s.ItemOut(i).data, "pedido": {"id": str(i.pedido_id), "numero": i.pedido.numero,
                                              "mesa": i.pedido.mesa, "nome_cliente": i.pedido.nome_cliente,
-                                             "tipo_atendimento": i.pedido.tipo_atendimento}}
+                                             "tipo_atendimento": i.pedido.tipo_atendimento,
+                                             "criado_em": i.pedido.criado_em}}
             for i in itens
         ])
 

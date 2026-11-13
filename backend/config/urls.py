@@ -25,6 +25,8 @@ urlpatterns = [
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("api/", include("apps.api.urls")),
+    # Painel web (gestão + operação pelo navegador)
+    path("painel/", include("apps.painel.urls")),
     # Cardápio digital público (Passo 4): /<slug-da-loja>/
     path("", include("apps.vitrine.urls")),
 ]

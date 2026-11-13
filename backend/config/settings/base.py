@@ -53,7 +53,11 @@ INSTALLED_APPS = [
     "apps.api",
     "apps.realtime",
     "apps.vitrine",  # cardápio digital público (Passo 4)
+    "apps.painel",  # painel web: gestão e operação pelo navegador
 ]
+LOGIN_URL = "/painel/entrar/"
+LOGIN_REDIRECT_URL = "/painel/"
+LOGOUT_REDIRECT_URL = "/painel/entrar/"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
