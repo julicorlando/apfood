@@ -6,6 +6,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
+def recurso(nome: str) -> Path:
+    """Arquivos que vão junto com o app (logo, ícone). Funciona no .exe do PyInstaller."""
+    return Path(__file__).resolve().parent / "recursos" / nome
+
+
 def pasta_dados() -> Path:
     """%LOCALAPPDATA%\\ApFood no Windows; APFOOD_PASTA sobrescreve (testes)."""
     if os.environ.get("APFOOD_PASTA"):

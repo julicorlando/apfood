@@ -1,0 +1,102 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f26a0f">
+  <title>Planos e teste grátis — ApFood</title>
+  <meta name="description" content="Gestão, PDV e cardápio digital para restaurantes e hamburguerias. Teste grátis.">
+  {% include "marca/cabeca.html" %}
+  <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
+  <style>
+    body { background: var(--fundo); }
+    .pagina { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+    .topo-site { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+    .topo-site img { height: 56px; width: auto; }
+    .chamada { text-align: center; margin: 8px 0 28px; }
+    .chamada h1 { font-size: clamp(26px, 4vw, 38px); margin: 0 0 8px; letter-spacing: -.5px; }
+    .chamada p { color: var(--suave); font-size: 18px; margin: 0; }
+    .planos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .plano { background: #fff; border-radius: 14px; box-shadow: var(--sombra); padding: 22px; border: 2px solid transparent; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
+    .plano:has(input:checked) { border-color: var(--cor); }
+    .plano input { position: absolute; opacity: 0; pointer-events: none; }
+    .plano .nome { font-weight: 800; font-size: 20px; }
+    .plano .preco { font-size: 30px; font-weight: 800; color: var(--cor-escura); }
+    .plano .preco small { font-size: 14px; color: var(--suave); font-weight: 500; }
+    .plano ul { margin: 6px 0 0; padding-left: 18px; color: #3a3a3f; }
+    .plano .marcador { margin-top: auto; font-weight: 700; color: var(--cor-escura); }
+    .plano:not(:has(input:checked)) .marcador { color: var(--suave); font-weight: 500; }
+    .cadastro { max-width: 640px; margin: 0 auto; }
+    .vantagens { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 32px; }
+    .vantagens div { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: var(--sombra); }
+    .vantagens strong { display: block; }
+    .escondido { position: absolute; left: -9999px; }
+  </style>
+</head>
+<body>
+  <div class="pagina">
+    <header class="topo-site">
+      <a href="/"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
+      <a class="botao" href="{% url 'painel:entrar' %}">Já tenho conta</a>
+    </header>
+
+    <section class="chamada">
+      <h1>Teste grátis por {{ dias_trial }} dias</h1>
+      <p>PDV, pedidos online, mesas, cozinha, caixa e estoque. Sem cartão de crédito.</p>
+    </section>
+
+    <section class="vantagens" aria-label="O que vem incluído">
+      <div><strong>🧾 PDV no navegador</strong><span class="muted">ou no app para Windows, que funciona sem internet</span></div>
+      <div><strong>📱 Cardápio digital</strong><span class="muted">seu link próprio para pedidos de delivery e retirada</span></div>
+      <div><strong>🛎️ Pedidos em tempo real</strong><span class="muted">aviso sonoro, cozinha e acompanhamento do cliente</span></div>
+      <div><strong>💵 Caixa e relatórios</strong><span class="muted">fechamento conferido, curva ABC e fluxo de caixa</span></div>
+    </section>
+
+    <form method="post" class="cadastro" novalidate>
+      {% csrf_token %}
+      {% if planos %}
+      <h2 style="text-align:center">Escolha o plano</h2>
+      <div class="planos" role="radiogroup" aria-label="Planos">
+        {% for p in planos %}
+        <label class="plano">
+          <input type="radio" name="plano" value="{{ p.pk }}" {% if form.plano.value|stringformat:"s" == p.pk|stringformat:"s" %}checked{% endif %}>
+          <span class="nome">{{ p.nome }}</span>
+          <span class="preco">R$ {% widthratio p.preco_mensal_centavos 100 1 %}<small>/mês depois do teste</small></span>
+          {% if p.descricao %}<span class="muted">{{ p.descricao }}</span>{% endif %}
+          <ul>
+            <li>{% if p.limite_lojas %}Até {{ p.limite_lojas }} loja{{ p.limite_lojas|pluralize }}{% else %}Lojas ilimitadas{% endif %}</li>
+            <li>{% if p.limite_usuarios %}Até {{ p.limite_usuarios }} usuários{% else %}Usuários ilimitados{% endif %}</li>
+            {% for r in p.recursos %}<li>{% if r == "fiscal" %}Nota fiscal (NFC-e){% elif r == "mesas" %}Mesas e comandas{% elif r == "marketplace" %}Integração iFood{% elif r == "pix" %}Pix com QR Code{% elif r == "whatsapp" %}Avisos por WhatsApp{% elif r == "multiloja" %}Várias lojas{% elif r == "kds" %}Tela da cozinha{% else %}{{ r }}{% endif %}</li>{% endfor %}
+          </ul>
+          <span class="marcador">✓ Escolhido</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="cartao">
+        <h2>Crie sua conta</h2>
+        {% if form.non_field_errors %}<div class="alerta alerta-erro" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
+        <div class="form-grade">
+          {% for campo in form %}{% if campo.name != "plano" and campo.name != "aceite" and campo.name != "site" %}
+          <label class="campo {% if campo.name == 'restaurante' %}largo{% endif %}">
+            <span>{{ campo.label }}</span>
+            <input type="{% if campo.name == 'senha' %}password{% elif campo.name == 'email' %}email{% elif campo.name == 'telefone' %}tel{% else %}text{% endif %}"
+                   name="{{ campo.name }}" value="{% if campo.name != 'senha' %}{{ campo.value|default:'' }}{% endif %}"
+                   {% if campo.name == 'senha' %}autocomplete="new-password"{% elif campo.name == 'email' %}autocomplete="email"{% elif campo.name == 'nome' %}autocomplete="name"{% endif %} required>
+            {% for e in campo.errors %}<span class="erro">{{ e }}</span>{% endfor %}
+          </label>
+          {% endif %}{% endfor %}
+          <label class="escondido" aria-hidden="true">Não preencha <input type="text" name="site" tabindex="-1" autocomplete="off"></label>
+          <div class="campo largo">
+            <label class="check"><input type="checkbox" name="aceite" {% if form.aceite.value %}checked{% endif %}> <span>Li e aceito os termos de uso e a política de privacidade</span></label>
+            {% for e in form.aceite.errors %}<span class="erro">Marque para continuar.</span>{% endfor %}
+          </div>
+        </div>
+        <button type="submit" class="botao botao-primario botao-grande botao-bloco" style="margin-top:16px">Começar teste grátis</button>
+        <p class="muted" style="text-align:center;margin-bottom:0">Você entra direto no painel para cadastrar o cardápio.</p>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

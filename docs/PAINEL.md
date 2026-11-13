@@ -19,6 +19,18 @@ Tudo o que o PDV para Windows faz também pode ser feito pelo navegador, no comp
 
 O seletor no topo troca a loja ativa, para quem tem acesso a mais de uma.
 
+## Páginas públicas
+
+| Endereço | O que é |
+|---|---|
+| `/planos/` | Planos e **cadastro self-service**: o restaurante cria a conta sozinho, em teste grátis (empresa + loja + administrador), e entra direto no painel. Só aparecem os planos marcados como "públicos". |
+| `/painel/senha/esqueci/` | **Esqueci minha senha**: link por e-mail que vale 2 horas (precisa do `EMAIL_URL`, ver DEPLOY.md). |
+| `/entrega/<link>/` | **Tela do entregador**, no celular: as entregas dele, mapa, botão de ligar, quanto cobrar e "Entregue". O link é gerado em Clientes e entrega → Entregadores → **Link do celular** (gerar outro desativa o anterior). |
+
+## Cashback
+
+Em **Dados da loja → Fidelidade**, defina o percentual. Cada pedido **concluído** de um cliente identificado pelo telefone gera saldo (sem contar a taxa de entrega). No PDV, ao buscar o telefone, aparece **"Usar cashback"**, que vira desconto. Se o pedido for cancelado, o saldo usado volta para o cliente. O saldo aparece na lista de Clientes.
+
 ## PDV no navegador
 
 - **Comer aqui, Para viagem ou Delivery.** No delivery, buscar o telefone preenche o cliente e o endereço salvo, e a taxa vem da zona de entrega.

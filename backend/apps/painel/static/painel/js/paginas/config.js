@@ -62,6 +62,9 @@ const CAMPOS_LOJA = [
   { nome: "tempo_preparo_min", rotulo: "Tempo de preparo (min)", tipo: "numero" },
   { nome: "taxa_servico_percentual", rotulo: "Taxa de serviço das mesas (%)", tipo: "decimal", passo: "0.01" },
   { nome: "momento_baixa_estoque", rotulo: "Baixar estoque no", tipo: "select", enum: "MomentoBaixaEstoque", obrigatorio: true },
+  { secao: "Fidelidade" },
+  { nome: "cashback_percentual", rotulo: "Cashback (%)", tipo: "decimal", passo: "0.01",
+    ajuda: "Parte do valor de cada pedido concluído que volta como saldo para o cliente (identificado pelo telefone). 0 = desligado." },
   { nome: "ativa", rotulo: "Loja ativa", tipo: "bool" },
 ];
 
@@ -206,7 +209,7 @@ export function usuarios() {
       { nome: "username", rotulo: "Login", obrigatorio: true, ajuda: "Usado para entrar. Sem espaços." },
       { nome: "first_name", rotulo: "Nome" },
       { nome: "last_name", rotulo: "Sobrenome" },
-      { nome: "email", rotulo: "E-mail", tipo: "email" },
+      { nome: "email", rotulo: "E-mail", tipo: "email", ajuda: "Usado no \"Esqueci minha senha\"." },
       { nome: "password", rotulo: u ? "Nova senha (vazio = manter)" : "Senha", tipo: "senha", obrigatorio: !u, ajuda: "Mínimo de 6 caracteres." },
       { nome: "pin", rotulo: "PIN do PDV (4 a 6 dígitos)", tipo: "senha", ajuda: u?.tem_pin ? "Já definido — preencha só para trocar." : "Para troca rápida de operador no PDV desktop." },
       ...(u && u.id === sessao.usuario?.id ? [] : [

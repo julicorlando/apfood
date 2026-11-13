@@ -3,10 +3,11 @@
 import logging
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from .api import ApiClient, SemConexao
-from .config import Config, pasta_dados
+from .config import Config, pasta_dados, recurso
 from .local_db import BancoLocal
 from .ui.contexto import Contexto
 from .ui.estilo import QSS
@@ -17,6 +18,7 @@ def main():
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = QApplication(sys.argv)
     app.setApplicationName("ApFood PDV")
+    app.setWindowIcon(QIcon(str(recurso("icone.png"))))
     app.setStyleSheet(QSS)
     from .ui.janela import DialogoLogin, JanelaPrincipal
 

@@ -23,6 +23,7 @@ from apps.core.api import EhAdmin, EhGerente, EscopoLojaMixin, UsuarioLiberado, 
 from apps.fiscal.models import ConfiguracaoFiscal
 from apps.integracoes.models import Integracao
 from apps.lojas.models import Empresa, Loja
+from apps.plataforma.cadastro import RESERVADOS as SLUGS_RESERVADOS
 from apps.plataforma.models import Fatura, Plano
 
 LEITURA = ("GET", "HEAD", "OPTIONS")
@@ -46,9 +47,6 @@ def _erros_django(exc: DjangoValidationError):
 # =============================================================================
 # Lojas
 # =============================================================================
-SLUGS_RESERVADOS = {"admin", "api", "painel", "static", "media", "health", "pedido", "ws"}
-
-
 class LojaGestaoSerializer(serializers.ModelSerializer):
     empresa_nome = serializers.CharField(source="empresa.nome", read_only=True)
 

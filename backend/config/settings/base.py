@@ -55,6 +55,11 @@ INSTALLED_APPS = [
     "apps.vitrine",  # cardápio digital público (Passo 4)
     "apps.painel",  # painel web: gestão e operação pelo navegador
 ]
+# E-mail (recuperação de senha). Ex.: EMAIL_URL=smtp+tls://usuario:senha@smtp.gmail.com:587
+# Sem EMAIL_URL, os e-mails só aparecem no log do container.
+vars().update(env.email_url("EMAIL_URL", default="consolemail://"))
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="ApFood <nao-responda@apfood.app>")
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 2  # link vale 2 horas
 LOGIN_URL = "/painel/entrar/"
 LOGIN_REDIRECT_URL = "/painel/"
 LOGOUT_REDIRECT_URL = "/painel/entrar/"

@@ -1,0 +1,19 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f26a0f">
+  <title>{% block titulo %}ApFood{% endblock %} — ApFood</title>
+  {% include "marca/cabeca.html" %}
+  <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
+</head>
+<body class="tela-entrar">
+  <main class="entrar">
+    <div class="entrar-cartao">
+      <a href="/" class="marca marca-grande"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
+      {% block conteudo %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

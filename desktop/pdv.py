@@ -17,6 +17,11 @@ def autoteste() -> int:
     for pacote in (apfood_core, apfood_pdv):
         for m in pkgutil.walk_packages(pacote.__path__, pacote.__name__ + "."):
             importlib.import_module(m.name)
+    from apfood_pdv.config import recurso
+
+    for nome in ("logo.png", "icone.png", "apfood.ico"):
+        if not recurso(nome).exists():
+            return 2  # faltou empacotar a logo
     import PySide6.QtMultimedia  # noqa: F401
     import PySide6.QtWebSockets  # noqa: F401
 

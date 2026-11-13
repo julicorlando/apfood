@@ -92,6 +92,8 @@ class Pedido(DaLoja, ModeloBase):
     acrescimo_centavos = models.PositiveIntegerField(default=0)
     total_centavos = models.PositiveIntegerField(default=0)
     troco_para_centavos = models.PositiveIntegerField(null=True, blank=True)
+    cashback_usado_centavos = models.PositiveIntegerField(default=0, help_text="saldo do cliente usado como desconto")
+    cashback_gerado_centavos = models.PositiveIntegerField(default=0, help_text="creditado ao cliente na conclusão")
 
     cupom = models.ForeignKey(
         "marketing.Cupom", on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"

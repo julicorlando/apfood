@@ -117,7 +117,8 @@ jobs:
       - name: Gerar executável
         run: >
           pyinstaller --noconfirm --onefile --windowed --name ApFoodPDV
-          --paths core --paths desktop
+          --paths core --paths desktop --icon desktop/apfood_pdv/recursos/apfood.ico
+          --add-data "desktop/apfood_pdv/recursos;apfood_pdv/recursos"
           --collect-submodules apfood_pdv --collect-submodules apfood_core
           --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtWebSockets
           desktop/pdv.py
@@ -173,7 +174,19 @@ jobs:
           ex sh -c "curl -fsS $H http://127.0.0.1:8000/static/vitrine/cardapio.js -o /dev/null"
           ex sh -c "curl -fsS $H http://127.0.0.1:8000/api/publico/lojas/burger-demo/ | grep -q X-Burger"
           ex sh -c "curl -fsS $H -X POST -H 'Content-Type: application/json' -d '{\"username\":\"master\",\"password\":\"ci-master\"}' http://127.0.0.1:8000/api/auth/token/ | grep -q access"
+          ex sh -c "curl -fsS $H http://127.0.0.1:8000/painel/entrar/ | grep -q 'marca/logo'"
+          ex sh -c "curl -fsS $H http://127.0.0.1:8000/planos/ | grep -q 'Teste'"
           docker compose -f docker-compose.prod.yml ps
+      - name: Backup automático gera o arquivo e ele restaura
+        run: |
+          set -e
+          dc() { docker compose -f docker-compose.prod.yml "$@"; }
+          dc up -d backup
+          for i in $(seq 1 30); do dc logs backup | grep -q "backup ok" && break; sleep 2; done
+          dc logs backup
+          dc logs backup | grep -q "backup ok"
+          arq=$(dc exec -T backup sh -c 'ls -1 /backups/apfood-*.dump | tail -1')
+          dc exec -T backup sh -c "createdb restaurado && pg_restore -d restaurado --no-owner $arq && psql -d restaurado -tAc 'select count(*) from lojas'"
       - name: Logs em caso de falha
         if: failure()
         run: docker compose -f docker-compose.prod.yml logs --tail 200

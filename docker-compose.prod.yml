@@ -89,6 +89,51 @@ services:
       timeout: 3s
       retries: 20
 
+  # Cópia diária do banco e das fotos (volume "backups"). Guarda BACKUP_DIAS dias.
+  # Restaurar: ver docs/DEPLOY.md, seção Backup.
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: apfood
+      PGDATABASE: apfood
+      PGPASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      TZ: America/Sao_Paulo
+      BACKUP_DIAS: ${BACKUP_DIAS:-14}
+      BACKUP_HORA: ${BACKUP_HORA:-04}
+    volumes:
+      - backups:/backups
+      - media:/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -u
+        copiar() {
+          d=$$(date +%Y%m%d-%H%M)
+          if pg_dump -Fc -f /backups/apfood-$$d.dump.tmp; then
+            mv /backups/apfood-$$d.dump.tmp /backups/apfood-$$d.dump
+            tar -czf /backups/media-$$d.tar.gz -C /media . 2>/dev/null || true
+            find /backups -name 'apfood-*.dump' -mtime +$$BACKUP_DIAS -delete
+            find /backups -name 'media-*.tar.gz' -mtime +$$BACKUP_DIAS -delete
+            echo "backup ok: apfood-$$d.dump ($$(du -h /backups/apfood-$$d.dump | cut -f1))"
+          else
+            rm -f /backups/apfood-$$d.dump.tmp
+            echo "BACKUP FALHOU em $$d" >&2
+          fi
+        }
+        copiar  # uma cópia ao subir (deploy)
+        while true; do
+          agora=$$(date +%H%M); alvo=$${BACKUP_HORA}00
+          [ "$$agora" = "$$alvo" ] && copiar && sleep 61
+          sleep 30
+        done
+    healthcheck:
+      disable: true
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -100,3 +145,4 @@ volumes:
   media:
   pgdata:
   redisdata:
+  backups:

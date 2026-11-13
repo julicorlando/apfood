@@ -1,0 +1,7 @@
+{% extends "painel/_tela.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block conteudo %}
+<h2 style="text-align:center">{{ titulo }}</h2>
+<p class="entrar-sub">{{ texto }}</p>
+<a href="{% url 'painel:entrar' %}" class="botao {% if entrar %}botao-primario{% endif %} botao-bloco">Ir para o login</a>
+{% endblock %}

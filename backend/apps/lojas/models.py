@@ -105,6 +105,10 @@ class Loja(ModeloBase):
     )
     tempo_preparo_min = models.PositiveSmallIntegerField(default=30)
     aceite_automatico = models.BooleanField(default=False)
+    cashback_percentual = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text="% do pedido concluído que volta como saldo para o cliente (0 = desligado)",
+    )
     momento_baixa_estoque = models.CharField(
         max_length=max_len(MomentoBaixaEstoque),
         choices=choices(MomentoBaixaEstoque),

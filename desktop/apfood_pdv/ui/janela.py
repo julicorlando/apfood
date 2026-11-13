@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
     QMessageBox, QStackedWidget, QWidget,
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from .. import __version__
 from ..api import ErroApi, SemConexao
-from ..config import normalizar_servidor
+from ..config import normalizar_servidor, recurso
 from .alerta import AlertaSonoro
 from .dialogos import DialogoEscolha
 from .paginas.gestao import PaginaCaixa, PaginaConfig, PaginaCozinha, PaginaEstoque, PaginaRelatorios
@@ -31,8 +31,14 @@ class DialogoLogin(QDialog):
         self.setWindowTitle(titulo)
         self.setMinimumWidth(380)
         f = QFormLayout(self)
-        logo = QLabel("ApFood PDV")
-        logo.setProperty("papel", "titulo")
+        logo = QLabel()
+        imagem = QPixmap(str(recurso("logo.png")))
+        if imagem.isNull():
+            logo.setText("ApFood PDV")
+            logo.setProperty("papel", "titulo")
+        else:
+            logo.setPixmap(imagem.scaledToHeight(90, Qt.SmoothTransformation))
+            logo.setAlignment(Qt.AlignCenter)
         f.addRow(logo)
         self.servidor = QLineEdit(ctx.cfg.api_url)
         if not pin:
