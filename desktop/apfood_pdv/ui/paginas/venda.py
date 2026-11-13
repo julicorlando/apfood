@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QComboBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
+    QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton, QScrollArea, QSplitter, QTableWidget,
     QVBoxLayout, QWidget,
 )
@@ -89,6 +90,13 @@ class PaginaVenda(QWidget):
         self.mesa_balcao.setMaximumWidth(90)
         fb.addRow("Atendimento", self.atendimento)
         fb.addRow("Nome", self.nome_balcao)
+        tb = QHBoxLayout()
+        self.telefone_balcao = QLineEdit()
+        self.telefone_balcao.setPlaceholderText("telefone (cashback, opcional)")
+        self.telefone_balcao.returnPressed.connect(self.buscar_cliente_balcao)
+        tb.addWidget(self.telefone_balcao)
+        tb.addWidget(botao("Buscar", self.buscar_cliente_balcao))
+        fb.addRow("Telefone", tb)
         linha = QHBoxLayout()
         linha.addWidget(QLabel("Senha"))
         linha.addWidget(self.senha)
@@ -158,6 +166,10 @@ class PaginaVenda(QWidget):
         acoes.addWidget(botao("+1", lambda: self._quantidade(1)))
         acoes.addWidget(botao("−1", lambda: self._quantidade(-1)))
         acoes.addStretch()
+        self.usar_cashback = QCheckBox()
+        self.usar_cashback.setVisible(False)
+        self.usar_cashback.toggled.connect(self._atualizar_total)
+        acoes.addWidget(self.usar_cashback)
         self.desconto = QLineEdit()
         self.desconto.setPlaceholderText("desconto")
         self.desconto.setMaximumWidth(100)
@@ -293,9 +305,27 @@ class PaginaVenda(QWidget):
         except ValueError:
             return 0
 
+    def saldo_cashback(self) -> int:
+        return int((self.cliente or {}).get("saldo_cashback_centavos") or 0)
+
+    def cashback_a_usar(self) -> int:
+        if not self.usar_cashback.isChecked() or self.modo == "MESA":
+            return 0
+        taxa = self._valor(self.taxa) if self.modo == "DELIVERY" else 0
+        return min(self.saldo_cashback(), max(0, self.subtotal() + taxa - self._valor(self.desconto)))
+
+    def _mostrar_cashback(self):
+        saldo = self.saldo_cashback()
+        self.usar_cashback.blockSignals(True)
+        self.usar_cashback.setChecked(False)
+        self.usar_cashback.blockSignals(False)
+        self.usar_cashback.setText(f"Usar cashback ({reais(saldo)})")
+        self.usar_cashback.setVisible(saldo > 0 and self.modo != "MESA")
+        self._atualizar_total()
+
     def _atualizar_total(self):
         taxa = self._valor(self.taxa) if self.modo == "DELIVERY" else 0
-        total = max(0, self.subtotal() + taxa - self._valor(self.desconto))
+        total = max(0, self.subtotal() + taxa - self._valor(self.desconto) - self.cashback_a_usar())
         self.total.setText(reais(total))
         self.btn_finalizar.setEnabled(bool(self.carrinho))
 
@@ -315,6 +345,7 @@ class PaginaVenda(QWidget):
             self.titulo.setText(f"Rodada — {mesa}")
         else:
             self.titulo.setText("Novo pedido — " + self.MODOS[self.modo])
+        self.usar_cashback.setVisible(self.saldo_cashback() > 0 and self.modo != "MESA")
         self._atualizar_total()
 
     def para_comanda(self, comanda: dict):
@@ -357,6 +388,22 @@ class PaginaVenda(QWidget):
         self.enderecos.blockSignals(False)
         self.enderecos.setCurrentIndex(0)
         self._usar_endereco()
+        self._mostrar_cashback()
+
+    def buscar_cliente_balcao(self):
+        """Balcão: identifica o cliente pelo telefone só para o cashback."""
+        tel = self.telefone_balcao.text()
+        if len("".join(c for c in tel if c.isdigit())) < 10:
+            return
+        achados = seguro(self, self.ctx.pdv.buscar_cliente, tel) or []
+        self.cliente = achados[0] if achados else None
+        if self.cliente:
+            if not self.nome_balcao.text().strip():
+                self.nome_balcao.setText(self.cliente["nome"])
+            self.ctx.status(f"Cliente {self.cliente['nome']} — cashback {reais(self.saldo_cashback())}")
+        else:
+            self.ctx.status("Cliente novo — o cashback começa a contar nesta compra")
+        self._mostrar_cashback()
 
     def _usar_endereco(self, *_):
         e = self.enderecos.currentData()
@@ -387,12 +434,15 @@ class PaginaVenda(QWidget):
         itens = [c["item"] for c in self.carrinho]
         dados = {"itens": itens, "observacao": self.observacao.text().strip(), "cpf_nota": self.cpf.text().strip(),
                  "desconto_centavos": self._valor(self.desconto)}
+        if usar := self.cashback_a_usar():
+            dados["usar_cashback_centavos"] = usar
         if self.modo == "MESA":
             dados.update(canal="MESA", tipo_atendimento="CONSUMO_LOCAL", comanda=self.comanda["id"],
                          mesa=(self.comanda.get("mesa_nome") or "")[:10])
         elif self.modo == "BALCAO":
             dados.update(canal="BALCAO", tipo_atendimento=self.atendimento.currentData(),
                          nome_cliente=self.nome_balcao.text().strip(), senha=self.senha.text().strip(),
+                         telefone_cliente=self.telefone_balcao.text().strip(),
                          mesa=self.mesa_balcao.text().strip())
         else:
             dados.update(
@@ -490,12 +540,14 @@ class PaginaVenda(QWidget):
                 and self.sender().text() == "Limpar" and not confirmar(self, "Descartar o pedido atual?"):
             return
         self.carrinho.clear()
-        for campo in (self.nome_balcao, self.senha, self.mesa_balcao, self.telefone, self.nome, self.logradouro,
+        for campo in (self.nome_balcao, self.senha, self.mesa_balcao, self.telefone_balcao, self.telefone, self.nome,
+                      self.logradouro,
                       self.numero, self.complemento, self.bairro, self.referencia, self.taxa, self.troco_para,
                       self.desconto, self.observacao, self.cpf, self.busca):
             campo.clear()
         self.enderecos.clear()
         self.cliente = None
+        self._mostrar_cashback()
         self._atualizar_carrinho()
 
 

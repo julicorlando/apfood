@@ -29,7 +29,19 @@ O seletor no topo troca a loja ativa, para quem tem acesso a mais de uma.
 
 ## Cashback
 
-Em **Dados da loja → Fidelidade**, defina o percentual. Cada pedido **concluído** de um cliente identificado pelo telefone gera saldo (sem contar a taxa de entrega). No PDV, ao buscar o telefone, aparece **"Usar cashback"**, que vira desconto. Se o pedido for cancelado, o saldo usado volta para o cliente. O saldo aparece na lista de Clientes.
+Em **Dados da loja → Fidelidade**, defina o percentual. Cada pedido **concluído** de um cliente identificado pelo telefone gera saldo (sem contar a taxa de entrega). No PDV, ao buscar o telefone, aparece **"Usar cashback"**, que vira desconto. Se o pedido for cancelado, o saldo usado volta para o cliente. O saldo aparece na lista de Clientes. O PDV para Windows também usa: informe o telefone no balcão (ou busque o cliente no delivery) e marque **"Usar cashback"**.
+
+## Campanhas de WhatsApp
+
+Em **Clientes e entrega → Campanhas WhatsApp** (gerente+), escreva a mensagem e escolha o público:
+- todos que aceitam promoções;
+- quem tem saldo de cashback;
+- quem não compra há X dias.
+
+A mensagem aceita `{nome}`, `{loja}`, `{cashback}` e `{link}` (o cardápio da loja). **Revisar e enviar** mostra quantos vão receber e um exemplo.
+
+- **Quem recebe:** só clientes com "Aceita receber promoções" marcado (LGPD).
+- **Envio:** pela integração **Z-API**, uma mensagem a cada 8 segundos, pela fila de tarefas, para o número não ser bloqueado. A lista mostra enviados e falhas.
 
 ## PDV no navegador
 
