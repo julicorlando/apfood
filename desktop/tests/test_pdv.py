@@ -206,3 +206,12 @@ def test_verificar_baixar_e_conferir_sha(tmp_path):
         baixar(at, destino=tmp_path / "x.exe", baixador=lambda url: b"adulterado")
     cmd = script_troca(tmp_path / "novo.exe", tmp_path / "ApFoodPDV.exe", 1234)
     assert 'PID eq 1234' in cmd and ".old" in cmd and "start" in cmd
+
+
+def test_normalizar_servidor():
+    from apfood_pdv.config import normalizar_servidor
+
+    assert normalizar_servidor("apfood.axionwebdigital.com.br") == "https://apfood.axionwebdigital.com.br"
+    assert normalizar_servidor(" https://apfood.axionwebdigital.com.br/painel/ ") == "https://apfood.axionwebdigital.com.br"
+    assert normalizar_servidor("localhost:8000") == "http://localhost:8000"
+    assert normalizar_servidor("http://192.168.0.10:8000/") == "http://192.168.0.10:8000"

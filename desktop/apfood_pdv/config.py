@@ -18,7 +18,7 @@ def pasta_dados() -> Path:
 
 @dataclass
 class Config:
-    api_url: str = os.environ.get("APFOOD_API_URL", "http://localhost:8000")
+    api_url: str = os.environ.get("APFOOD_API_URL", "https://apfood.axionwebdigital.com.br")
     loja_id: str = ""
     intervalo_sync_s: int = 5
     impressora_caixa: str = ""  # "192.168.0.50:9100" | nome da impressora no Windows | "arquivo:C:/cupons"
@@ -49,3 +49,16 @@ class Config:
     def salvar(self, caminho: Path | None = None) -> None:
         caminho = caminho or pasta_dados() / "config.json"
         caminho.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def normalizar_servidor(texto: str) -> str:
+    """Aceita "apfood.exemplo.com.br", "https://.../painel/" etc. e devolve só a origem."""
+    from urllib.parse import urlsplit
+
+    t = (texto or "").strip()
+    if not t:
+        return t
+    if "://" not in t:
+        t = ("http://" if t.startswith(("localhost", "127.", "192.168.", "10.")) else "https://") + t
+    p = urlsplit(t)
+    return f"{p.scheme}://{p.netloc}"
