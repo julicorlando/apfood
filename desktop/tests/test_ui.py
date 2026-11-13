@@ -61,6 +61,8 @@ class ServidorFalso:
             ("GET", r"/api/estoque/abaixo-do-minimo/", lambda c, m: (200, [])),
             ("GET", r"/api/estoque/", lambda c, m: (200, {"results": [], "next": None})),
             ("GET", r"/api/produtos/", lambda c, m: (200, {"results": CARDAPIO["produtos"], "next": None})),
+            ("GET", r"/api/clientes/por-telefone/", lambda c, m: (200, [
+                {"id": "cl1", "nome": "Ana", "telefone": "11999990000", "saldo_cashback_centavos": 500, "enderecos": []}])),
             ("GET", r"/api/relatorios/vendas/", lambda c, m: (200, {
                 "faturamento_centavos": 0, "pedidos": 0, "ticket_medio_centavos": 0, "cancelados": 0, "por_dia": [],
                 "por_canal": [], "por_forma_pagamento": []})),
@@ -159,6 +161,24 @@ def test_venda_balcao_online_recebe_e_imprime(ctx, avisos):
     cupons = list((ctx.pasta / "cupons").glob("*.txt"))
     assert cupons and "CUPOM SERVIDOR" in cupons[0].read_text(encoding="utf-8")
     assert v.carrinho == [] and not avisos
+
+
+def test_venda_balcao_usa_cashback_do_cliente(ctx):
+    from apfood_pdv.ui.paginas.venda import PaginaVenda
+
+    v = PaginaVenda(ctx)
+    v.ao_mostrar()
+    v.adicionar_produto(CARDAPIO["produtos"][0])  # 700
+    assert v.usar_cashback.isHidden()
+    v.telefone_balcao.setText("11999990000")
+    v.buscar_cliente_balcao()
+    assert not v.usar_cashback.isHidden() and "5,00" in v.usar_cashback.text()
+    v.usar_cashback.setChecked(True)
+    assert "2,00" in v.total.text()
+    dados = v.montar_dados()
+    assert dados["usar_cashback_centavos"] == 500 and dados["telefone_cliente"] == "11999990000"
+    v.limpar()
+    assert v.usar_cashback.isHidden() and v.cliente is None
 
 
 def test_venda_offline_vai_para_fila_e_imprime_nao_fiscal_local(ctx):

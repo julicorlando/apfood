@@ -25,6 +25,7 @@ const ROTAS = [
   ["/entregadores", "Entregadores", "🛵", "Clientes e entrega", temLoja, "cadastros", "entregadores"],
   ["/zonas", "Zonas de entrega", "📍", "Clientes e entrega", temLoja, "cadastros", "zonas"],
   ["/cupons", "Cupons", "🏷️", "Clientes e entrega", temLoja, "cadastros", "cupons"],
+  ["/campanhas", "Campanhas WhatsApp", "📣", "Clientes e entrega", () => temLoja() && ehGerente(), "cadastros", "campanhas"],
   ["/mesas-cadastro", "Cadastro de mesas", "🪑", "Clientes e entrega", temLoja, "cadastros", "mesasCadastro"],
 
   ["/estoque", "Estoque", "📦", "Estoque e compras", () => temLoja() && ehGerente(), "gestao", "estoque"],

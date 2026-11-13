@@ -50,6 +50,10 @@ def executar(tarefa: Tarefa) -> bool:
         tarefa.erro = str(exc)[:2000]
         if tarefa.tentativas >= tarefa.max_tentativas:
             tarefa.status = Tarefa.FALHOU
+            if tarefa.tipo == "marketing.campanha":
+                from apps.marketing.campanhas import falhou
+
+                falhou(tarefa.payload.get("envio_id", ""), str(exc))
         else:
             tarefa.status = Tarefa.PENDENTE
             tarefa.executar_em = timezone.now() + timedelta(seconds=30 * 2 ** (tarefa.tentativas - 1))
@@ -78,6 +82,7 @@ def _carregar_executores():
     from apps.fiscal import services as _f  # noqa: F401
     from apps.integracoes import notificacoes as _n  # noqa: F401
     from apps.integracoes.provedores import ifood as _i  # noqa: F401
+    from apps.marketing import campanhas as _m  # noqa: F401
     from apps.plataforma import cobranca as _c  # noqa: F401
 
     EXECUTORES["_carregado"] = True

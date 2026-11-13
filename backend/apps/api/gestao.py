@@ -23,6 +23,7 @@ from apps.core.api import EhAdmin, EhGerente, EscopoLojaMixin, UsuarioLiberado, 
 from apps.fiscal.models import ConfiguracaoFiscal
 from apps.integracoes.models import Integracao
 from apps.lojas.models import Empresa, Loja
+from apps.marketing.models import Campanha
 from apps.plataforma.cadastro import RESERVADOS as SLUGS_RESERVADOS
 from apps.plataforma.models import Fatura, Plano
 
@@ -445,3 +446,46 @@ class EnumsView(APIView):
             if isinstance(cls, type) and issubclass(cls, enums._Rotulado) and cls is not enums._Rotulado:
                 dados[nome] = [{"valor": v, "rotulo": r} for v, r in cls.choices()]
         return Response(dados)
+
+
+# =============================================================================
+# Campanhas de WhatsApp
+# =============================================================================
+class CampanhaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Campanha
+        exclude = ["loja"]
+        read_only_fields = ["id", "criado_em", "atualizado_em", "status", "total", "enviados", "falhas",
+                            "iniciada_em", "concluida_em", "criado_por"]
+
+
+class CampanhaViewSet(EscopoLojaMixin, viewsets.ModelViewSet):
+    queryset = Campanha.objects.all()
+    serializer_class = CampanhaSerializer
+    permission_classes = [EhGerente]
+
+    def perform_update(self, serializer):
+        if serializer.instance.status != "RASCUNHO":
+            raise ValidationError({"detail": ["campanha já enviada não pode ser alterada"]})
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.status == "ENVIANDO":
+            raise ValidationError({"detail": ["aguarde terminar o envio"]})
+        instance.delete()
+
+    @action(detail=True, methods=["get"])
+    def previa(self, request, pk=None):
+        from apps.marketing import campanhas
+
+        c = self.get_object()
+        clientes = list(campanhas.publico(c)[:500])
+        return Response({"total": len(clientes), "exemplo": campanhas.texto(c, clientes[0]) if clientes else "",
+                         "nomes": [x.nome for x in clientes[:10]]})
+
+    @action(detail=True, methods=["post"])
+    def enviar(self, request, pk=None):
+        from apps.marketing import campanhas
+
+        c = campanhas.iniciar(self.get_object(), request.user)
+        return Response(CampanhaSerializer(c).data)

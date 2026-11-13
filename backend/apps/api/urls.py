@@ -19,6 +19,7 @@ for prefixo, vs in [
 for prefixo, vs in [
     ("lojas", gestao.LojaViewSet), ("empresas", gestao.EmpresaViewSet), ("usuarios", gestao.UsuarioViewSet),
     ("integracoes", gestao.IntegracaoViewSet), ("planos", gestao.PlanoViewSet), ("faturas", gestao.FaturaViewSet),
+    ("campanhas", gestao.CampanhaViewSet),
 ]:
     r.register(prefixo, vs, basename=prefixo)
 

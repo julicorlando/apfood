@@ -534,3 +534,54 @@ export function taxas() {
     podeExcluir: excluirGerente,
   });
 }
+
+// ---------------------------------------------------------------- campanhas
+const PUBLICOS = [
+  { valor: "MARKETING", rotulo: "Todos que aceitam promoções" },
+  { valor: "CASHBACK", rotulo: "Quem tem saldo de cashback" },
+  { valor: "INATIVOS", rotulo: "Quem não compra há X dias" },
+];
+
+export function campanhas() {
+  return paginaCadastro({
+    titulo: "Campanhas WhatsApp", singular: "Campanha", textoNovo: "Nova campanha", url: "/api/campanhas/",
+    intro: "Mensagens pelo WhatsApp (integração Z-API) só para clientes que aceitaram receber promoções. "
+      + "As mensagens saem aos poucos (uma a cada 8 segundos) para o número não ser bloqueado.",
+    busca: ["nome"], podeEditar: (c) => c.status === "RASCUNHO",
+    novo: { publico: "MARKETING", dias_inativo: 30,
+      mensagem: "Oi, {nome}! Hoje tem promoção na {loja} 🍔\nPeça pelo link: {link}" },
+    colunas: [
+      { rotulo: "Campanha", campo: "nome" },
+      { rotulo: "Público", valor: (c) => PUBLICOS.find((p) => p.valor === c.publico)?.rotulo || c.publico },
+      { rotulo: "Situação", valor: (c) => etiqueta(c.status === "RASCUNHO" ? "Rascunho" : c.status === "ENVIANDO" ? "Enviando" : "Concluída",
+        c.status === "CONCLUIDA" ? "e-ok" : c.status === "ENVIANDO" ? "e-info" : "e-alerta") },
+      { rotulo: "Envios", classe: "num", valor: (c) => (c.total ? `${c.enviados}/${c.total}${c.falhas ? ` · ${c.falhas} falha(s)` : ""}` : "—") },
+    ],
+    campos: [
+      { nome: "nome", rotulo: "Nome (só para você)", obrigatorio: true },
+      { nome: "publico", rotulo: "Para quem", tipo: "select", opcoes: PUBLICOS, obrigatorio: true },
+      { nome: "dias_inativo", rotulo: "Sem comprar há quantos dias", tipo: "numero", mostrarSe: (v) => v.publico === "INATIVOS" },
+      { nome: "mensagem", rotulo: "Mensagem", tipo: "textarea", linhas: 5, obrigatorio: true,
+        ajuda: "Troca automática: {nome} (primeiro nome), {loja}, {cashback} (saldo do cliente) e {link} (seu cardápio)." },
+    ],
+    podeExcluir: (c) => c.status !== "ENVIANDO",
+    acoes: (c, recarregar) => c.status === "RASCUNHO" ? botaoAcao("Revisar e enviar", () => revisarCampanha(c, recarregar), "botao botao-pequeno botao-primario") : null,
+  });
+}
+
+async function revisarCampanha(c, recarregar) {
+  const r = await get(`/api/campanhas/${c.id}/previa/`);
+  const m = modal({
+    titulo: `Enviar "${c.nome}"`, tamanho: "modal-pequeno",
+    corpo: h("div", { class: "grade" },
+      h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Clientes que vão receber"), h("div", { class: "kpi-valor" }, String(r.total))),
+      r.total ? h("div", null, h("small", { class: "muted" }, "Exemplo de mensagem:"),
+        h("div", { class: "cartao", style: { whiteSpace: "pre-wrap", background: "#e9fbe5" } }, r.exemplo)) : h("div", { class: "alerta alerta-aviso" },
+        "Nenhum cliente neste público aceitou receber promoções. Marque \"Aceita receber promoções\" no cadastro do cliente."),
+      r.total ? h("small", { class: "muted" }, `Tempo estimado: ~${Math.ceil((r.total * 8) / 60)} min. Depois de enviada, a campanha não pode ser alterada.`) : null),
+    rodape: r.total ? [botaoAcao("Enviar agora", async () => {
+      await post(`/api/campanhas/${c.id}/enviar/`);
+      aviso("Campanha em envio.", "ok"); m.fechar(); recarregar();
+    }, "botao botao-primario")] : null,
+  });
+}
