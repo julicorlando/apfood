@@ -111,18 +111,24 @@ jobs:
         with:
           python-version: "3.12"
       - name: Instalar
-        run: pip install -e core -e desktop pyinstaller
+        # SEM -e: o PyInstaller não enxerga pacotes instalados em modo editável
+        # (foi o que deixou o apfood_core de fora do exe na 0.2.0)
+        run: pip install ./core ./desktop pyinstaller
       - name: Gerar executável
         run: >
           pyinstaller --noconfirm --onefile --windowed --name ApFoodPDV
+          --paths core --paths desktop
           --collect-submodules apfood_pdv --collect-submodules apfood_core
           --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtWebSockets
           desktop/pdv.py
-      - name: Teste rápido do executável (importa e sai)
+      - name: Teste do executável (importa todos os módulos e sai)
         shell: pwsh
         run: |
           if (!(Test-Path dist/ApFoodPDV.exe)) { throw "exe não gerado" }
           "{0:N1} MB" -f ((Get-Item dist/ApFoodPDV.exe).Length / 1MB)
+          $p = Start-Process dist/ApFoodPDV.exe -ArgumentList "--autoteste" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "autoteste do exe falhou (código $($p.ExitCode))" }
+          "autoteste ok"
       - uses: actions/upload-artifact@v4
         with:
           name: ApFoodPDV-windows

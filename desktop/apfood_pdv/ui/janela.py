@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from .. import __version__
 from ..api import ErroApi, SemConexao
+from ..config import normalizar_servidor
 from .alerta import AlertaSonoro
 from .dialogos import DialogoEscolha
 from .paginas.gestao import PaginaCaixa, PaginaConfig, PaginaCozinha, PaginaEstoque, PaginaRelatorios
@@ -21,6 +22,8 @@ from .realtime import ClienteTempoReal
 
 
 # =============================================================================
+
+
 class DialogoLogin(QDialog):
     def __init__(self, ctx, parent=None, *, titulo="Entrar no ApFood", pin=False):
         super().__init__(parent)
@@ -54,7 +57,7 @@ class DialogoLogin(QDialog):
             if self.pin:
                 u = self.ctx.api.trocar_operador(self.usuario.text().strip(), self.senha.text())
             else:
-                url = self.servidor.text().strip().rstrip("/")
+                url = normalizar_servidor(self.servidor.text())
                 if url != self.ctx.cfg.api_url:
                     self.ctx.cfg.api_url = self.ctx.api.base_url = url
                     self.ctx.cfg.salvar()
