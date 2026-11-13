@@ -155,7 +155,17 @@ class ProdutoViewSet(_ProdutoBase):
         return Response(s.FichaSerializer(produto.ficha_tecnica.all(), many=True).data)
 GrupoAdicionalViewSet = cadastro_viewset(GrupoAdicional, s.GrupoAdicionalSerializer)
 ZonaViewSet = cadastro_viewset(ZonaEntrega, s.ZonaEntregaSerializer)
-EntregadorViewSet = cadastro_viewset(Entregador, s.EntregadorSerializer, filtros=["ativo"])
+_EntregadorBase = cadastro_viewset(Entregador, s.EntregadorSerializer, filtros=["ativo"])
+
+
+class EntregadorViewSet(_EntregadorBase):
+    @action(detail=True, methods=["post"])
+    def link(self, request, pk=None):
+        """Gerente+ gera o link do celular do entregador (o anterior para de funcionar)."""
+        if not request.user.eh_gerente:
+            raise PermissionDenied("requer gerente")
+        token = self.get_object().gerar_link()
+        return Response({"url": request.build_absolute_uri(f"/entrega/{token}/")})
 MesaViewSet = cadastro_viewset(Mesa, s.MesaSerializer, filtros=["area", "ativa"])
 FornecedorViewSet = cadastro_viewset(Fornecedor, s.FornecedorSerializer)
 CupomViewSet = cadastro_viewset(Cupom, s.CupomSerializer, filtros=["ativo"])
@@ -290,6 +300,7 @@ def pedido_in(dados: dict, loja, request=None) -> pedidos_srv.PedidoIn:
         entregador_id=str(dados["entregador_id"]) if dados.get("entregador_id") else None,
         marketplace=dados.get("marketplace", ""), id_externo=dados.get("id_externo", ""),
         codigo_externo=dados.get("codigo_externo", ""), codigo_local=dados.get("codigo_local", ""),
+        usar_cashback_centavos=dados.get("usar_cashback_centavos", 0),
     )
 
 

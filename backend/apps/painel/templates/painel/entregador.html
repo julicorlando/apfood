@@ -1,0 +1,58 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f26a0f">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="refresh" content="60">
+  <title>Entregas — {{ entregador.nome }}</title>
+  {% include "marca/cabeca.html" %}
+  <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
+  <style>
+    .pagina { max-width: 560px; margin: 0 auto; padding: 16px; }
+    .topo-ent { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .topo-ent img { height: 40px; }
+    .entrega { background: #fff; border-radius: 14px; box-shadow: var(--sombra); padding: 16px; margin-bottom: 14px; }
+    .entrega h2 { margin: 0 0 4px; font-size: 22px; }
+    .cobrar { font-size: 20px; font-weight: 800; }
+    .botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .botoes form { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <div class="pagina">
+    <header class="topo-ent">
+      <img src="{% static 'marca/logo-pequena.png' %}" alt="ApFood">
+      <span class="muted">{{ entregador.loja.nome }}</span>
+    </header>
+    <h1 style="font-size:20px;margin:0 0 12px">Olá, {{ entregador.nome }}!</h1>
+    {% if aviso %}<div class="alerta alerta-ok" role="status" style="margin-bottom:12px">Pedido #{{ aviso }} marcado como entregue.</div>{% endif %}
+
+    {% for c in cartoes %}
+    <article class="entrega">
+      <h2>Pedido #{{ c.p.numero }}</h2>
+      <div class="negrito">{{ c.p.nome_cliente|default:"Cliente" }}</div>
+      <p style="margin:6px 0">📍 {{ c.endereco }}{% if c.p.entrega_referencia %}<br><span class="muted">Ref.: {{ c.p.entrega_referencia }}</span>{% endif %}</p>
+      {% if c.cobrar %}
+        <div class="alerta alerta-aviso"><span class="cobrar">Cobrar {{ c.cobrar_txt }}</span>
+          {% if c.forma %}<br>{{ c.forma }}{% endif %}{% if c.troco_txt %} · troco para {{ c.troco_txt }}{% endif %}</div>
+      {% else %}
+        <div class="alerta alerta-ok">Já está pago</div>
+      {% endif %}
+      {% if c.p.observacao %}<p class="muted">Obs.: {{ c.p.observacao }}</p>{% endif %}
+      <div class="botoes">
+        <a class="botao" href="{{ c.mapa }}" target="_blank" rel="noopener">🗺️ Abrir mapa</a>
+        {% if c.p.telefone_cliente %}<a class="botao" href="tel:{{ c.p.telefone_cliente }}">📞 Ligar</a>{% else %}<span></span>{% endif %}
+        <form method="post" action="{% url 'entregue' token=entregador.token_acesso pedido=c.p.id %}">
+          {% csrf_token %}
+          <button type="submit" class="botao botao-ok botao-grande botao-bloco">✓ Entregue</button>
+        </form>
+      </div>
+    </article>
+    {% empty %}
+    <div class="cartao vazio">Nenhuma entrega com você agora.<br><small>Esta página se atualiza sozinha.</small></div>
+    {% endfor %}
+  </div>
+</body>
+</html>

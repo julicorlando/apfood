@@ -7,6 +7,8 @@ from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.painel import entrega
+
 
 admin.site.site_header = "ApFood — Painel"
 admin.site.site_title = "ApFood"
@@ -27,6 +29,9 @@ urlpatterns = [
     path("api/", include("apps.api.urls")),
     # Painel web (gestão + operação pelo navegador)
     path("painel/", include("apps.painel.urls")),
+    path("planos/", include("apps.plataforma.urls")),
+    path("entrega/<str:token>/", entrega.painel_entregador, name="entregador"),
+    path("entrega/<str:token>/<uuid:pedido>/entregue/", entrega.marcar_entregue, name="entregue"),
     # Cardápio digital público (Passo 4): /<slug-da-loja>/
     path("", include("apps.vitrine.urls")),
 ]

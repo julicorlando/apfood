@@ -7,7 +7,11 @@ mesma que o PDV desktop usa, autenticada pela sessão do navegador.
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import (
+    LoginView, LogoutView, PasswordResetCompleteView, PasswordResetConfirmView, PasswordResetDoneView,
+    PasswordResetView,
+)
+from django.urls import reverse_lazy
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import redirect, render
@@ -27,6 +31,33 @@ class Entrar(LoginView):
     template_name = "painel/entrar.html"
     authentication_form = FormEntrar
     redirect_authenticated_user = True
+
+
+class EsqueciSenha(PasswordResetView):
+    """Envia o link por e-mail. A resposta é a mesma exista ou não o e-mail
+    (não revela quem tem cadastro)."""
+
+    template_name = "painel/senha_esqueci.html"
+    email_template_name = "painel/email_senha.txt"
+    subject_template_name = "painel/email_senha_assunto.txt"
+    success_url = reverse_lazy("painel:senha_enviada")
+
+
+class SenhaEnviada(PasswordResetDoneView):
+    template_name = "painel/senha_mensagem.html"
+    extra_context = {"titulo": "Confira seu e-mail",
+                     "texto": "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha. "
+                              "Ele vale por 2 horas. Não chegou? Veja o spam ou peça ao administrador da sua empresa."}
+
+
+class NovaSenha(PasswordResetConfirmView):
+    template_name = "painel/senha_nova.html"
+    success_url = reverse_lazy("painel:senha_pronta")
+
+
+class SenhaPronta(PasswordResetCompleteView):
+    template_name = "painel/senha_mensagem.html"
+    extra_context = {"titulo": "Senha alterada", "texto": "Pronto! Já pode entrar com a nova senha.", "entrar": True}
 
 
 class Sair(LogoutView):

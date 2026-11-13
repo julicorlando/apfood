@@ -253,6 +253,7 @@ class PedidoIn(serializers.Serializer):
     id_externo = serializers.CharField(required=False, allow_blank=True, default="")
     codigo_externo = serializers.CharField(required=False, allow_blank=True, default="")
     codigo_local = serializers.CharField(required=False, allow_blank=True, default="", max_length=20)
+    usar_cashback_centavos = serializers.IntegerField(min_value=0, default=0)
 
 
 class PedidoOnlineIn(PedidoIn):
@@ -270,7 +271,8 @@ class PedidoOnlineIn(PedidoIn):
     def get_fields(self):
         campos = super().get_fields()
         for nome in ("taxa_entrega_centavos", "desconto_centavos", "acrescimo_centavos", "comanda", "entregador_id",
-                     "marketplace", "id_externo", "codigo_externo", "codigo_local", "mesa", "senha", "origem_contato"):
+                     "marketplace", "id_externo", "codigo_externo", "codigo_local", "mesa", "senha", "origem_contato",
+                     "usar_cashback_centavos"):
             campos.pop(nome, None)
         return campos
 

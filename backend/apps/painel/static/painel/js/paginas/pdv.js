@@ -164,6 +164,7 @@ export function pdv() {
         itens: [], modo: "LOCAL", categoria: cardapio.categorias[0]?.id, busca: "",
         cliente: { nome: "", telefone: "" }, endereco: null, taxa: 0, desconto: 0, cupom: "", observacao: "", cpf: "",
         senha: "", origem: "TELEFONE", previsto: "DINHEIRO", trocoPara: "",
+        saldoCashback: 0, usarCashback: false,
       };
 
       const avisoCaixa = h("div");
@@ -222,8 +223,28 @@ export function pdv() {
       const modos = [["LOCAL", "Comer aqui"], ["RETIRADA", "Para viagem"], ["DELIVERY", "Delivery"]];
 
       function totais() {
-        const t = C().totais(idx, estado.itens, estado.modo === "DELIVERY" ? estado.taxa : 0, estado.desconto);
+        const taxa = estado.modo === "DELIVERY" ? estado.taxa : 0;
+        const base = C().totais(idx, estado.itens, taxa, estado.desconto);
+        const cashback = estado.usarCashback ? Math.min(estado.saldoCashback, base.total) : 0;
+        const t = C().totais(idx, estado.itens, taxa, estado.desconto + cashback);
+        t.cashback = cashback;
         return t;
+      }
+
+      async function buscarCliente(telefone) {
+        const achados = await get(`/api/clientes/por-telefone/?telefone=${encodeURIComponent(telefone.replace(/\D/g, ""))}`);
+        const c = achados[0];
+        estado.saldoCashback = c?.saldo_cashback_centavos || 0;
+        estado.usarCashback = false;
+        return c;
+      }
+
+      function blocoCashback() {
+        if (!estado.saldoCashback) return null;
+        const marca = h("input", { type: "checkbox", checked: estado.usarCashback });
+        marca.addEventListener("change", () => { estado.usarCashback = marca.checked; desenharCarrinho(); });
+        return h("label", { class: "check alerta alerta-ok", style: { margin: "6px 0" } }, marca,
+          h("span", null, `Usar cashback do cliente (saldo ${dinheiro(estado.saldoCashback)})`));
       }
 
       function desenharCarrinho() {
@@ -251,7 +272,7 @@ export function pdv() {
           h("ul", { class: "lista-simples" },
             h("li", null, "Subtotal", h("span", { class: "num" }, dinheiro(t.subtotal))),
             estado.modo === "DELIVERY" ? h("li", null, "Entrega", h("span", { class: "num" }, dinheiro(t.taxa))) : null,
-            t.desconto ? h("li", null, "Desconto", h("span", { class: "num" }, `− ${dinheiro(t.desconto)}`)) : null),
+            t.desconto ? h("li", null, t.cashback ? "Desconto (inclui cashback)" : "Desconto", h("span", { class: "num" }, `− ${dinheiro(t.desconto)}`)) : null),
           h("div", { class: "pdv-total" }, h("span", null, "Total"), h("span", null, dinheiro(t.total))),
           h("div", { class: "acoes" },
             h("button", { type: "button", class: "botao botao-pequeno", onclick: ajustes }, "Desconto, cupom, obs."),
@@ -266,16 +287,23 @@ export function pdv() {
           nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
           const senha = h("input", { type: "text", placeholder: "Senha/ficha", value: estado.senha, style: { maxWidth: "110px" } });
           senha.addEventListener("input", () => { estado.senha = senha.value; });
-          return h("div", { class: "acoes", style: { marginBottom: "6px" } }, nome, senha);
+          const tel = h("input", { type: "tel", placeholder: "Telefone (cashback)", value: estado.cliente.telefone });
+          tel.addEventListener("input", () => { estado.cliente.telefone = tel.value; });
+          const buscar = botaoAcao("Buscar", async () => {
+            const c = await buscarCliente(tel.value);
+            if (c) { estado.cliente = { nome: c.nome, telefone: c.telefone }; } else aviso("Cliente novo: o cashback começa a contar a partir desta compra.");
+            desenharCarrinho();
+          }, "botao botao-pequeno");
+          return h("div", { class: "grade", style: { gap: "6px", marginBottom: "6px" } },
+            h("div", { class: "acoes" }, nome, senha), h("div", { class: "acoes" }, tel, buscar), blocoCashback());
         }
         const tel = h("input", { type: "tel", placeholder: "Telefone do cliente", value: estado.cliente.telefone });
         const nome = h("input", { type: "text", placeholder: "Nome", value: estado.cliente.nome });
         nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
         tel.addEventListener("input", () => { estado.cliente.telefone = tel.value; });
         const buscar = botaoAcao("Buscar", async () => {
-          const achados = await get(`/api/clientes/por-telefone/?telefone=${encodeURIComponent(tel.value.replace(/\D/g, ""))}`);
-          const c = achados[0];
-          if (!c) { aviso("Cliente novo: preencha nome e endereço."); return; }
+          const c = await buscarCliente(tel.value);
+          if (!c) { aviso("Cliente novo: preencha nome e endereço."); desenharCarrinho(); return; }
           estado.cliente = { nome: c.nome, telefone: c.telefone };
           const e = c.enderecos?.find((x) => x.principal) || c.enderecos?.[0];
           if (e) { estado.endereco = { logradouro: e.logradouro, numero: e.numero, complemento: e.complemento, bairro: e.bairro, cidade: e.cidade, cep: e.cep, referencia: e.referencia }; await calcularTaxa(); }
@@ -285,7 +313,8 @@ export function pdv() {
         return h("div", { class: "grade", style: { gap: "6px", marginBottom: "6px" } },
           h("div", { class: "acoes" }, tel, buscar), nome,
           h("button", { type: "button", class: "botao botao-pequeno", onclick: editarEndereco },
-            end ? `📍 ${end.logradouro}, ${end.numero} — ${end.bairro}` : "Informar endereço de entrega"));
+            end ? `📍 ${end.logradouro}, ${end.numero} — ${end.bairro}` : "Informar endereço de entrega"),
+          blocoCashback());
       }
 
       async function calcularTaxa() {
@@ -359,6 +388,7 @@ export function pdv() {
           cupom_codigo: estado.cupom,
           observacao: estado.observacao,
           cpf_nota: estado.cpf,
+          usar_cashback_centavos: estado.usarCashback ? estado.saldoCashback : 0,
           forma_pagamento_prevista: delivery ? estado.previsto : "",
           troco_para_centavos: delivery && estado.previsto === "DINHEIRO" && estado.trocoPara ? centavos(estado.trocoPara) : null,
         };
@@ -390,6 +420,7 @@ export function pdv() {
         estado.itens = [];
         estado.desconto = 0; estado.cupom = ""; estado.observacao = ""; estado.cpf = ""; estado.senha = "";
         estado.cliente = { nome: "", telefone: "" }; estado.endereco = null; estado.taxa = 0; estado.trocoPara = "";
+        estado.saldoCashback = 0; estado.usarCashback = false;
         desenharCarrinho();
       }
 

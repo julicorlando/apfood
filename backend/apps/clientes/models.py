@@ -20,6 +20,7 @@ class Cliente(DaLoja, ModeloSincronizavel):
     observacoes = models.TextField(blank=True)
     # LGPD
     aceita_marketing = models.BooleanField(default=False)
+    saldo_cashback_centavos = models.PositiveIntegerField(default=0, editable=False)
     consentimento_em = models.DateTimeField(null=True, blank=True)
     anonimizado_em = models.DateTimeField(null=True, blank=True)
 
@@ -103,6 +104,17 @@ class Entregador(DaLoja, ModeloSincronizavel):
     nome = models.CharField(max_length=80)
     telefone = models.CharField(max_length=13, blank=True)
     ativo = models.BooleanField(default=True)
+    token_acesso = models.CharField(
+        max_length=64, blank=True, db_index=True, editable=False,
+        help_text="link do celular do entregador (/entrega/<token>/); gerar outro invalida o anterior",
+    )
+
+    def gerar_link(self) -> str:
+        import secrets
+
+        self.token_acesso = secrets.token_urlsafe(24)
+        self.save(update_fields=["token_acesso", "atualizado_em"])
+        return self.token_acesso
 
     class Meta:
         db_table = "entregadores"

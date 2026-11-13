@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#e4572e">
+  <meta name="theme-color" content="#f26a0f">
   <title>ApFood — gestão, PDV e cardápio digital</title>
+  {% include "marca/cabeca.html" %}
   <style>
-    :root { --cor: #e4572e; --texto: #1d1d1f; --suave: #6b6b70; --fundo: #faf7f5; }
+    :root { --cor: #f26a0f; --texto: #1d1d1f; --suave: #6b6b70; --fundo: #faf7f5; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texto); background: var(--fundo); min-height: 100vh; display: flex; flex-direction: column; }
     main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
     .cartao { max-width: 520px; width: 100%; text-align: center; }
-    .marca { font-size: 44px; font-weight: 800; letter-spacing: -1px; margin: 0; }
-    .marca span { color: var(--cor); }
+    .marca { margin: 0; }
+    .marca img { width: min(320px, 80vw); height: auto; display: block; margin: 0 auto; }
     .sub { color: var(--suave); font-size: 18px; margin: 8px 0 32px; line-height: 1.5; }
     .botoes { display: flex; flex-direction: column; gap: 12px; }
     a.botao { display: block; padding: 16px 20px; border-radius: 12px; font-size: 17px; font-weight: 600; text-decoration: none; }
@@ -28,10 +29,11 @@
 <body>
   <main>
     <div class="cartao">
-      <h1 class="marca">Ap<span>Food</span></h1>
+      <h1 class="marca"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood" width="400" height="160"></h1>
       <p class="sub">Gestão, PDV e cardápio digital para restaurantes e hamburguerias.</p>
       <div class="botoes">
         <a class="botao primario" href="{% url 'painel:app' %}">Entrar no painel</a>
+        <a class="botao secundario" href="{% url 'cadastro:planos' %}">Testar grátis no meu restaurante</a>
         {% if url_pdv %}<a class="botao secundario" href="{{ url_pdv }}">Baixar o PDV para Windows</a>{% endif %}
       </div>
       <ul>

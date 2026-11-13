@@ -307,6 +307,7 @@ export function clientes() {
       { rotulo: "Nome", campo: "nome" },
       { rotulo: "Telefone", campo: "telefone" },
       { rotulo: "Bairro", valor: (c) => c.enderecos?.[0]?.bairro || "—" },
+      { rotulo: "Cashback", classe: "num", valor: (c) => (c.saldo_cashback_centavos ? dinheiro(c.saldo_cashback_centavos) : "—") },
       { rotulo: "Marketing", valor: (c) => simNao(c.aceita_marketing) },
     ],
     campos: [
@@ -335,6 +336,25 @@ export function entregadores() {
     ],
     antesDeSalvar: (d) => ({ ...d, telefone: String(d.telefone || "").replace(/\D/g, "") }),
     podeExcluir: excluirGerente,
+    intro: "Cada entregador recebe um link para abrir no celular: vê as entregas dele, o mapa, quanto cobrar e marca como entregue.",
+    acoes: (e) => ehGerente() && e.ativo ? botaoAcao("Link do celular", () => linkEntregador(e), "botao botao-pequeno") : null,
+  });
+}
+
+async function linkEntregador(e) {
+  const r = await post(`/api/entregadores/${e.id}/link/`);
+  const texto = `Olá, ${e.nome}! Suas entregas ficam neste link (guarde no celular): ${r.url}`;
+  const wa = e.telefone ? `https://wa.me/55${e.telefone}?text=${encodeURIComponent(texto)}` : null;
+  modal({
+    titulo: `Link do entregador — ${e.nome}`, tamanho: "modal-pequeno",
+    corpo: h("div", { class: "grade", style: { textAlign: "center" } },
+      h("img", { src: `/painel/qrcode.svg?t=${encodeURIComponent(r.url)}`, alt: "QR Code do link", style: { width: "200px", margin: "0 auto" } }),
+      h("textarea", { readonly: true, rows: 3, onclick: (ev) => ev.target.select() }, r.url),
+      h("small", { class: "muted" }, "Gerar de novo desativa o link anterior.")),
+    rodape: [
+      h("button", { type: "button", class: "botao", onclick: () => navigator.clipboard?.writeText(r.url).then(() => aviso("Link copiado.", "ok")) }, "Copiar"),
+      wa ? h("a", { class: "botao botao-primario", href: wa, target: "_blank", rel: "noopener" }, "Enviar no WhatsApp") : null,
+    ],
   });
 }
 

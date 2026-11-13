@@ -1,0 +1,14 @@
+{% extends "painel/_tela.html" %}
+{% block titulo %}Esqueci minha senha{% endblock %}
+{% block conteudo %}
+<form method="post" class="grade" novalidate>
+  {% csrf_token %}
+  <p class="entrar-sub">Informe o e-mail do seu cadastro. Enviaremos um link para criar uma nova senha.</p>
+  {% if form.errors %}<div class="alerta alerta-erro" role="alert">Informe um e-mail válido.</div>{% endif %}
+  <label class="campo"><span>E-mail</span>
+    <input type="email" name="email" autocomplete="email" autofocus required value="{{ form.email.value|default:'' }}">
+  </label>
+  <button type="submit" class="botao botao-primario botao-bloco">Enviar link</button>
+  <a href="{% url 'painel:entrar' %}" class="direita">Voltar para o login</a>
+</form>
+{% endblock %}

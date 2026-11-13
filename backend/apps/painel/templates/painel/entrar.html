@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#e4572e">
+  <meta name="theme-color" content="#f26a0f">
   <title>Entrar — ApFood</title>
+  {% include "marca/cabeca.html" %}
   <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
 </head>
 <body class="tela-entrar">
   <main class="entrar">
     <form method="post" class="entrar-cartao" novalidate>
       {% csrf_token %}
-      <a href="/" class="marca marca-grande">Ap<span>Food</span></a>
+      <a href="/" class="marca marca-grande"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
       <p class="entrar-sub">Entre para gerenciar sua loja</p>
       {% if form.non_field_errors %}
         <div class="alerta alerta-erro" role="alert">
@@ -29,6 +30,8 @@
       </label>
       <input type="hidden" name="next" value="{{ next|default:'/painel/' }}">
       <button type="submit" class="botao botao-primario botao-bloco">Entrar</button>
+      <a href="{% url 'painel:esqueci' %}" class="direita">Esqueci minha senha</a>
+      <p class="entrar-sub" style="margin:4px 0 0">Ainda não usa o ApFood? <a href="{% url 'cadastro:planos' %}">Teste grátis</a></p>
     </form>
   </main>
 </body>

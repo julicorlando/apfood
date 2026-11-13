@@ -79,6 +79,7 @@ class PedidoIn:
     cupom_codigo: str = ""
     troco_para_centavos: int | None = None
     forma_pagamento_prevista: str = ""  # online: "pagar na entrega com..."
+    usar_cashback_centavos: int = 0  # PDV: quanto do saldo de cashback do cliente usar
     observacao: str = ""
     cpf_nota: str = ""
     entregador_id: str | None = None
@@ -263,12 +264,30 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
     if online and subtotal < loja.pedido_minimo_centavos:
         raise ErroNegocio("pedido abaixo do valor mínimo da loja")
 
+    # --- cliente (pelo telefone): guarda o endereço e permite cashback ---
+    tel = "".join(ch for ch in dados.telefone_cliente if ch.isdigit())
+    cliente = None
+    if tel and dados.canal != CanalVenda.MARKETPLACE:
+        from apps.clientes.services import salvar_cliente_do_pedido
+
+        cliente = salvar_cliente_do_pedido(loja, nome=dados.nome_cliente, telefone=tel, endereco=end or None)
+
     # --- descontos ---
     cupom, desconto = None, 0
     if dados.cupom_codigo:
         cupom, desconto = _cupom(loja, dados.cupom_codigo, subtotal, taxa, dados)
+    desconto_cupom = desconto
     if not online:  # desconto/acréscimo manual só no PDV
         desconto += dados.desconto_centavos
+    cashback = 0
+    if dados.usar_cashback_centavos and not online:
+        from apps.clientes.models import Cliente
+
+        if cliente is None:
+            raise ErroNegocio("informe o telefone do cliente para usar o cashback", "telefone_cliente")
+        cliente = Cliente.objects.select_for_update().get(pk=cliente.pk)
+        cashback = min(dados.usar_cashback_centavos, cliente.saldo_cashback_centavos, max(0, subtotal + taxa - desconto))
+        desconto += cashback
     acrescimo = 0 if online else dados.acrescimo_centavos
     t = totais.calcular_totais(itens_core, taxa, min(desconto, subtotal + taxa), acrescimo)
 
@@ -278,12 +297,6 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
     # --- cria ---
     status = fluxo.status_inicial(online, loja.aceite_automatico)
     agora = timezone.now()
-    tel = "".join(ch for ch in dados.telefone_cliente if ch.isdigit())
-    cliente = None
-    if tel and dados.canal in (CanalVenda.ONLINE, CanalVenda.DELIVERY):
-        from apps.clientes.services import salvar_cliente_do_pedido
-
-        cliente = salvar_cliente_do_pedido(loja, nome=dados.nome_cliente, telefone=tel, endereco=end or None)
 
     pedido = Pedido.objects.create(
         **({"id": dados.id} if dados.id else {}),
@@ -301,6 +314,7 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
         subtotal_centavos=t.subtotal_centavos, taxa_entrega_centavos=t.taxa_entrega_centavos,
         desconto_centavos=t.desconto_centavos, acrescimo_centavos=t.acrescimo_centavos,
         total_centavos=t.total_centavos, troco_para_centavos=dados.troco_para_centavos,
+        cashback_usado_centavos=cashback,
         cupom=cupom, cpf_nota="".join(ch for ch in dados.cpf_nota if ch.isdigit()),
         observacao=dados.observacao, atendente=usuario if usuario and not online else None,
         turno=caixa.turno_aberto(usuario, loja) if usuario and not online else None,
@@ -323,10 +337,16 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
         ])
     HistoricoStatusPedido.objects.create(pedido=pedido, status_para=status, usuario=usuario)
 
+    if cashback:
+        from apps.clientes.models import Cliente
+
+        Cliente.objects.filter(pk=cliente.pk).update(saldo_cashback_centavos=F("saldo_cashback_centavos") - cashback)
+
     if cupom:
         from apps.marketing.models import Cupom, UsoCupom
 
-        UsoCupom.objects.create(cupom=cupom, pedido=pedido, cliente=cliente, telefone=tel, desconto_centavos=desconto)
+        UsoCupom.objects.create(cupom=cupom, pedido=pedido, cliente=cliente, telefone=tel,
+                                desconto_centavos=desconto_cupom)
         Cupom.objects.filter(pk=cupom.pk).update(usos=F("usos") + 1)
 
     if dados.forma_pagamento_prevista:  # online: forma escolhida, paga na entrega/retirada
@@ -383,6 +403,7 @@ def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", 
         estoque.baixar_pedido(p, usuario)
     elif para == S.CONCLUIDO:
         estoque.baixar_pedido(p, usuario)  # garante a baixa mesmo se o aceite foi automático
+    _cashback_na_transicao(p, para)
     if para in (S.CANCELADO, S.RECUSADO):
         estoque.estornar_pedido(p, usuario)
         _estornar_pagamentos(p, usuario, motivo)
@@ -398,6 +419,25 @@ def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", 
     eventos.pedido_status(p)
     _ganchos_status(p, para, motivo, origem_externa)
     return p
+
+
+def _cashback_na_transicao(p, para) -> None:
+    """Concluído: credita o cashback (uma vez). Cancelado: devolve o saldo que foi usado."""
+    if not p.cliente_id:
+        return
+    from apps.clientes.models import Cliente
+
+    if para == S.CONCLUIDO and not p.cashback_gerado_centavos:
+        pct = p.loja.cashback_percentual or 0
+        base = max(0, p.total_centavos - p.taxa_entrega_centavos)
+        gerado = int(base * pct / 100)
+        if gerado > 0:
+            Pedido.objects.filter(pk=p.pk).update(cashback_gerado_centavos=gerado)
+            p.cashback_gerado_centavos = gerado
+            Cliente.objects.filter(pk=p.cliente_id).update(saldo_cashback_centavos=F("saldo_cashback_centavos") + gerado)
+    elif para in (S.CANCELADO, S.RECUSADO) and p.cashback_usado_centavos:
+        Cliente.objects.filter(pk=p.cliente_id).update(
+            saldo_cashback_centavos=F("saldo_cashback_centavos") + p.cashback_usado_centavos)
 
 
 def _ganchos_status(p, para, motivo, origem_externa):

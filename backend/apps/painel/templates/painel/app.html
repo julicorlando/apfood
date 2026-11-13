@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#e4572e">
+  <meta name="theme-color" content="#f26a0f">
   <title>ApFood — Painel</title>
+  {% include "marca/cabeca.html" %}
   <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
 </head>
 <body>
   <div class="app" id="app">
     <aside class="menu" id="menu" aria-label="Menu principal">
       <div class="menu-topo">
-        <a href="#/" class="marca">Ap<span>Food</span></a>
+        <a href="#/" class="marca"><img src="{% static 'marca/logo-pequena.png' %}" srcset="{% static 'marca/logo.png' %} 2x" alt="ApFood"></a>
         <button type="button" class="botao-icone so-celular" id="fechar-menu" aria-label="Fechar menu">✕</button>
       </div>
       <nav id="nav"></nav>

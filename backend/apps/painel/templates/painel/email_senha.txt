@@ -1,0 +1,11 @@
+{% autoescape off %}Olá{% if user.first_name %}, {{ user.first_name }}{% endif %}!
+
+Recebemos um pedido para criar uma nova senha no ApFood (login: {{ user.get_username }}).
+
+Para continuar, abra o link abaixo (vale por 2 horas):
+{{ protocol }}://{{ domain }}{% url 'painel:nova_senha' uidb64=uid token=token %}
+
+Se não foi você, ignore este e-mail: sua senha continua a mesma.
+
+— Equipe ApFood
+{% endautoescape %}

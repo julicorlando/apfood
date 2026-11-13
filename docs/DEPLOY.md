@@ -33,4 +33,16 @@ O Cloudflare cria sozinho o CNAME `apfood` → `<id-do-túnel>.cfargotunnel.com`
 - Webhook do Mercado Pago: `https://apfood.axionwebdigital.com.br/api/webhooks/mercadopago/<id-da-loja>/`.
 
 ## 4. Backup
-O banco fica no volume `pgdata`. Ative **Backups** no recurso no Coolify, ou agende um `pg_dump` diário, e guarde também o volume `media` (fotos dos produtos).
+O serviço **backup** do compose faz uma cópia do banco (`pg_dump`) e das fotos (volume `media`) ao subir e todo dia às 04h, no volume `backups`, e apaga as cópias com mais de 14 dias. Variáveis opcionais: `BACKUP_HORA` (padrão `04`) e `BACKUP_DIAS` (padrão `14`).
+
+- **Ver as cópias:** Coolify → ApFood → **Terminal** → container `backup` → `ls -lh /backups`.
+- **Restaurar** (no terminal do container `backup`):
+  ```sh
+  pg_restore --clean --if-exists --no-owner -d apfood /backups/apfood-AAAAMMDD-HHMM.dump
+  ```
+  Depois, faça **Restart** do recurso.
+- **Fotos:** `tar -xzf /backups/media-AAAAMMDD-HHMM.tar.gz -C /media` (no mesmo terminal).
+- O volume `backups` fica no mesmo servidor. Para ter uma cópia fora dele, ative também os **Backups S3** do Coolify ou copie `/backups` para outro lugar.
+
+## 5. E-mail (Esqueci minha senha)
+Defina `EMAIL_URL` no Coolify, por exemplo `smtp+tls://usuario:senha@smtp.gmail.com:587` (no Gmail, use uma *senha de app*), e `DEFAULT_FROM_EMAIL` (ex.: `ApFood <nao-responda@seudominio.com.br>`). Sem `EMAIL_URL`, os e-mails só aparecem no log do container e o administrador redefine a senha pelo painel (Configurações → Usuários).

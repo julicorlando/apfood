@@ -44,7 +44,7 @@ function criarEntrada(c, valor) {
     case "hora":
       return h("input", { type: "time", value: valor ? String(valor).slice(0, 5) : "" });
     case "cor":
-      return h("input", { type: "color", value: valor || "#e4572e", style: { height: "40px", padding: "2px" } });
+      return h("input", { type: "color", value: valor || "#f26a0f", style: { height: "40px", padding: "2px" } });
     case "senha":
       return h("input", { type: "password", autocomplete: "new-password", value: "" });
     case "imagem": {

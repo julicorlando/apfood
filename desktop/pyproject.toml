@@ -20,3 +20,6 @@ apfood-pdv = "apfood_pdv.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["apfood_pdv*"]
+
+[tool.setuptools.package-data]
+apfood_pdv = ["recursos/*"]

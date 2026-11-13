@@ -242,6 +242,8 @@ export async function abrirPedido(id, { aoMudar } = {}) {
             p.taxa_entrega_centavos ? h("li", null, "Entrega", h("span", { class: "num" }, dinheiro(p.taxa_entrega_centavos))) : null,
             p.desconto_centavos ? h("li", null, "Desconto", h("span", { class: "num" }, `− ${dinheiro(p.desconto_centavos)}`)) : null,
             p.acrescimo_centavos ? h("li", null, "Acréscimo", h("span", { class: "num" }, dinheiro(p.acrescimo_centavos))) : null,
+            p.cashback_usado_centavos ? h("li", null, "Cashback usado (já no desconto)", h("span", { class: "num" }, dinheiro(p.cashback_usado_centavos))) : null,
+            p.cashback_gerado_centavos ? h("li", null, "Cashback gerado para o cliente", h("span", { class: "num" }, dinheiro(p.cashback_gerado_centavos))) : null,
             h("li", { class: "negrito" }, "Total", h("span", { class: "num" }, dinheiro(p.total_centavos))))),
         h("div", null,
           h("h3", null, "Cliente"),
