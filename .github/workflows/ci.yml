@@ -126,6 +126,7 @@ jobs:
         env:
           APFOOD_SEM_SOM: "1"
           APFOOD_PRINTS: prints
+          QT_QPA_PLATFORM: windows
         run: |
           pip install pytest
           pytest desktop/tests/test_ui.py -q -k login -p no:faulthandler
