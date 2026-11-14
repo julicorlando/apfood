@@ -129,6 +129,7 @@ jobs:
         run: |
           pip install pytest
           pytest desktop/tests/test_ui.py -q -k login -p no:faulthandler
+          if (Test-Path prints/login.png) { "PRINT_BASE64:" + [Convert]::ToBase64String([IO.File]::ReadAllBytes("prints/login.png")) }
       - uses: actions/upload-artifact@v4
         with:
           name: prints-pdv
