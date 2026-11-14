@@ -28,7 +28,16 @@ class SemConexao(ErroApi):
 Transporte = Callable[[str, str, dict, bytes | None, float], tuple[int, bytes]]
 
 
+def user_agent() -> str:
+    """O Cloudflare bloqueia o "Python-urllib" padrão (erro 1010, "browser's
+    signature"). O PDV se identifica como um navegador + ApFoodPDV/versão."""
+    from . import __version__
+
+    return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) ApFoodPDV/{__version__}"
+
+
 def transporte_urllib(metodo: str, url: str, headers: dict, corpo: bytes | None, timeout: float) -> tuple[int, bytes]:
+    headers = {"User-Agent": user_agent(), "Accept": "application/json", **headers}
     req = urllib.request.Request(url, data=corpo, method=metodo, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (URL configurada pelo usuário)
@@ -37,6 +46,11 @@ def transporte_urllib(metodo: str, url: str, headers: dict, corpo: bytes | None,
         return e.code, e.read()
     except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as e:
         raise SemConexao(f"sem conexão com o servidor ({e})") from e
+
+
+def _bloqueio_cloudflare(bruto: bytes) -> bool:
+    texto = (bruto or b"")[:20000].decode("utf-8", "ignore").lower()
+    return "cloudflare" in texto or "browser's signature" in texto or "error 1010" in texto
 
 
 def mensagem_de_erro(corpo) -> str:
@@ -91,6 +105,9 @@ class ApiClient:
         if status >= 500:
             raise SemConexao(f"servidor indisponível (HTTP {status})", status, resposta)
         if status >= 400:
+            if not isinstance(resposta, (dict, list)) and status in (403, 503) and _bloqueio_cloudflare(bruto):
+                raise ErroApi("O Cloudflare bloqueou este computador (proteção contra robôs). "
+                              "Peça ao administrador para liberar o PDV no Cloudflare.", status, None)
             raise ErroApi(mensagem_de_erro(resposta), status, resposta)
         return resposta
 
