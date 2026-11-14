@@ -34,7 +34,13 @@ class ClienteTempoReal(QObject):
     def _abrir(self):
         if self.ws is None or self.ligado:
             return
-        self.ws.open(QUrl(f"{self.ws_base}/ws/pdv/{self.loja_id}/?token={self.token_fn()}"))
+        from PySide6.QtNetwork import QNetworkRequest
+
+        from ..api import user_agent
+
+        req = QNetworkRequest(QUrl(f"{self.ws_base}/ws/pdv/{self.loja_id}/?token={self.token_fn()}"))
+        req.setRawHeader(b"User-Agent", user_agent().encode())
+        self.ws.open(req)
 
     def _estado(self, ok: bool):
         self.ligado = ok

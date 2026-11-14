@@ -228,3 +228,20 @@ def test_config_antiga_vazia_volta_para_o_servidor_padrao(tmp_path):
         assert Config.carregar(arq).api_url == SERVIDOR_PADRAO
     arq.write_text(json.dumps({"api_url": "http://192.168.0.5:8000"}), encoding="utf-8")
     assert Config.carregar(arq).api_url == "http://192.168.0.5:8000"
+
+
+def test_pdv_se_identifica_e_explica_bloqueio_do_cloudflare():
+    import pytest as _pytest
+
+    from apfood_pdv.api import ApiClient, ErroApi, user_agent
+
+    vistos = {}
+
+    def transporte(metodo, url, headers, corpo, timeout):
+        vistos.update(headers)
+        return 403, b"<html><title>Access denied | Cloudflare</title> Error 1010 browser's signature</html>"
+
+    assert "ApFoodPDV/" in user_agent() and user_agent().startswith("Mozilla/5.0")
+    api = ApiClient("https://x", transporte=transporte)
+    with _pytest.raises(ErroApi, match="Cloudflare"):
+        api.login("a", "b")

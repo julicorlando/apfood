@@ -64,7 +64,10 @@ Baixador = Callable[[str], bytes]
 
 
 def _baixar_urllib(url: str) -> bytes:
-    with urllib.request.urlopen(url, timeout=120) as r:  # noqa: S310 — URL vem do nosso servidor
+    from .api import user_agent
+
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent()})
+    with urllib.request.urlopen(req, timeout=120) as r:  # noqa: S310 — URL vem do nosso servidor
         return r.read()
 
 
