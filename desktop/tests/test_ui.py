@@ -47,6 +47,8 @@ class ServidorFalso:
         self.pedidos = []
         self.rotas = [
             ("GET", r"/api/eu/", lambda c, m: (200, USUARIO)),
+            ("POST", r"/api/auth/token/", lambda c, m: (200, {"access": "a", "refresh": "r"}) if c["password"] == "certa"
+             else (401, {"detail": "credenciais"})),
             ("GET", r"/api/pedidos/", lambda c, m: (200, {"results": self.pedidos, "next": None})),
             ("POST", r"/api/pedidos/", self._criar),
             ("POST", r"/api/pedidos/([^/]+)/pagamentos/", lambda c, m: (201, {"id": "pg", "troco_centavos": 0})),
@@ -238,3 +240,34 @@ def test_caixa_fechado_permite_abrir(ctx):
     c = PaginaCaixa(ctx)
     c.atualizar()
     assert c.btn_abrir.isEnabled() and not c.btn_fechar.isEnabled()
+
+
+def test_login_tema_claro_lembra_usuario_e_mostra_erro(ctx):
+    from apfood_pdv.ui.janela import DialogoLogin
+
+    d = DialogoLogin(ctx)
+    assert not d.box_servidor.isVisible() and "servidor" in d.lbl_servidor.text()
+    if pasta := os.environ.get("APFOOD_PRINTS"):  # a CI guarda o print da tela
+        from apfood_pdv.__main__ import tema_claro
+        from apfood_pdv.ui.estilo import QSS
+
+        app = QtWidgets.QApplication.instance()
+        tema_claro(app)
+        app.setStyleSheet(QSS)
+        d.usuario.setText("caixa1")
+        d.show()
+        app.processEvents()
+        os.makedirs(pasta, exist_ok=True)
+        d.grab().save(os.path.join(pasta, "login.png"))
+        d.usuario.clear()
+    d.entrar()
+    assert "Informe usuário" in d.msg.text()
+    d.usuario.setText("caixa1")
+    d.senha.setText("errada")
+    d.entrar()
+    assert "incorretos" in d.msg.text() and d.btn_entrar.isEnabled()
+    d.senha.setText("certa")
+    d.entrar()
+    assert d.result() == 1 and ctx.cfg.ultimo_usuario == "caixa1"
+    d2 = DialogoLogin(ctx)
+    assert d2.usuario.text() == "caixa1"

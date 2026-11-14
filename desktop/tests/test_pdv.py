@@ -215,3 +215,16 @@ def test_normalizar_servidor():
     assert normalizar_servidor(" https://apfood.axionwebdigital.com.br/painel/ ") == "https://apfood.axionwebdigital.com.br"
     assert normalizar_servidor("localhost:8000") == "http://localhost:8000"
     assert normalizar_servidor("http://192.168.0.10:8000/") == "http://192.168.0.10:8000"
+
+
+def test_config_antiga_vazia_volta_para_o_servidor_padrao(tmp_path):
+    import json
+
+    from apfood_pdv.config import SERVIDOR_PADRAO, Config
+
+    arq = tmp_path / "config.json"
+    for antigo in ("", "http://localhost:8000"):
+        arq.write_text(json.dumps({"api_url": antigo}), encoding="utf-8")
+        assert Config.carregar(arq).api_url == SERVIDOR_PADRAO
+    arq.write_text(json.dumps({"api_url": "http://192.168.0.5:8000"}), encoding="utf-8")
+    assert Config.carregar(arq).api_url == "http://192.168.0.5:8000"
