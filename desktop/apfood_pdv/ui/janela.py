@@ -5,13 +5,13 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
-    QMessageBox, QStackedWidget, QWidget,
+    QApplication, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .. import __version__
 from ..api import ErroApi, SemConexao
-from ..config import normalizar_servidor, recurso
+from ..config import SERVIDOR_PADRAO, normalizar_servidor, recurso
 from .alerta import AlertaSonoro
 from .dialogos import DialogoEscolha
 from .paginas.gestao import PaginaCaixa, PaginaConfig, PaginaCozinha, PaginaEstoque, PaginaRelatorios
@@ -25,55 +25,173 @@ from .realtime import ClienteTempoReal
 
 
 class DialogoLogin(QDialog):
+    """Login do PDV (ou troca de operador por PIN)."""
+
     def __init__(self, ctx, parent=None, *, titulo="Entrar no ApFood", pin=False):
         super().__init__(parent)
         self.ctx, self.pin = ctx, pin
         self.setWindowTitle(titulo)
-        self.setMinimumWidth(380)
-        f = QFormLayout(self)
+        self.setFixedWidth(440)
+        externo = QVBoxLayout(self)
+        externo.setContentsMargins(20, 20, 20, 16)
+
         logo = QLabel()
         imagem = QPixmap(str(recurso("logo.png")))
         if imagem.isNull():
             logo.setText("ApFood PDV")
             logo.setProperty("papel", "titulo")
         else:
-            logo.setPixmap(imagem.scaledToHeight(90, Qt.SmoothTransformation))
-            logo.setAlignment(Qt.AlignCenter)
-        f.addRow(logo)
-        self.servidor = QLineEdit(ctx.cfg.api_url)
-        if not pin:
-            f.addRow("Servidor", self.servidor)
-        self.usuario = QLineEdit()
+            logo.setPixmap(imagem.scaledToHeight(84, Qt.SmoothTransformation))
+        logo.setAlignment(Qt.AlignCenter)
+        externo.addWidget(logo)
+        sub = QLabel("Troque o operador com o PIN" if pin else "Acesse o caixa da sua loja")
+        sub.setProperty("papel", "sutil")
+        sub.setAlignment(Qt.AlignCenter)
+        externo.addWidget(sub)
+        externo.addSpacing(8)
+
+        cartao = QFrame()
+        cartao.setObjectName("cartaoLogin")
+        v = QVBoxLayout(cartao)
+        v.setContentsMargins(22, 16, 22, 20)
+        v.setSpacing(4)
+
+        def rotulo(texto):
+            r = QLabel(texto)
+            r.setProperty("papel", "rotulo")
+            v.addWidget(r)
+
+        self.usuario = QLineEdit(ctx.cfg.ultimo_usuario if not pin else "")
+        self.usuario.setPlaceholderText("seu login")
+        rotulo("Usuário")
+        v.addWidget(self.usuario)
         self.senha = QLineEdit()
         self.senha.setEchoMode(QLineEdit.Password)
-        f.addRow("Usuário", self.usuario)
-        f.addRow("PIN" if pin else "Senha", self.senha)
+        self.senha.setPlaceholderText("PIN de 4 a 6 dígitos" if pin else "sua senha")
+        rotulo("PIN" if pin else "Senha")
+        linha_senha = QHBoxLayout()
+        linha_senha.addWidget(self.senha, 1)
+        self.btn_ver = QPushButton("Mostrar")
+        self.btn_ver.setCheckable(True)
+        self.btn_ver.setFocusPolicy(Qt.NoFocus)
+        self.btn_ver.toggled.connect(self._mostrar_senha)
+        linha_senha.addWidget(self.btn_ver)
+        v.addLayout(linha_senha)
+
+        self.servidor = QLineEdit(ctx.cfg.api_url)
+        self.servidor.setPlaceholderText("https://apfood.axionwebdigital.com.br")
+        self.box_servidor = QWidget()
+        bs = QVBoxLayout(self.box_servidor)
+        bs.setContentsMargins(0, 0, 0, 0)
+        bs.setSpacing(4)
+        r = QLabel("Servidor")
+        r.setProperty("papel", "rotulo")
+        bs.addWidget(r)
+        bs.addWidget(self.servidor)
+        v.addWidget(self.box_servidor)
+        self.box_servidor.setVisible(False)
+
         self.msg = QLabel()
-        self.msg.setStyleSheet("color:#C62828")
-        f.addRow(self.msg)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.button(QDialogButtonBox.Ok).setText("Entrar")
-        bb.accepted.connect(self.entrar)
-        bb.rejected.connect(self.reject)
-        f.addRow(bb)
-        self.usuario.setFocus()
+        self.msg.setProperty("papel", "erro")
+        self.msg.setWordWrap(True)
+        self.msg.setVisible(False)
+        v.addSpacing(8)
+        v.addWidget(self.msg)
+
+        self.btn_entrar = QPushButton("Entrar")
+        self.btn_entrar.setProperty("papel", "primario")
+        self.btn_entrar.setMinimumHeight(46)
+        self.btn_entrar.setDefault(True)
+        self.btn_entrar.clicked.connect(self.entrar)
+        v.addSpacing(6)
+        v.addWidget(self.btn_entrar)
+        externo.addWidget(cartao)
+
+        rodape = QHBoxLayout()
+        if not pin:
+            self.lbl_servidor = QLabel()
+            self.lbl_servidor.setProperty("papel", "sutil")
+            rodape.addWidget(self.lbl_servidor, 1)
+            alterar = QPushButton("alterar")
+            alterar.setProperty("papel", "link")
+            alterar.setCursor(Qt.PointingHandCursor)
+            alterar.clicked.connect(self._editar_servidor)
+            rodape.addWidget(alterar)
+            esqueci = QPushButton("Esqueci a senha")
+            esqueci.setProperty("papel", "link")
+            esqueci.setCursor(Qt.PointingHandCursor)
+            esqueci.clicked.connect(self._esqueci)
+            rodape.addWidget(esqueci)
+            self._atualizar_lbl_servidor()
+        else:
+            rodape.addStretch(1)
+        cancelar = QPushButton("Sair" if not pin else "Cancelar")
+        cancelar.clicked.connect(self.reject)
+        rodape.addWidget(cancelar)
+        externo.addLayout(rodape)
+        versao = QLabel(f"versão {__version__}")
+        versao.setProperty("papel", "sutil")
+        versao.setAlignment(Qt.AlignRight)
+        externo.addWidget(versao)
+
+        (self.senha if self.usuario.text() else self.usuario).setFocus()
+
+    def _mostrar_senha(self, ver: bool):
+        self.senha.setEchoMode(QLineEdit.Normal if ver else QLineEdit.Password)
+        self.btn_ver.setText("Ocultar" if ver else "Mostrar")
+
+    def _atualizar_lbl_servidor(self):
+        url = normalizar_servidor(self.servidor.text()) or SERVIDOR_PADRAO
+        self.lbl_servidor.setText("Servidor: " + url.split("://", 1)[-1])
+
+    def _editar_servidor(self):
+        self.box_servidor.setVisible(not self.box_servidor.isVisible())
+        if self.box_servidor.isVisible():
+            self.servidor.setFocus()
+            self.servidor.selectAll()
+        self.adjustSize()
+
+    def _esqueci(self):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        url = normalizar_servidor(self.servidor.text()) or SERVIDOR_PADRAO
+        QDesktopServices.openUrl(QUrl(url + "/painel/senha/esqueci/"))
+
+    def _erro(self, texto: str):
+        self.msg.setText(texto)
+        self.msg.setVisible(True)
 
     def entrar(self):
+        usuario = self.usuario.text().strip()
+        if not usuario or not self.senha.text():
+            self._erro("Informe usuário e " + ("PIN." if self.pin else "senha."))
+            return
+        self.btn_entrar.setEnabled(False)
+        self.btn_entrar.setText("Entrando…")
+        QApplication.processEvents()
         try:
             if self.pin:
-                u = self.ctx.api.trocar_operador(self.usuario.text().strip(), self.senha.text())
+                u = self.ctx.api.trocar_operador(usuario, self.senha.text())
             else:
-                url = normalizar_servidor(self.servidor.text())
+                url = normalizar_servidor(self.servidor.text()) or SERVIDOR_PADRAO
                 if url != self.ctx.cfg.api_url:
                     self.ctx.cfg.api_url = self.ctx.api.base_url = url
                     self.ctx.cfg.salvar()
-                u = self.ctx.api.login(self.usuario.text().strip(), self.senha.text())
+                    self._atualizar_lbl_servidor()
+                u = self.ctx.api.login(usuario, self.senha.text())
         except SemConexao:
-            self.msg.setText("Servidor fora do ar ou endereço errado.")
+            self._erro("Não foi possível falar com o servidor. Confira a internet ou clique em \"alterar\".")
             return
         except ErroApi as e:
-            self.msg.setText("Usuário ou senha inválidos." if e.status in (400, 401) else e.mensagem)
+            self._erro("Usuário ou senha incorretos." if e.status in (400, 401) else e.mensagem)
             return
+        finally:
+            self.btn_entrar.setEnabled(True)
+            self.btn_entrar.setText("Entrar")
+        if not self.pin and usuario != self.ctx.cfg.ultimo_usuario:
+            self.ctx.cfg.ultimo_usuario = usuario
+            self.ctx.cfg.salvar()
         self.ctx.definir_usuario(u)
         if not self.ctx.escolher_loja(self):
             return

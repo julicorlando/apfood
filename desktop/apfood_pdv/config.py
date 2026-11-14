@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
+SERVIDOR_PADRAO = "https://apfood.axionwebdigital.com.br"
+
+
 def recurso(nome: str) -> Path:
     """Arquivos que vão junto com o app (logo, ícone). Funciona no .exe do PyInstaller."""
     return Path(__file__).resolve().parent / "recursos" / nome
@@ -23,7 +26,8 @@ def pasta_dados() -> Path:
 
 @dataclass
 class Config:
-    api_url: str = os.environ.get("APFOOD_API_URL", "https://apfood.axionwebdigital.com.br")
+    api_url: str = os.environ.get("APFOOD_API_URL", SERVIDOR_PADRAO)
+    ultimo_usuario: str = ""
     loja_id: str = ""
     intervalo_sync_s: int = 5
     impressora_caixa: str = ""  # "192.168.0.50:9100" | nome da impressora no Windows | "arquivo:C:/cupons"
@@ -48,7 +52,11 @@ class Config:
         if caminho.exists():
             dados = json.loads(caminho.read_text(encoding="utf-8"))
             campos = {k: v for k, v in dados.items() if k in cls.__dataclass_fields__}
-            return cls(**campos)
+            cfg = cls(**campos)
+            # versões antigas salvavam vazio ou localhost: volta para o servidor de produção
+            if not (cfg.api_url or "").strip() or cfg.api_url.rstrip("/") == "http://localhost:8000":
+                cfg.api_url = os.environ.get("APFOOD_API_URL", SERVIDOR_PADRAO)
+            return cfg
         return cls()
 
     def salvar(self, caminho: Path | None = None) -> None:

@@ -3,7 +3,7 @@
 import logging
 import sys
 
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from .api import ApiClient, SemConexao
@@ -13,12 +13,29 @@ from .ui.contexto import Contexto
 from .ui.estilo import QSS
 
 
+def tema_claro(app: QApplication) -> None:
+    """Fixa o tema claro: no Windows em modo escuro, o Qt herdava texto branco
+    sobre o fundo claro do app e os rótulos/botões ficavam invisíveis."""
+    app.setStyle("Fusion")
+    p = QPalette()
+    for papel, cor in [
+        (QPalette.Window, "#F6F6F4"), (QPalette.WindowText, "#1D1D1F"), (QPalette.Base, "#FFFFFF"),
+        (QPalette.AlternateBase, "#F6F6F4"), (QPalette.Text, "#1D1D1F"), (QPalette.Button, "#FFFFFF"),
+        (QPalette.ButtonText, "#1D1D1F"), (QPalette.ToolTipBase, "#FFFFFF"), (QPalette.ToolTipText, "#1D1D1F"),
+        (QPalette.PlaceholderText, "#8A8A90"), (QPalette.Highlight, "#F26A0F"), (QPalette.HighlightedText, "#FFFFFF"),
+        (QPalette.Link, "#C9520A"),
+    ]:
+        p.setColor(papel, QColor(cor))
+    app.setPalette(p)
+
+
 def main():
     logging.basicConfig(filename=str(pasta_dados() / "pdv.log"), level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = QApplication(sys.argv)
     app.setApplicationName("ApFood PDV")
     app.setWindowIcon(QIcon(str(recurso("icone.png"))))
+    tema_claro(app)
     app.setStyleSheet(QSS)
     from .ui.janela import DialogoLogin, JanelaPrincipal
 
