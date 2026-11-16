@@ -1,3 +1,4 @@
 -r base.txt
 uvicorn[standard]>=0.30
 gunicorn>=22.0
+sentry-sdk[django]>=2.18  # opcional: só liga com SENTRY_DSN

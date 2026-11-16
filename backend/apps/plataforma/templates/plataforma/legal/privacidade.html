@@ -1,0 +1,49 @@
+{% extends "plataforma/legal/_base.html" %}
+{% block titulo %}Política de privacidade{% endblock %}
+{% block conteudo %}
+<h1>Política de privacidade</h1>
+<p>Esta política explica como o ApFood, oferecido por <strong>{{ razao_social }}</strong> (CNPJ <strong>{{ cnpj }}</strong>), trata dados pessoais, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018 — LGPD).</p>
+
+<h2>1. Papéis de cada um</h2>
+<ul>
+  <li><strong>Dados dos usuários dos restaurantes</strong> (donos, gerentes, operadores): o ApFood é o <em>controlador</em>.</li>
+  <li><strong>Dados dos consumidores dos restaurantes</strong> (quem pede pelo cardápio, delivery ou balcão): o restaurante é o <em>controlador</em> e o ApFood é o <em>operador</em>, tratando esses dados apenas para prestar o serviço ao restaurante.</li>
+</ul>
+
+<h2>2. Quais dados</h2>
+<ul>
+  <li><strong>Cadastro da empresa e usuários:</strong> nome, e-mail, telefone, CNPJ/CPF, login e registro de acessos.</li>
+  <li><strong>Consumidores:</strong> nome, telefone, endereço de entrega, CPF (quando pedido na nota), histórico de pedidos, saldo de cashback e preferência de receber promoções.</li>
+  <li><strong>Operação:</strong> pedidos, pagamentos (sem guardar números de cartão), caixa, estoque e notas fiscais.</li>
+  <li><strong>Técnicos:</strong> endereço IP e dados de navegação necessários à segurança.</li>
+</ul>
+
+<h2>3. Para que usamos</h2>
+<ul>
+  <li>Prestar o serviço contratado: registrar vendas, entregar pedidos, emitir documentos fiscais e gerar relatórios.</li>
+  <li>Cobrar a assinatura e enviar avisos sobre a conta (faturas, vencimentos, segurança).</li>
+  <li>Enviar promoções do restaurante por WhatsApp, apenas a consumidores que consentiram.</li>
+  <li>Garantir a segurança, prevenir fraudes e cumprir obrigações legais e fiscais.</li>
+</ul>
+<p>Bases legais: execução de contrato, cumprimento de obrigação legal, legítimo interesse (segurança) e consentimento (marketing).</p>
+
+<h2>4. Com quem compartilhamos</h2>
+<p>Somente com fornecedores necessários ao serviço, e só quando o restaurante ativa a integração correspondente: hospedagem e rede (servidor e Cloudflare), emissor fiscal (Focus NFe) e SEFAZ, pagamentos (Mercado Pago), WhatsApp (Z-API), marketplaces (iFood) e mapas (Google Maps ou OpenStreetMap). Não vendemos dados pessoais.</p>
+
+<h2>5. Cookies</h2>
+<p>Usamos apenas cookies essenciais: sessão de login e proteção contra falsificação de requisições (CSRF). Não usamos cookies de publicidade.</p>
+
+<h2>6. Guarda e segurança</h2>
+<ul>
+  <li>Senhas são guardadas de forma irreversível (hash); credenciais de integrações ficam cifradas.</li>
+  <li>Acesso por perfil, com cada empresa vendo apenas os próprios dados; conexão sempre criptografada (HTTPS).</li>
+  <li>Cópias de segurança diárias, mantidas por 14 dias.</li>
+  <li>Os dados são mantidos enquanto a conta estiver ativa e, depois, pelo prazo exigido pela legislação fiscal (em geral, 5 anos para documentos fiscais).</li>
+</ul>
+
+<h2>7. Seus direitos</h2>
+<p>O titular pode pedir confirmação, acesso, correção, anonimização, portabilidade ou eliminação dos seus dados e revogar o consentimento de marketing. Consumidores devem falar primeiro com o restaurante onde compraram; o restaurante consegue anonimizar o cadastro do cliente pelo painel. Para dados de usuários da plataforma, escreva para o encarregado: <strong>{{ email }}</strong>.</p>
+
+<h2>8. Alterações</h2>
+<p>Esta política pode ser atualizada; mudanças relevantes serão avisadas no painel ou por e-mail.</p>
+{% endblock %}

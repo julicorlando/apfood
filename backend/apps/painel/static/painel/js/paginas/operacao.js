@@ -4,7 +4,7 @@ import { aoMudarConexao, ouvir } from "../realtime.js";
 import {
   aviso, barras, botaoAcao, centavos, confirmar, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, hora, kpi, limpar, minutosDesde, modal, pedirTexto, reais, rotulo, tabela, trocar, uuid,
 } from "../ui.js";
-import { abrirPedido, imprimirLinhas, itensTexto, mostrarCupom, pago, receber } from "./comum.js";
+import { abrirPedido, imprimirLinhas, imprimirPedido, itensTexto, mostrarCupom, pago, receber } from "./comum.js";
 import { carregarCardapio, montarItem } from "./pdv.js";
 
 function atualizarAoVivo(fn, ms = 20000) {
@@ -350,9 +350,7 @@ async function abrirComanda(id, aoMudar) {
             sabores: i.sabores || [], adicionais: i.adicionais || [], observacao: i.observacao || "" })),
         });
         if (cozinha.checked) {
-          const r = await get(`/api/pedidos/${p.id}/cupom/?tipo=cozinha`);
-          const linhas = (r.vias || []).flatMap((v) => v.linhas || []);
-          if (linhas.length) imprimirLinhas(linhas);
+          await imprimirPedido(p.id, "cozinha").catch(erro);
         }
         aviso(`Pedido #${p.numero} enviado.`, "ok");
         mm.fechar();

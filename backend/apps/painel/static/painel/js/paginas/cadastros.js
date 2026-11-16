@@ -3,7 +3,7 @@ import { del, ehGerente, get, lista, patch, post, put } from "../api.js";
 import { paginaCadastro } from "../crud.js";
 import { formulario } from "../form.js";
 import {
-  aviso, botaoAcao, centavos, data, dinheiro, erro, etiqueta, h, modal, rotulo, simNao, tabela, trocar,
+  aviso, botaoAcao, centavos, confirmar, data, dinheiro, erro, etiqueta, h, modal, rotulo, simNao, tabela, trocar,
 } from "../ui.js";
 
 const ativoCol = (campo = "ativo") => ({ rotulo: "Ativo", valor: (l) => simNao(l[campo]) });
@@ -322,7 +322,25 @@ export function clientes() {
     antesDeSalvar: (d) => ({ ...d, telefone: String(d.telefone || "").replace(/\D/g, ""), cpf: String(d.cpf || "").replace(/\D/g, "") }),
     podeExcluir: excluirGerente,
     extras: (c) => secaoEnderecos(c),
+    acoes: (c, recarregar) => (ehGerente() && !c.anonimizado_em
+      ? botaoAcao("Anonimizar", () => anonimizarCliente(c, recarregar), "botao botao-pequeno")
+      : null),
   });
+}
+
+// LGPD: o cliente pediu para apagar os dados. Pedidos e notas continuam (valores), sem nome/contato.
+async function anonimizarCliente(c, recarregar) {
+  const ok = await confirmar(
+    `Apagar nome, telefone, e-mail, CPF e endereços de "${c.nome}"? Os pedidos continuam nos relatórios, `
+    + "sem os dados pessoais. Notas fiscais já emitidas são mantidas por obrigação legal. Não tem como desfazer.",
+    { titulo: "Anonimizar cliente (LGPD)", ok: "Anonimizar", perigo: true },
+  );
+  if (!ok) return;
+  try {
+    await post(`/api/clientes/${c.id}/anonimizar/`, {});
+    aviso("Dados do cliente apagados.", "ok");
+    recarregar();
+  } catch (e) { erro(e); }
 }
 
 export function entregadores() {

@@ -8,6 +8,7 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.painel import entrega
+from apps.plataforma import legal
 
 
 admin.site.site_header = "ApFood — Painel"
@@ -30,6 +31,8 @@ urlpatterns = [
     # Painel web (gestão + operação pelo navegador)
     path("painel/", include("apps.painel.urls")),
     path("planos/", include("apps.plataforma.urls")),
+    path("termos/", legal.termos, name="termos"),
+    path("privacidade/", legal.privacidade, name="privacidade"),
     path("entrega/<str:token>/", entrega.painel_entregador, name="entregador"),
     path("entrega/<str:token>/<uuid:pedido>/entregue/", entrega.marcar_entregue, name="entregue"),
     # Cardápio digital público (Passo 4): /<slug-da-loja>/

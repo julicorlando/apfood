@@ -1,7 +1,7 @@
 // Painel ApFood: roteamento por hash, menu por perfil e seletor de loja.
 import { definirLoja, ehAdmin, ehGerente, ehMaster, get, lojaSalva, sessao } from "./api.js";
 import { bipe, conectar, ouvir } from "./realtime.js";
-import { aviso, definirRotulos, erro, h, limpar, trocar } from "./ui.js";
+import { aviso, data, definirRotulos, dinheiro, erro, h, limpar, trocar } from "./ui.js";
 
 const sempre = () => true;
 const temLoja = () => !!sessao.loja;
@@ -45,6 +45,7 @@ const ROTAS = [
   ["/loja", "Dados da loja", "🏪", "Configurações", () => temLoja() && ehAdmin(), "config", "loja"],
   ["/fiscal", "Fiscal", "🏛️", "Configurações", () => temLoja() && ehAdmin(), "config", "fiscal"],
   ["/integracoes", "Integrações", "🔌", "Configurações", () => temLoja() && ehAdmin(), "config", "integracoes"],
+  ["/impressao", "Impressão", "🖨️", "Configurações", sempre, "config", "impressao"],
   ["/usuarios", "Usuários", "🔑", "Configurações", ehGerente, "config", "usuarios"],
   ["/lojas", "Lojas", "🏬", "Configurações", ehAdmin, "config", "lojas"],
   ["/empresa", "Minha empresa", "🏢", "Configurações", () => ehAdmin() && !ehMaster(), "config", "minhaEmpresa"],
@@ -137,6 +138,31 @@ export async function recarregarSessao() {
   return eu;
 }
 
+// Faixa no topo: fim do teste grátis ou fatura em aberto (só ADMIN da empresa).
+export async function mostrarAssinatura() {
+  document.getElementById("faixa-assinatura")?.remove();
+  const a = await get("/api/assinatura/", { semLoja: true });
+  const f = a.fatura_aberta;
+  let texto = null;
+  let classe = "faixa";
+  if (f && f.vencida) {
+    classe += " faixa-perigo";
+    texto = `Fatura ${f.competencia.slice(5, 7)}/${f.competencia.slice(0, 4)} (${dinheiro(f.valor_centavos)}) venceu em ${data(f.vencimento)}. `
+      + `O acesso é suspenso ${a.tolerancia_dias} dias após o vencimento.`;
+  } else if (f) {
+    texto = `Fatura ${f.competencia.slice(5, 7)}/${f.competencia.slice(0, 4)} de ${dinheiro(f.valor_centavos)} vence em ${data(f.vencimento)}.`;
+  } else if (a.dias_de_teste !== null && a.dias_de_teste <= 7) {
+    texto = a.dias_de_teste > 0
+      ? `Seu teste grátis termina em ${a.dias_de_teste} dia${a.dias_de_teste === 1 ? "" : "s"} (${data(a.trial_ate)}).`
+      : "Seu teste grátis termina hoje.";
+  }
+  if (!texto) return;
+  const faixa = h("div", { class: classe, id: "faixa-assinatura", role: "status" }, h("span", null, texto),
+    f?.link_pagamento ? h("a", { class: "botao botao-pequeno botao-primario", href: f.link_pagamento, target: "_blank", rel: "noopener" }, "Pagar com Pix") : null,
+    h("a", { class: "botao botao-pequeno", href: "#/empresa" }, f ? "Ver faturas" : "Ver planos"));
+  $("conteudo").before(faixa);
+}
+
 async function iniciar() {
   $("abrir-menu").addEventListener("click", () => $("app").classList.add("menu-aberto"));
   $("fechar-menu").addEventListener("click", () => $("app").classList.remove("menu-aberto"));
@@ -150,6 +176,7 @@ async function iniciar() {
   }
   const u = sessao.usuario;
   $("usuario").textContent = `${u.nome} · ${u.empresa?.nome || "Plataforma"}`;
+  if (ehAdmin() && !ehMaster()) mostrarAssinatura().catch(() => {});
   conectar();
   ouvir((ev) => {
     if (ev.tipo === "pedido.novo") {

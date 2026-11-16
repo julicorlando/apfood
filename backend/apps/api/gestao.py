@@ -9,6 +9,7 @@ Mesmas regras do admin do Django (apfood_core.permissoes):
 
 from apfood_core import permissoes
 from apfood_core.enums import PapelUsuario
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import mixins, serializers, status, viewsets
@@ -429,6 +430,53 @@ class FaturaViewSet(viewsets.ModelViewSet):
         u = self.request.user
         qs = Fatura.objects.select_related("empresa")
         return qs if u.eh_master else qs.filter(empresa_id=u.empresa_id)
+
+
+class AssinaturaView(APIView):
+    """ADMIN: situação da assinatura da própria empresa (banner do painel).
+    POST {"plano": <id>} troca o plano a partir da próxima fatura."""
+
+    permission_classes = [EhAdmin]
+
+    def _empresa(self, request):
+        if not request.user.empresa_id:
+            raise ValidationError({"detail": "usuário sem empresa"})
+        return Empresa.objects.select_related("plano").get(pk=request.user.empresa_id)
+
+    def _dados(self, e):
+        from django.utils import timezone
+
+        from apps.plataforma import cobranca
+
+        hoje = timezone.localdate()
+        f = cobranca.fatura_em_aberto(e)
+        planos = Plano.objects.filter(ativo=True, publico=True).order_by("ordem", "preco_mensal_centavos")
+        return {
+            "status": e.status_assinatura,
+            "plano": str(e.plano_id) if e.plano_id else None,
+            "plano_nome": e.plano.nome if e.plano_id else "",
+            "trial_ate": e.trial_ate,
+            "dias_de_teste": (e.trial_ate - hoje).days if e.trial_ate and e.status_assinatura == "TRIAL" else None,
+            "tolerancia_dias": int(getattr(settings, "APFOOD_DIAS_TOLERANCIA", 10)),
+            "fatura_aberta": FaturaSerializer(f).data | {"vencida": f.vencimento < hoje} if f else None,
+            "planos": PlanoSerializer(planos, many=True).data,
+        }
+
+    def get(self, request):
+        return Response(self._dados(self._empresa(request)))
+
+    def post(self, request):
+        from apps.plataforma import cobranca
+
+        e = self._empresa(request)
+        plano = Plano.objects.filter(pk=request.data.get("plano")).first() if request.data.get("plano") else None
+        if plano is None:
+            raise ValidationError({"plano": ["escolha um plano"]})
+        try:
+            cobranca.trocar_plano(e, plano)
+        except DjangoValidationError as exc:
+            raise _erros_django(exc) from exc
+        return Response(self._dados(e))
 
 
 # =============================================================================

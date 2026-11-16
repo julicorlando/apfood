@@ -49,5 +49,11 @@ class Fatura(ModeloBase):
             models.UniqueConstraint(fields=["empresa", "competencia"], name="fatura_unica_por_mes")
         ]
 
+    @property
+    def valor_formatado(self) -> str:
+        from apfood_core.dinheiro import formatar
+
+        return formatar(self.valor_centavos)
+
     def __str__(self):
         return f"{self.empresa} {self.competencia:%m/%Y}"

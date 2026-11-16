@@ -71,3 +71,47 @@ def salvar_cliente_do_pedido(loja, *, nome: str, telefone: str, endereco: dict |
                 latitude=endereco.get("latitude"), longitude=endereco.get("longitude"),
             )
     return cliente
+
+
+@transaction.atomic
+def anonimizar(cliente: Cliente) -> Cliente:
+    """LGPD: apaga os dados pessoais do cliente e dos pedidos dele.
+
+    Mantém os pedidos (números, valores) para relatórios e os documentos
+    fiscais, que a lei obriga a guardar. Não tem volta.
+    """
+    import uuid
+
+    from django.utils import timezone
+
+    from apps.pedidos.models import Pedido
+
+    if cliente.anonimizado_em:
+        return cliente
+    agora = timezone.now()
+    cliente.nome = "Cliente anonimizado"
+    # telefone é único por loja: usa um número impossível (começa com 00)
+    cliente.telefone = "00" + str(uuid.uuid4().int)[:11]
+    cliente.email = ""
+    cliente.cpf = ""
+    cliente.data_nascimento = None
+    cliente.observacoes = ""
+    cliente.aceita_marketing = False
+    cliente.consentimento_em = None
+    cliente.saldo_cashback_centavos = 0
+    cliente.anonimizado_em = agora
+    cliente.save()
+    for e in cliente.enderecos.all():
+        e.logradouro = e.numero = e.bairro = e.cidade = "-"
+        e.apelido = e.complemento = e.uf = e.cep = e.referencia = ""
+        e.latitude = e.longitude = None
+        e.principal = False
+        e.excluido_em = agora
+        e.save()
+    Pedido.objects.filter(cliente=cliente).update(
+        nome_cliente="", telefone_cliente="",
+        entrega_logradouro="-", entrega_numero="", entrega_complemento="", entrega_bairro="",
+        entrega_cep="", entrega_referencia="", entrega_latitude=None, entrega_longitude=None,
+        atualizado_em=agora,
+    )
+    return cliente

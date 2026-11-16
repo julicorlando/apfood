@@ -44,5 +44,24 @@ O serviço **backup** do compose faz uma cópia do banco (`pg_dump`) e das fotos
 - **Fotos:** `tar -xzf /backups/media-AAAAMMDD-HHMM.tar.gz -C /media` (no mesmo terminal).
 - O volume `backups` fica no mesmo servidor. Para ter uma cópia fora dele, ative também os **Backups S3** do Coolify ou copie `/backups` para outro lugar.
 
-## 5. E-mail (Esqueci minha senha)
+## 5. E-mail (senha, cobrança e alertas)
 Defina `EMAIL_URL` no Coolify, por exemplo `smtp+tls://usuario:senha@smtp.gmail.com:587` (no Gmail, use uma *senha de app*), e `DEFAULT_FROM_EMAIL` (ex.: `ApFood <nao-responda@seudominio.com.br>`). Sem `EMAIL_URL`, os e-mails só aparecem no log do container e o administrador redefine a senha pelo painel (Configurações → Usuários).
+
+O mesmo e-mail é usado nos avisos de cobrança da assinatura e nos alertas de erro.
+
+## 6. Monitoramento de erros
+- **Por e-mail:** `DJANGO_ADMINS="Seu Nome <voce@exemplo.com>, outro@exemplo.com"`. Cada erro 500 chega por e-mail com o detalhe (precisa do `EMAIL_URL`).
+- **Sentry (recomendado):** crie um projeto Django em sentry.io (o plano gratuito atende) e defina `SENTRY_DSN`. Os erros chegam agrupados, com o contexto, e sem dados de clientes (`send_default_pii=False`). Opcional: `SENTRY_AMBIENTE` (padrão `producao`) e `SENTRY_TRACES` (ex.: `0.1` para medir desempenho).
+- Os logs continuam no Coolify (aba Logs de cada serviço).
+
+## 7. Termos de uso e privacidade
+Defina no Coolify:
+
+| Variável | Exemplo |
+|---|---|
+| `APFOOD_LEGAL_RAZAO_SOCIAL` | `Axion Web Digital LTDA` |
+| `APFOOD_LEGAL_CNPJ` | `00.000.000/0001-00` |
+| `APFOOD_LEGAL_EMAIL` | `privacidade@seudominio.com.br` (encarregado/LGPD) |
+| `APFOOD_LEGAL_CIDADE_FORO` | `Recife/PE` |
+
+Enquanto faltar alguma, `/termos/` e `/privacidade/` mostram o aviso "Rascunho". O texto é um modelo: **revise com um advogado** antes de vender.

@@ -21,9 +21,19 @@ from django.views.decorators.cache import never_cache
 class FormEntrar(AuthenticationForm):
     """Recusa quem está bloqueado (empresa inativa) já na tela de login."""
 
+    fatura_aberta = None  # bloqueio por falta de pagamento: o template mostra o link
+
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
         if user.acesso().bloqueado:
+            from apps.plataforma.cobranca import MOTIVO_INADIMPLENCIA, fatura_em_aberto
+
+            e = user.empresa
+            if e is not None and user.is_active and e.motivo_bloqueio == MOTIVO_INADIMPLENCIA:
+                self.fatura_aberta = fatura_em_aberto(e)
+                raise ValidationError(
+                    "Acesso bloqueado por falta de pagamento. Assim que o pagamento for confirmado, "
+                    "o acesso volta sozinho.", code="bloqueado")
             raise ValidationError("Acesso bloqueado. Fale com o administrador da plataforma.", code="bloqueado")
 
 

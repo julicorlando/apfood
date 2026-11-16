@@ -89,7 +89,7 @@
           {% endif %}{% endfor %}
           <label class="escondido" aria-hidden="true">Não preencha <input type="text" name="site" tabindex="-1" autocomplete="off"></label>
           <div class="campo largo">
-            <label class="check"><input type="checkbox" name="aceite" {% if form.aceite.value %}checked{% endif %}> <span>Li e aceito os termos de uso e a política de privacidade</span></label>
+            <label class="check"><input type="checkbox" name="aceite" {% if form.aceite.value %}checked{% endif %}> <span>Li e aceito os <a href="{% url 'termos' %}" target="_blank" rel="noopener">termos de uso</a> e a <a href="{% url 'privacidade' %}" target="_blank" rel="noopener">política de privacidade</a></span></label>
             {% for e in form.aceite.errors %}<span class="erro">Marque para continuar.</span>{% endfor %}
           </div>
         </div>

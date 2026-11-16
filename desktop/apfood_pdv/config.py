@@ -36,6 +36,7 @@ class Config:
     imprimir_cozinha_automatico: bool = True
     som_novo_pedido: bool = True
     nome_terminal: str = "Caixa 1"
+    porta_ponte: int = 17777  # ponte de impressão do painel web (0 = desligada)
     extras: dict = field(default_factory=dict)
 
     @property
