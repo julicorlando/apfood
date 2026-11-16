@@ -220,6 +220,12 @@ class ClienteViewSet(CadastroViewSet):
         achados = clientes_srv.buscar_por_telefone(self.get_loja(), request.query_params.get("telefone", ""))
         return Response(s.ClienteSerializer(achados, many=True).data)
 
+    @action(detail=True, methods=["post"])  # POST: só gerente+ (LeituraOuGerente)
+    def anonimizar(self, request, pk=None):
+        """LGPD: apaga nome, contatos e endereços. Irreversível."""
+        cliente = clientes_srv.anonimizar(self.get_object())
+        return Response(s.ClienteSerializer(cliente).data)
+
     def perform_create(self, serializer):
         serializer.save(loja=self.get_loja())
 

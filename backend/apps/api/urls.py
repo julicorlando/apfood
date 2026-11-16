@@ -29,6 +29,7 @@ urlpatterns = [
     path("pdv/versao/", views.VersaoPdvView.as_view()),
     path("taxa-entrega/", views.TaxaEntregaView.as_view()),
     path("enums/", gestao.EnumsView.as_view()),
+    path("assinatura/", gestao.AssinaturaView.as_view()),
     path("fiscal/configuracao/", gestao.ConfiguracaoFiscalView.as_view()),
     path("sync/pull/", sync.PullView.as_view()),
     path("sync/push/", sync.PushView.as_view()),

@@ -166,6 +166,14 @@ APFOOD = {
     "PDV_SHA256": env("APFOOD_PDV_SHA256", default=""),
     "PDV_OBRIGATORIA_ATE": env("APFOOD_PDV_OBRIGATORIA_ATE", default=""),  # versões abaixo desta: atualizar já
 }
+# Dados de quem presta o serviço (aparecem nos Termos de uso e na Política de privacidade)
+APFOOD_LEGAL = {
+    "RAZAO_SOCIAL": env("APFOOD_LEGAL_RAZAO_SOCIAL", default=""),
+    "CNPJ": env("APFOOD_LEGAL_CNPJ", default=""),
+    "EMAIL": env("APFOOD_LEGAL_EMAIL", default=""),  # contato e encarregado de dados (LGPD)
+    "CIDADE_FORO": env("APFOOD_LEGAL_CIDADE_FORO", default=""),  # ex.: "Recife/PE"
+    "ATUALIZADO_EM": env("APFOOD_LEGAL_ATUALIZADO_EM", default="16/11/2026"),
+}
 APFOOD_CHAVE_CRIPTO = env("APFOOD_CHAVE_CRIPTO", default="")  # manage.py gerar_chave_cripto
 APFOOD_IFOOD_CLIENT_ID = env("APFOOD_IFOOD_CLIENT_ID", default="")
 APFOOD_IFOOD_CLIENT_SECRET = env("APFOOD_IFOOD_CLIENT_SECRET", default="")

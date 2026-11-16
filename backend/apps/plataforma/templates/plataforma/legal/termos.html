@@ -1,0 +1,52 @@
+{% extends "plataforma/legal/_base.html" %}
+{% block titulo %}Termos de uso{% endblock %}
+{% block conteudo %}
+<h1>Termos de uso do ApFood</h1>
+<p>Estes termos regem o uso do ApFood, plataforma de gestão, ponto de venda (PDV) e cardápio digital para restaurantes, disponibilizada em <strong>{{ site }}</strong> e no aplicativo ApFood PDV para Windows, oferecida por <strong>{{ razao_social }}</strong>, CNPJ <strong>{{ cnpj }}</strong> ("ApFood"). Ao criar uma conta ou usar a plataforma, o estabelecimento ("Cliente") e seus usuários concordam com estes termos.</p>
+
+<h2>1. O serviço</h2>
+<p>O ApFood oferece, conforme o plano contratado: PDV no navegador e no aplicativo para Windows, pedidos online por cardápio digital, controle de mesas, cozinha, caixa, estoque, compras, financeiro, relatórios e integrações com serviços de terceiros (emissão fiscal, pagamentos, WhatsApp, marketplaces e mapas).</p>
+
+<h2>2. Conta e acesso</h2>
+<ul>
+  <li>O Cliente informa dados verdadeiros no cadastro e mantém e-mail e telefone atualizados.</li>
+  <li>Cada usuário tem login próprio e é responsável por manter sua senha em sigilo. O administrador do Cliente define quem acessa e com qual perfil.</li>
+  <li>O Cliente é responsável por todas as operações realizadas com os acessos que cadastrou.</li>
+</ul>
+
+<h2>3. Teste grátis, planos e pagamento</h2>
+<ul>
+  <li>Novas contas podem ter um período de teste grátis. Ao fim do teste, a cobrança do plano escolhido começa no mês seguinte.</li>
+  <li>A mensalidade é cobrada por fatura mensal, com pagamento por Pix ou outro meio indicado na fatura.</li>
+  <li>Com fatura vencida, a conta fica com status de inadimplente. Após o prazo de tolerância informado na fatura, o acesso pode ser suspenso até a quitação, preservando os dados do Cliente.</li>
+  <li>O Cliente pode trocar de plano pelo painel; a mudança vale a partir da próxima fatura.</li>
+  <li>Os preços podem ser reajustados mediante aviso prévio de 30 dias.</li>
+</ul>
+
+<h2>4. Obrigações do Cliente</h2>
+<ul>
+  <li>Usar a plataforma de acordo com a lei, inclusive as obrigações fiscais, sanitárias e de defesa do consumidor do seu negócio.</li>
+  <li>Configurar corretamente os dados fiscais (regime tributário, NCM, CFOP, certificado digital e CSC) e conferir os documentos emitidos. A responsabilidade tributária pelas vendas é do Cliente.</li>
+  <li>Enviar mensagens de marketing somente a consumidores que deram consentimento, conforme a Lei Geral de Proteção de Dados (LGPD).</li>
+  <li>Não tentar acessar dados de outros clientes, sobrecarregar, copiar ou fazer engenharia reversa da plataforma.</li>
+</ul>
+
+<h2>5. Serviços de terceiros</h2>
+<p>Integrações como emissão de NFC-e/NF-e, Pix, WhatsApp, iFood e mapas dependem de contas que o Cliente mantém diretamente com esses fornecedores, sujeitas aos termos e tarifas de cada um. O ApFood não responde por indisponibilidade ou cobranças desses serviços.</p>
+
+<h2>6. Disponibilidade e suporte</h2>
+<p>O ApFood se empenha para manter a plataforma disponível e faz cópias de segurança diárias dos dados. Podem ocorrer interrupções para manutenção ou por falhas de terceiros (internet, hospedagem, SEFAZ). O aplicativo PDV para Windows continua registrando vendas sem internet e as envia quando a conexão volta.</p>
+
+<h2>7. Dados</h2>
+<p>Os dados de vendas, produtos e clientes do estabelecimento pertencem ao Cliente. O tratamento de dados pessoais segue a <a href="{% url 'privacidade' %}">Política de privacidade</a>. Ao encerrar a conta, o Cliente pode solicitar a exportação dos seus dados em até 30 dias; depois disso, os dados podem ser excluídos, ressalvadas as obrigações legais de guarda.</p>
+
+<h2>8. Limitação de responsabilidade</h2>
+<p>Na máxima extensão permitida pela lei, a responsabilidade do ApFood por danos decorrentes do uso da plataforma fica limitada ao valor pago pelo Cliente nos 12 meses anteriores ao evento. O ApFood não responde por lucros cessantes nem por decisões tomadas com base em dados cadastrados incorretamente pelo Cliente.</p>
+
+<h2>9. Cancelamento</h2>
+<p>O Cliente pode cancelar a qualquer momento pelo e-mail {{ email }}; não há multa, e o acesso permanece até o fim do período já pago. O ApFood pode encerrar contas que violem estes termos.</p>
+
+<h2>10. Alterações e foro</h2>
+<p>Estes termos podem ser atualizados; mudanças relevantes serão avisadas por e-mail ou no painel. Fica eleito o foro da comarca de {{ cidade_foro }} para dirimir questões relacionadas a estes termos, ressalvados os direitos do consumidor.</p>
+<p>Contato: <strong>{{ email }}</strong>.</p>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f26a0f">
+  <title>{% block titulo %}{% endblock %} — ApFood</title>
+  {% include "marca/cabeca.html" %}
+  <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
+  <style>
+    .doc { max-width: 820px; margin: 0 auto; padding: 24px 18px 56px; line-height: 1.6; }
+    .doc header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .doc header img { height: 48px; }
+    .doc h1 { font-size: 28px; margin: 0 0 4px; }
+    .doc h2 { font-size: 19px; margin: 28px 0 8px; }
+    .doc p, .doc li { color: #2b2b30; }
+    .doc .cartao { padding: 28px; }
+    .doc nav a { margin-left: 14px; }
+  </style>
+</head>
+<body>
+  <div class="doc">
+    <header>
+      <a href="/"><img src="{% static 'marca/logo.png' %}" alt="ApFood"></a>
+      <nav><a href="{% url 'termos' %}">Termos de uso</a><a href="{% url 'privacidade' %}">Privacidade</a></nav>
+    </header>
+    {% if not completo %}
+    <div class="alerta alerta-aviso" style="margin-bottom:16px">Rascunho: os dados da empresa responsável ainda não foram configurados. Revise este texto com um advogado antes de usar comercialmente.</div>
+    {% endif %}
+    <article class="cartao">
+      {% block conteudo %}{% endblock %}
+      <p class="muted" style="margin-top:28px">Última atualização: {{ atualizado_em }}</p>
+    </article>
+  </div>
+</body>
+</html>

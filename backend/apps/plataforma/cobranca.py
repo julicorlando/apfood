@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from apps.integracoes.tarefas import executor
 
+from . import avisos
 from .models import Fatura
 
 log = logging.getLogger(__name__)
@@ -73,16 +74,22 @@ def atualizar_inadimplencia(hoje: date | None = None) -> dict:
     hoje = hoje or timezone.localdate()
     tolerancia = int(getattr(settings, "APFOOD_DIAS_TOLERANCIA", 10))
     inadimplentes, bloqueadas = 0, 0
-    vencidas = Fatura.objects.filter(status=StatusFatura.ABERTA, vencimento__lt=hoje).select_related("empresa")
+    vencidas = (Fatura.objects.filter(status=StatusFatura.ABERTA, vencimento__lt=hoje)
+                .select_related("empresa", "plano").order_by("vencimento"))
+    empresas = {}  # uma instância por empresa (várias faturas vencidas não duplicam avisos)
     for f in vencidas:
-        e = f.empresa
+        e = empresas.setdefault(f.empresa_id, f.empresa)
+        f.empresa = e
         if e.status_assinatura != StatusAssinatura.INADIMPLENTE:
             e.status_assinatura = StatusAssinatura.INADIMPLENTE
             inadimplentes += 1
+            e.save()
+            avisos.vencida(f, tolerancia)
         if (hoje - f.vencimento).days > tolerancia and e.ativa:
             e.ativa, e.motivo_bloqueio = False, MOTIVO_INADIMPLENCIA
             bloqueadas += 1
-        e.save()
+            e.save()
+            avisos.bloqueada(f)
     return {"inadimplentes": inadimplentes, "bloqueadas": bloqueadas}
 
 
@@ -99,17 +106,29 @@ def confirmar_fatura(fatura: Fatura, forma: str = "PIX") -> Fatura:
         if not e.ativa and e.motivo_bloqueio == MOTIVO_INADIMPLENCIA:
             e.ativa, e.motivo_bloqueio = True, ""
         e.save()
+    transaction.on_commit(lambda: avisos.pagamento_confirmado(f))
     return f
 
 
 def rotina_diaria(hoje: date | None = None) -> dict:
+    hoje = hoje or timezone.localdate()
     criadas = gerar_faturas(hoje)
     for f in Fatura.objects.filter(status=StatusFatura.ABERTA, link_pagamento=""):
         try:
             gerar_pix(f)
         except Exception:  # noqa: BLE001
             log.exception("falha ao gerar Pix da fatura %s", f.id)
-    return {"faturas_criadas": len(criadas), **atualizar_inadimplencia(hoje)}
+    for f in criadas:
+        f.refresh_from_db()  # pega o link do Pix
+        avisos.nova_fatura(f)
+    lembretes = lembrete_vencimento(DIAS_LEMBRETE, hoje)
+    for f in lembretes:
+        avisos.lembrete(f)
+    testes = fim_do_teste(DIAS_LEMBRETE, hoje)
+    for e in testes:
+        avisos.fim_do_teste(e, DIAS_LEMBRETE)
+    return {"faturas_criadas": len(criadas), "lembretes": len(lembretes), "fim_de_teste": len(testes),
+            **atualizar_inadimplencia(hoje)}
 
 
 @executor("plataforma.rotina_diaria")
@@ -117,7 +136,41 @@ def _tarefa_rotina():
     rotina_diaria()
 
 
-def lembrete_vencimento(dias: int = 3) -> list[Fatura]:
-    """Faturas que vencem em `dias` (para aviso por e-mail/WhatsApp)."""
-    alvo = timezone.localdate() + timedelta(days=dias)
-    return list(Fatura.objects.filter(status=StatusFatura.ABERTA, vencimento=alvo).select_related("empresa"))
+DIAS_LEMBRETE = 3
+
+
+def lembrete_vencimento(dias: int = DIAS_LEMBRETE, hoje: date | None = None) -> list[Fatura]:
+    """Faturas que vencem daqui a `dias` (a rotina roda 1x/dia: um aviso só)."""
+    alvo = (hoje or timezone.localdate()) + timedelta(days=dias)
+    return list(Fatura.objects.filter(status=StatusFatura.ABERTA, vencimento=alvo).select_related("empresa", "plano"))
+
+
+def fim_do_teste(dias: int = DIAS_LEMBRETE, hoje: date | None = None) -> list:
+    from apps.lojas.models import Empresa
+
+    alvo = (hoje or timezone.localdate()) + timedelta(days=dias)
+    return list(Empresa.objects.filter(status_assinatura=StatusAssinatura.TRIAL, trial_ate=alvo, ativa=True)
+                .select_related("plano"))
+
+
+def fatura_em_aberto(empresa) -> Fatura | None:
+    """A fatura mais antiga a pagar (a que libera o acesso)."""
+    return (Fatura.objects.filter(empresa=empresa, status=StatusFatura.ABERTA)
+            .select_related("plano").order_by("vencimento").first())
+
+
+def trocar_plano(empresa, plano) -> None:
+    """Troca feita pelo ADMIN. Vale a partir da próxima fatura (as já geradas
+    não mudam). Respeita os limites do plano novo."""
+    from django.core.exceptions import ValidationError
+
+    if not plano.ativo or not plano.publico:
+        raise ValidationError({"plano": ["plano indisponível"]})
+    lojas = empresa.lojas.count()
+    if plano.limite_lojas is not None and empresa.limite_lojas is None and lojas > plano.limite_lojas:
+        raise ValidationError({"plano": [f"este plano permite {plano.limite_lojas} loja(s); você tem {lojas}"]})
+    usuarios = empresa.usuarios.filter(is_active=True).count()
+    if plano.limite_usuarios is not None and empresa.limite_usuarios is None and usuarios > plano.limite_usuarios:
+        raise ValidationError({"plano": [f"este plano permite {plano.limite_usuarios} usuário(s); você tem {usuarios}"]})
+    empresa.plano = plano
+    empresa.save(update_fields=["plano", "atualizado_em"])

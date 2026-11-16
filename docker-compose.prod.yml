@@ -25,6 +25,18 @@ services:
       APFOOD_PDV_URL: ${APFOOD_PDV_URL:-}
       APFOOD_PDV_SHA256: ${APFOOD_PDV_SHA256:-}
       APFOOD_PDV_OBRIGATORIA_ATE: ${APFOOD_PDV_OBRIGATORIA_ATE:-}
+      # E-mail (senha, cobrança, alertas de erro). Ex.: smtp+tls://usuario:senha@smtp.gmail.com:587
+      EMAIL_URL: ${EMAIL_URL:-consolemail://}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-ApFood <nao-responda@apfood.app>}
+      # Monitoramento de erros: DSN do Sentry (opcional) e e-mails que recebem os erros 500
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_AMBIENTE: ${SENTRY_AMBIENTE:-producao}
+      DJANGO_ADMINS: ${DJANGO_ADMINS:-}
+      # Dados da empresa nos Termos de uso e na Política de privacidade
+      APFOOD_LEGAL_RAZAO_SOCIAL: ${APFOOD_LEGAL_RAZAO_SOCIAL:-}
+      APFOOD_LEGAL_CNPJ: ${APFOOD_LEGAL_CNPJ:-}
+      APFOOD_LEGAL_EMAIL: ${APFOOD_LEGAL_EMAIL:-}
+      APFOOD_LEGAL_CIDADE_FORO: ${APFOOD_LEGAL_CIDADE_FORO:-}
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-master}
       DJANGO_SUPERUSER_PASSWORD: ${SERVICE_PASSWORD_MASTER}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}

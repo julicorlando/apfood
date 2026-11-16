@@ -272,6 +272,17 @@ class JanelaPrincipal(QMainWindow):
         if self.ctx.loja.get("id"):
             self.tempo_real.iniciar(self.ctx.cfg.ws_url, self.ctx.loja["id"], lambda: self.ctx.api.access)
         self.vigia.start()
+        self.iniciar_ponte()
+
+    def iniciar_ponte(self):
+        """Painel web aberto neste computador imprime direto na térmica do PDV."""
+        from ..ponte import Ponte
+
+        def setores():
+            return {s_.get("impressora") for s_ in self.ctx.banco.listar("setores") if s_.get("impressora")}
+
+        self.ponte = Ponte(lambda: self.ctx.cfg, setores, porta=self.ctx.cfg.porta_ponte)
+        self.ponte.iniciar()
 
     def verificar_atualizacao(self):
         from .. import atualizador
@@ -398,6 +409,8 @@ class JanelaPrincipal(QMainWindow):
         self.tempo_real.parar()
         if self.ctx.sync:
             self.ctx.sync.parar()
+        if ev.isAccepted() and getattr(self, "ponte", None):
+            self.ponte.parar()
         super().closeEvent(ev)
 
 

@@ -17,6 +17,10 @@
       {% if form.non_field_errors %}
         <div class="alerta alerta-erro" role="alert">
           {% for e in form.non_field_errors %}{% if "bloqueado" in e %}{{ e }}{% else %}Usuário ou senha incorretos.{% endif %}{% endfor %}
+          {% with f=form.fatura_aberta %}{% if f %}
+            <div class="fatura-bloqueio">Fatura {{ f.competencia|date:"m/Y" }} — {{ f.valor_formatado }}, venceu em {{ f.vencimento|date:"d/m/Y" }}.
+            {% if f.link_pagamento %}<a class="botao botao-primario botao-bloco" href="{{ f.link_pagamento }}" target="_blank" rel="noopener">Pagar com Pix</a>{% endif %}</div>
+          {% endif %}{% endwith %}
         </div>
       {% endif %}
       <label class="campo">
@@ -33,6 +37,7 @@
       <a href="{% url 'painel:esqueci' %}" class="direita">Esqueci minha senha</a>
       <p class="entrar-sub" style="margin:4px 0 0">Ainda não usa o ApFood? <a href="{% url 'cadastro:planos' %}">Teste grátis</a></p>
     </form>
+    <p class="entrar-legal"><a href="{% url 'termos' %}">Termos de uso</a> · <a href="{% url 'privacidade' %}">Privacidade</a></p>
   </main>
 </body>
 </html>

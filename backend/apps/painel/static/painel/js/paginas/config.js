@@ -1,9 +1,10 @@
 // Configurações: loja, horários, fiscal, integrações, usuários, lojas e empresa.
 import { ehAdmin, ehMaster, ErroApi, get, lista, patch, post, put, sessao } from "../api.js";
-import { recarregarSessao } from "../app.js";
+import { mostrarAssinatura, recarregarSessao } from "../app.js";
 import { paginaCadastro } from "../crud.js";
+import { imprimirLinhas, infoPonte, ponteDisponivel } from "./comum.js";
 import { formulario } from "../form.js";
-import { aviso, botaoAcao, dataHora, erro, etiqueta, h, limpar, modal, rotulo, simNao, trocar } from "../ui.js";
+import { aviso, botaoAcao, confirmar, data, dataHora, dinheiro, erro, etiqueta, h, limpar, modal, rotulo, simNao, trocar } from "../ui.js";
 
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 
@@ -267,6 +268,7 @@ export function minhaEmpresa() {
         { nome: "telefone", rotulo: "Telefone", tipo: "tel" },
       ], e);
       const faturas = await lista("/api/faturas/").catch(() => []);
+      const assinatura = await get("/api/assinatura/", { semLoja: true }).catch(() => null);
       trocar(raiz, 
         h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
           h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Plano"), h("div", { class: "kpi-valor" }, e.plano_nome || "—")),
@@ -279,7 +281,74 @@ export function minhaEmpresa() {
         faturas.length ? h("div", { class: "cartao" }, h("h2", null, "Faturas"), h("ul", { class: "lista-simples" }, faturas.map((ft) => h("li", null,
           h("span", null, `${String(ft.competencia).slice(5, 7)}/${String(ft.competencia).slice(0, 4)} — vence ${String(ft.vencimento).split("-").reverse().join("/")}`),
           h("span", { class: "acoes" }, rotulo("StatusFatura", ft.status),
-            ft.link_pagamento && ft.status !== "PAGA" ? h("a", { class: "botao botao-pequeno", href: ft.link_pagamento, target: "_blank", rel: "noopener" }, "Pagar") : null))))) : null);
+            ft.link_pagamento && ft.status !== "PAGA" ? h("a", { class: "botao botao-pequeno", href: ft.link_pagamento, target: "_blank", rel: "noopener" }, "Pagar") : null))))) : null,
+        assinatura?.planos?.length ? cartaoPlanos(assinatura, () => this.render(raiz)) : null);
+    },
+  };
+}
+
+function cartaoPlanos(a, recarregar) {
+  const teste = a.status === "TRIAL" && a.trial_ate ? `Teste grátis até ${data(a.trial_ate)}. ` : "";
+  return h("div", { class: "cartao" },
+    h("h2", null, "Plano"),
+    h("p", { class: "suave" }, `${teste}A troca vale a partir da próxima fatura; faturas já geradas não mudam.`),
+    h("div", { class: "planos-escolha" }, a.planos.map((p) => {
+      const atual = p.id === a.plano;
+      return h("div", { class: `plano-op${atual ? " atual" : ""}` },
+        h("strong", null, p.nome),
+        h("div", { class: "preco" }, `${dinheiro(p.preco_mensal_centavos)}/mês`),
+        p.descricao ? h("div", { class: "suave" }, p.descricao) : null,
+        h("div", { class: "suave" }, `${p.limite_lojas ?? "Lojas ilimitadas"}${p.limite_lojas ? " loja(s)" : ""} · ${p.limite_usuarios ?? "usuários ilimitados"}${p.limite_usuarios ? " usuário(s)" : ""}`),
+        atual ? etiqueta("Plano atual", "e-ok") : botaoAcao("Escolher", async () => {
+          if (!(await confirmar(`Mudar para o plano ${p.nome} (${dinheiro(p.preco_mensal_centavos)}/mês) a partir da próxima fatura?`, { ok: "Mudar plano" }))) return;
+          try {
+            await post("/api/assinatura/", { plano: p.id }, { semLoja: true });
+            aviso("Plano alterado.", "ok");
+            mostrarAssinatura().catch(() => {});
+            recarregar();
+          } catch (e) { erro(e); }
+        }, "botao botao-pequeno"));
+    })));
+}
+
+// ---------------------------------------------------------------- impressão neste computador
+export function impressao() {
+  return {
+    titulo: "Impressão",
+    async render(raiz) {
+      const desenhar = async () => {
+        const navegador = (() => { try { return localStorage.getItem("apfood.impressao") === "navegador"; } catch { return false; } })();
+        const ok = !navegador && await ponteDisponivel(true);
+        const info = infoPonte();
+        const situacao = navegador
+          ? h("div", { class: "alerta" }, "Este navegador usa sempre a janela de impressão do sistema.")
+          : ok
+            ? h("div", { class: "alerta alerta-ok" }, `Impressão direta ativa: ApFood PDV ${info?.versao || ""} (${info?.terminal || "este computador"}). `
+              + (info?.caixa ? "Cupons saem na impressora do caixa configurada no PDV." : "Configure a impressora do caixa no PDV."))
+            : h("div", { class: "alerta alerta-aviso" }, "ApFood PDV não encontrado neste computador. Os cupons abrem a janela de impressão do navegador.");
+        const linhasTeste = [
+          { texto: "ApFood", negrito: true, grande: true, alinhamento: "centro" },
+          { texto: "Teste de impressão", alinhamento: "centro" },
+          { texto: new Date().toLocaleString("pt-BR"), alinhamento: "centro" },
+          { corte: true },
+        ];
+        trocar(raiz, h("div", { class: "cartao" },
+          h("h2", null, "Impressão neste computador"),
+          situacao,
+          h("p", { class: "suave", style: { margin: "12px 0" } },
+            "Para imprimir direto na térmica, sem a janela do navegador: instale e deixe aberto o ApFood PDV neste computador, "
+            + "configure a impressora nele e use o painel neste mesmo computador. No Chrome, permita o acesso a \"apps e serviços deste dispositivo\" quando ele pedir."),
+          h("label", { class: "check" },
+            h("input", { type: "checkbox", checked: navegador, onchange: (ev) => {
+              try { localStorage.setItem("apfood.impressao", ev.target.checked ? "navegador" : "direta"); } catch { /* sem storage */ }
+              desenhar();
+            } }),
+            h("span", null, "Usar sempre a janela de impressão do navegador")),
+          h("div", { class: "acoes", style: { marginTop: "16px" } },
+            botaoAcao("Imprimir teste", () => imprimirLinhas(linhasTeste), "botao botao-primario"),
+            botaoAcao("Verificar de novo", desenhar))));
+      };
+      await desenhar();
     },
   };
 }

@@ -42,7 +42,7 @@ body { margin: 0; font-family: "Courier New", monospace; font-size: 11px; color:
 .corte { border-bottom: 1px dashed #000; margin: 4mm 0; page-break-after: always; }
 img { display: block; margin: 2mm auto; width: 34mm; height: 34mm; }`;
 
-export function imprimirLinhas(linhas) {
+function imprimirNoNavegador(linhas) {
   const iframe = document.createElement("iframe");
   Object.assign(iframe.style, { position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0" });
   document.body.append(iframe);
@@ -63,6 +63,58 @@ export function imprimirLinhas(linhas) {
   });
 }
 
+// Ponte de impressão: com o ApFood PDV aberto neste computador, o cupom sai
+// direto na térmica configurada nele (sem a janela de impressão do navegador).
+const PONTE = "http://127.0.0.1:17777";
+const estadoPonte = { ok: null, quando: 0 };
+
+function ponteLigada() {
+  try { return localStorage.getItem("apfood.impressao") !== "navegador"; } catch { return true; }
+}
+
+export async function ponteDisponivel(forcar = false) {
+  if (!ponteLigada()) return false;
+  const agora = Date.now();
+  const validade = estadoPonte.ok ? 5 * 60000 : 60000;
+  if (!forcar && estadoPonte.ok !== null && agora - estadoPonte.quando < validade) return estadoPonte.ok;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 1500);
+  try {
+    const r = await fetch(`${PONTE}/status`, { signal: ctl.signal, cache: "no-store" });
+    estadoPonte.ok = r.ok;
+    estadoPonte.info = r.ok ? await r.json() : null;
+  } catch { estadoPonte.ok = false; estadoPonte.info = null; }
+  clearTimeout(t);
+  estadoPonte.quando = agora;
+  return estadoPonte.ok;
+}
+export const infoPonte = () => estadoPonte.info;
+
+async function imprimirNaPonte(linhas, { destino = "caixa", impressora = "", gaveta = false } = {}) {
+  try {
+    const r = await fetch(`${PONTE}/imprimir`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+      body: JSON.stringify({ linhas, destino, impressora, abrir_gaveta: gaveta }),
+    });
+    if (r.ok) return true;
+    const e = await r.json().catch(() => ({}));
+    aviso(`PDV: ${e.erro || `erro ${r.status}`}. Abrindo a impressão do navegador.`);
+  } catch {
+    estadoPonte.ok = false;
+  }
+  return false;
+}
+
+/** Imprime as linhas do cupom: na térmica (via PDV) ou pela janela do navegador. */
+export async function imprimirLinhas(linhas, opcoes = {}) {
+  if (await ponteDisponivel() && await imprimirNaPonte(linhas, opcoes)) {
+    aviso("Enviado para a impressora.", "ok");
+    return true;
+  }
+  imprimirNoNavegador(linhas);
+  return false;
+}
+
 export function mostrarCupom(linhas, { titulo = "Cupom", aviso: av = "" } = {}) {
   modal({
     titulo, tamanho: "modal-pequeno",
@@ -74,10 +126,18 @@ export function mostrarCupom(linhas, { titulo = "Cupom", aviso: av = "" } = {}) 
 export async function imprimirPedido(pedidoId, tipo = "venda") {
   const r = await get(`/api/pedidos/${pedidoId}/cupom/?tipo=${tipo}`);
   if (tipo === "cozinha") {
-    const vias = r.vias || [];
+    const vias = (r.vias || []).map((v) => (Array.isArray(v) ? { linhas: v } : v));
     if (!vias.length) { aviso("Nenhum item para a cozinha."); return; }
-    const linhas = vias.flatMap((v) => (Array.isArray(v) ? v : v.linhas || []));
-    imprimirLinhas(linhas);
+    if (await ponteDisponivel()) {
+      const falhou = [];
+      for (const v of vias) {
+        if (!(await imprimirNaPonte(v.linhas || [], { destino: "cozinha", impressora: v.impressora || "" }))) falhou.push(v);
+      }
+      if (!falhou.length) { aviso(vias.length > 1 ? `${vias.length} vias enviadas para a cozinha.` : "Via enviada para a cozinha.", "ok"); return; }
+      imprimirNoNavegador(falhou.flatMap((v) => v.linhas || []));
+      return;
+    }
+    imprimirNoNavegador(vias.flatMap((v) => v.linhas || []));
   } else imprimirLinhas(r.linhas);
 }
 
