@@ -202,67 +202,142 @@ def _promocoes(loja, produtos):
         "produtos": [str(produtos["Batata frita"].id)], "hora_inicio": time(17, 0), "hora_fim": time(19, 0)})
 
 
-def _historico(loja, card, entregadores, admin, dias: int):
-    """Pedidos concluídos dos últimos `dias` dias (8 a 16 por dia, mais no fim de semana)."""
+def _itens(rnd, card):
     from apps.pedidos import services as ps
-    from apps.pedidos.models import Pagamento, Pedido
 
-    rnd = random.Random(f"demo-{loja.id}")
     p = card["produtos"]
     ponto = list(card["ponto"].adicionais.all())
     extras = list(card["extras"].adicionais.all())
-    burgers = ["Smash Clássico", "Bacon Lovers", "Duplo Cheddar", "Salada Fit"]
     batata = p["Batata frita"]
     var_batata = list(batata.variacoes.all())
-    hoje = timezone.localdate()
+    itens = []
+    for _ in range(rnd.choice([1, 1, 2, 2, 3])):
+        nome = rnd.choice(["Smash Clássico", "Smash Clássico", "Bacon Lovers", "Bacon Lovers", "Duplo Cheddar",
+                           "Salada Fit", "Chicken Crispy", "Combo Smash", "Combo Bacon"])
+        prod = p[nome]
+        ads = []
+        if nome != "Chicken Crispy":
+            ads.append(ps.AdicionalIn(str(rnd.choice(ponto).id), 1))
+        if nome in ("Smash Clássico", "Bacon Lovers", "Duplo Cheddar", "Chicken Crispy") and rnd.random() < 0.35:
+            ads.append(ps.AdicionalIn(str(rnd.choice(extras).id), 1))
+        itens.append(ps.ItemIn(str(prod.id), 1, adicionais=ads))
+    if rnd.random() < 0.6:
+        itens.append(ps.ItemIn(str(batata.id), 1, variacao_id=str(rnd.choice(var_batata).id)))
+    if rnd.random() < 0.15:
+        itens.append(ps.ItemIn(str(p[rnd.choice(["Batata cheddar e bacon", "Onion rings"])].id), 1))
+    for _ in range(rnd.choice([0, 1, 1, 2])):
+        itens.append(ps.ItemIn(str(p[rnd.choice(["Refrigerante lata", "Suco natural", "Água mineral"])].id), 1))
+    if rnd.random() < 0.2:
+        itens.append(ps.ItemIn(str(p[rnd.choice(["Brownie com sorvete", "Milkshake"])].id), 1))
+    return itens
+
+
+def _datar(pedido, hora, entrega=False, canal=None):
+    from apps.pedidos.models import Pagamento, Pedido
+
+    campos = {"criado_em": hora, "data_referencia": timezone.localtime(hora).date(), "aceito_em": hora,
+              "pronto_em": hora + timedelta(minutes=20), "concluido_em": hora + timedelta(minutes=45)}
+    if entrega:
+        campos["saiu_entrega_em"] = hora + timedelta(minutes=25)
+    if canal:
+        campos["canal"] = canal
+    Pedido.objects.filter(pk=pedido.pk).update(**campos)
+    Pagamento.objects.filter(pedido=pedido).update(criado_em=hora, confirmado_em=hora)
+
+
+def _historico(loja, card, entregadores, admin, inicio, fim) -> int:
+    """Pedidos de `inicio` a `fim` (datas): balcão, delivery por telefone e pelo
+    cardápio online (Pix), mesas abertas e fechadas, e alguns cancelamentos."""
+    from apps.pedidos import services as ps
+    from apps.pedidos.models import Pagamento
+    from apps.salao import services as salao
+    from apps.salao.models import Comanda, Mesa
+
+    rnd = random.Random(f"demo-{loja.id}-{inicio}")
+    mesas = list(Mesa.objects.filter(loja=loja, ativa=True))
     criados = 0
-    for d in range(dias, 0, -1):
-        dia = hoje - timedelta(days=d)
-        n = rnd.randint(8, 12) + (5 if dia.weekday() >= 4 else 0)
+    dia = inicio
+    while dia <= fim:
+        n = rnd.randint(10, 15) + (7 if dia.weekday() >= 4 else 0)
         for _ in range(n):
-            itens = []
-            for _ in range(rnd.choice([1, 1, 2, 2, 3])):
-                nome = rnd.choice(burgers + ["Chicken Crispy", "Combo Smash", "Combo Bacon"])
-                prod = p[nome]
-                ads = []
-                if prod.grupos_adicionais.filter(nome="Ponto da carne").exists():
-                    ads.append(ps.AdicionalIn(str(rnd.choice(ponto).id), 1))
-                if prod.grupos_adicionais.filter(nome="Turbine seu lanche").exists() and rnd.random() < 0.35:
-                    ads.append(ps.AdicionalIn(str(rnd.choice(extras).id), 1))
-                itens.append(ps.ItemIn(str(prod.id), 1, adicionais=ads))
-            if rnd.random() < 0.6:
-                itens.append(ps.ItemIn(str(batata.id), 1, variacao_id=str(rnd.choice(var_batata).id)))
-            for _ in range(rnd.choice([0, 1, 1, 2])):
-                itens.append(ps.ItemIn(str(p[rnd.choice(["Refrigerante lata", "Suco natural", "Água mineral"])].id), 1))
-            if rnd.random() < 0.2:
-                itens.append(ps.ItemIn(str(p[rnd.choice(["Brownie com sorvete", "Milkshake"])].id), 1))
+            hora = timezone.make_aware(datetime.combine(dia, time(rnd.choice([12, 12, 13, 18, 19, 19, 20, 20, 21, 22]),
+                                                                  rnd.randint(0, 59))))
+            tipo = rnd.choices(["balcao", "telefone", "online", "mesa", "cancelado"], [25, 20, 35, 17, 3])[0]
             nome_c, tel, bairro, rua, num = rnd.choice(CLIENTES)
-            entrega = rnd.random() < 0.55
-            taxa = next(t for b, t, _ in ZONAS if b == bairro) if entrega else 0
-            dados = ps.PedidoIn(
-                CanalVenda.DELIVERY if entrega else CanalVenda.BALCAO,
-                TipoAtendimento.ENTREGA if entrega else TipoAtendimento.RETIRADA, itens,
-                nome_cliente=nome_c, telefone_cliente=tel, taxa_entrega_centavos=taxa if entrega else None,
-                endereco={"logradouro": rua, "numero": num, "bairro": bairro, "cidade": "Recife"} if entrega else None)
             with transaction.atomic():
-                ped = ps.criar_pedido(loja, dados, None)
-                forma = rnd.choice(FORMAS)
+                if tipo == "mesa" and mesas:
+                    mesa = rnd.choice(mesas)
+                    if Comanda.objects.filter(mesa=mesa, status__in=["ABERTA", "FECHANDO"]).exists():
+                        continue
+                    c = salao.abrir(loja, None, mesa=mesa, pessoas=rnd.randint(2, 5))
+                    rodadas = [ps.criar_pedido(loja, ps.PedidoIn(CanalVenda.MESA, TipoAtendimento.CONSUMO_LOCAL,
+                                                                 _itens(rnd, card), comanda=c, mesa=mesa.nome), None)
+                               for _ in range(rnd.choice([1, 1, 2]))]
+                    c = salao.pedir_conta(c, admin)
+                    pessoas = rnd.choice([1, 1, 2])
+                    resto = c.total_centavos
+                    parte = c.total_centavos // pessoas
+                    for k in range(pessoas):
+                        valor = resto if k == pessoas - 1 else parte
+                        resto -= valor
+                        ps.registrar_pagamento(usuario=admin, comanda=c, forma=rnd.choice(FORMAS), valor_centavos=valor,
+                                               pago_online=True, pagador=f"Cliente {k + 1}" if pessoas > 1 else "")
+                    salao.fechar(c, admin)
+                    for r in rodadas:
+                        _datar(r, hora)
+                    Comanda.objects.filter(pk=c.pk).update(criado_em=hora, conta_pedida_em=hora + timedelta(minutes=70),
+                                                          fechada_em=hora + timedelta(minutes=80))
+                    Pagamento.objects.filter(comanda=c).update(criado_em=hora + timedelta(minutes=75),
+                                                               confirmado_em=hora + timedelta(minutes=75))
+                    criados += 1
+                    continue
+                entrega = tipo in ("telefone", "online")
+                taxa = next(t for b, t, _ in ZONAS if b == bairro) if entrega else None
+                ped = ps.criar_pedido(loja, ps.PedidoIn(
+                    CanalVenda.DELIVERY if entrega else CanalVenda.BALCAO,
+                    TipoAtendimento.ENTREGA if entrega else TipoAtendimento.RETIRADA, _itens(rnd, card),
+                    nome_cliente=nome_c, telefone_cliente=tel, taxa_entrega_centavos=taxa,
+                    endereco={"logradouro": rua, "numero": num, "bairro": bairro, "cidade": "Recife"} if entrega else None),
+                    None)
+                if tipo == "cancelado":
+                    ps.transicionar(ped, StatusPedido.CANCELADO, admin,
+                                    motivo=rnd.choice(["cliente desistiu", "endereço fora da área", "item em falta"]))
+                    _datar(ped, hora)
+                    criados += 1
+                    continue
+                forma = FormaPagamento.PIX if tipo == "online" else rnd.choice(FORMAS)
                 ps.registrar_pagamento(usuario=admin, pedido=ped, forma=forma, valor_centavos=ped.total_centavos,
                                        pago_online=True)
                 ps.transicionar(ped, StatusPedido.PRONTO, admin)
                 if entrega:
-                    ps.transicionar(ped, StatusPedido.SAIU_PARA_ENTREGA, admin,
-                                    entregador_id=rnd.choice(entregadores).id)
+                    ps.transicionar(ped, StatusPedido.SAIU_PARA_ENTREGA, admin, entregador_id=rnd.choice(entregadores).id)
                 ps.transicionar(ped, StatusPedido.CONCLUIDO, admin)
-                hora = timezone.make_aware(datetime.combine(dia, time(rnd.randint(11, 22), rnd.randint(0, 59))))
-                campos = {"criado_em": hora, "data_referencia": dia, "aceito_em": hora,
-                          "pronto_em": hora + timedelta(minutes=20), "concluido_em": hora + timedelta(minutes=45)}
-                if entrega:
-                    campos["saiu_entrega_em"] = hora + timedelta(minutes=25)
-                Pedido.objects.filter(pk=ped.pk).update(**campos)
-                Pagamento.objects.filter(pedido=ped).update(criado_em=hora, confirmado_em=hora)
+                _datar(ped, hora, entrega, canal=CanalVenda.ONLINE if tipo == "online" else None)
             criados += 1
+        dia += timedelta(days=1)
     return criados
+
+
+def _compras(loja, inicio, fim):
+    """Entradas de estoque (compras semanais dos insumos), para a tela de estoque ter movimento."""
+    from apps.cardapio.models import Produto
+    from apps.estoque import services as estoque
+    from apps.estoque.models import MovimentacaoEstoque
+
+    insumos = list(Produto.objects.filter(loja=loja, tipo=TipoProduto.INSUMO, nome__in=[i[0] for i in INSUMOS]))
+    dia, n = inicio, 0
+    while dia <= fim:
+        if dia.weekday() == 0:  # toda segunda
+            for p in insumos:
+                info = next(i for i in INSUMOS if i[0] == p.nome)
+                qtd = D(info[3]) / 2
+                m = estoque.registrar_entrada(p, qtd, info[2], motivo="Compra semanal (demonstração)")
+                quando = timezone.make_aware(datetime.combine(dia, time(9, 0)))
+                if m is not None:
+                    MovimentacaoEstoque.objects.filter(pk=m.pk).update(criado_em=quando)
+                n += 1
+        dia += timedelta(days=1)
+    return n
 
 
 def _hoje(loja, card, admin):
@@ -275,6 +350,8 @@ def _hoje(loja, card, admin):
     ponto = card["ponto"].adicionais.filter(nome="Ao ponto").first()
     for nome, tel, status in [("Ana Beatriz Lima", "81991110001", StatusPedido.EM_PREPARO),
                               ("Felipe Araújo", "81991110006", StatusPedido.PRONTO),
+                              ("Gabriela Nunes", "81991110007", StatusPedido.SAIU_PARA_ENTREGA),
+                              ("Diego Santos", "81991110004", StatusPedido.EM_PREPARO),
                               ("Camila Rocha", "81991110003", None)]:
         ped = ps.criar_pedido(loja, ps.PedidoIn(
             CanalVenda.DELIVERY, TipoAtendimento.ENTREGA,
@@ -283,9 +360,17 @@ def _hoje(loja, card, admin):
             taxa_entrega_centavos=500, endereco={"logradouro": "Av. Conselheiro Aguiar", "numero": "100",
                                                  "bairro": "Boa Viagem", "cidade": "Recife"}), None)
         if status:
+            ps.registrar_pagamento(usuario=admin, pedido=ped, forma=FormaPagamento.PIX,
+                                   valor_centavos=ped.total_centavos, pago_online=True)
             ps.transicionar(ped, StatusPedido.EM_PREPARO, admin)
-            if status == StatusPedido.PRONTO:
+            if status in (StatusPedido.PRONTO, StatusPedido.SAIU_PARA_ENTREGA):
                 ps.transicionar(ped, StatusPedido.PRONTO, admin)
+            if status == StatusPedido.SAIU_PARA_ENTREGA:
+                from apps.clientes.models import Entregador
+
+                e = Entregador.objects.filter(loja=loja, ativo=True).first()
+                if e:
+                    ps.transicionar(ped, StatusPedido.SAIU_PARA_ENTREGA, admin, entregador_id=e.id)
     mesa = Mesa.objects.filter(loja=loja, nome="Mesa 3").first()
     if mesa and not Comanda.objects.filter(mesa=mesa, status__in=ABERTAS).exists():
         c = salao.abrir(loja, None, mesa=mesa, pessoas=3)
@@ -295,8 +380,11 @@ def _hoje(loja, card, admin):
             comanda=c, mesa=mesa.nome), None)
 
 
-def preencher(loja, dias: int = 30) -> dict:
+def preencher(loja, dias: int = 30, mais: bool = False) -> dict:
+    """Primeira vez: `dias` de histórico até ontem. `mais=True`: mais `dias` de
+    histórico ANTES do mais antigo e mais pedidos em andamento hoje."""
     from apfood_core.enums import PapelUsuario
+    from django.db.models import Min
 
     from apps.contas.models import Usuario
     from apps.pedidos.models import Pedido
@@ -307,22 +395,33 @@ def preencher(loja, dias: int = 30) -> dict:
         card = _cardapio(loja)
         entregadores = _loja(loja)
         _promocoes(loja, card["produtos"])
-    historico = 0
-    if Pedido.objects.filter(loja=loja, data_referencia__lt=timezone.localdate()).count() < 50:
-        historico = _historico(loja, card, entregadores, admin, dias)
-        _hoje(loja, card, admin)
-        # estoque "de hoje" depois do mês simulado (o Ovo fica abaixo do mínimo, para o alerta)
-        from apps.cardapio.models import Produto
+    hoje = timezone.localdate()
+    passados = Pedido.objects.filter(loja=loja, data_referencia__lt=hoje)
+    if mais and passados.exists():
+        fim = passados.aggregate(m=Min("data_referencia"))["m"] - timedelta(days=1)
+    elif passados.count() < 50:
+        fim = hoje - timedelta(days=1)
+    else:
+        return {"produtos": len(card["produtos"]), "pedidos_historico": 0}
+    inicio = fim - timedelta(days=dias - 1)
+    historico = _historico(loja, card, entregadores, admin, inicio, fim)
+    try:
+        _compras(loja, inicio, fim)
+    except Exception:  # noqa: BLE001 — estoque é enfeite da demonstração
+        log.exception("demonstração: compras")
+    _hoje(loja, card, admin)
+    # estoque "de hoje" depois do período simulado (o Ovo fica abaixo do mínimo, para o alerta)
+    from apps.cardapio.models import Produto
 
-        for nome, _un, _c, est, minimo in INSUMOS:
-            Produto.objects.filter(loja=loja, tipo=TipoProduto.INSUMO, nome=nome).update(
-                estoque_atual=D(minimo - 6) if nome == "Ovo" else D(est))
-    return {"produtos": len(card["produtos"]), "pedidos_historico": historico}
+    for nome, _un, _c, est, minimo in INSUMOS:
+        Produto.objects.filter(loja=loja, tipo=TipoProduto.INSUMO, nome=nome).update(
+            estoque_atual=D(minimo - 6) if nome == "Ovo" else D(est))
+    return {"produtos": len(card["produtos"]), "pedidos_historico": historico, "de": str(inicio), "ate": str(fim)}
 
 
 @executor("plataforma.demonstracao")
-def tarefa(loja_id: str, dias: int = 30):
+def tarefa(loja_id: str, dias: int = 30, mais: bool = False):
     from apps.lojas.models import Loja
 
-    r = preencher(Loja.objects.get(pk=loja_id), dias)
+    r = preencher(Loja.objects.get(pk=loja_id), dias, mais)
     log.info("demonstração da loja %s: %s", loja_id, r)

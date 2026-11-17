@@ -177,7 +177,10 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         loja = empresa.lojas.order_by("criado_em").first()
         if loja is None:
             raise ValidationError({"detail": "a empresa não tem loja"})
-        enfileirar("plataforma.demonstracao", {"loja_id": str(loja.id), "dias": 30}, chave=f"demo-{loja.id}")
+        mais = bool(request.data.get("mais"))
+        dias = max(1, min(int(request.data.get("dias") or (60 if mais else 30)), 180))
+        enfileirar("plataforma.demonstracao", {"loja_id": str(loja.id), "dias": dias, "mais": mais},
+                   chave=f"demo-{loja.id}-{'mais' if mais else 'base'}")
         return Response({"loja": loja.nome, "status": "em andamento"}, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=["post"])
