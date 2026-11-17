@@ -187,12 +187,15 @@ def _km(a_lat, a_lng, b_lat, b_lng):
 def _oferta(ch, es) -> dict:
     p, l = ch.pedido, ch.loja
     e = next(x for x in es if x.id == ch.entregador_atual_id)
+    todos = [p, *chamadas.juntos_validos(ch)]
+    bairros = list(dict.fromkeys(x.entrega_bairro for x in todos if x.entrega_bairro))
     return {
         "chamada": str(ch.id), "numero": p.numero, "loja": l.nome, "loja_endereco": _endereco_loja(l),
-        "bairro": p.entrega_bairro, "cidade": p.entrega_cidade,
+        "bairro": " + ".join(bairros) if bairros else p.entrega_bairro, "cidade": p.entrega_cidade,
+        "entregas": len(todos), "numeros": [x.numero for x in todos],
         "ate_loja_km": _km(e.latitude, e.longitude, l.latitude, l.longitude),
         "entrega_km": _km(l.latitude, l.longitude, p.entrega_latitude, p.entrega_longitude),
-        "ganho_centavos": e.ganho(p) if e.remuneracao != "NENHUM" else None,
+        "ganho_centavos": sum(e.ganho(x) for x in todos) if e.remuneracao != "NENHUM" else None,
         "segundos": max(0, int((ch.oferta_ate - timezone.now()).total_seconds())) if ch.oferta_ate else 0,
         "total_segundos": chamadas.OFERTA_S,
     }
@@ -266,18 +269,48 @@ def resumo_ganhos(es) -> dict:
     }
 
 
+def rota(pedidos: list[Pedido], es) -> list[Pedido]:
+    """Ordem das paradas: primeiro o que falta retirar; depois as entregas pelo caminho mais curto
+    (sempre a mais perto de onde ele está), a partir da posição do entregador ou da loja."""
+    from apfood_core.entrega import distancia_km
+
+    retirar = [p for p in pedidos if p.status != S.SAIU_PARA_ENTREGA]
+    rua = [p for p in pedidos if p.status == S.SAIU_PARA_ENTREGA]
+    if len(rua) < 2:
+        return retirar + rua
+    e = next((x for x in es if x.latitude is not None), None)
+    pos = (float(e.latitude), float(e.longitude)) if e else None
+    if pos is None and rua[0].loja.latitude is not None:
+        pos = (float(rua[0].loja.latitude), float(rua[0].loja.longitude))
+    com = [p for p in rua if p.entrega_latitude is not None and p.entrega_longitude is not None]
+    sem = [p for p in rua if p not in com]
+    ordem = []
+    while com and pos is not None:
+        prox = min(com, key=lambda p: distancia_km(pos[0], pos[1], float(p.entrega_latitude), float(p.entrega_longitude)))
+        ordem.append(prox)
+        com.remove(prox)
+        pos = (float(prox.entrega_latitude), float(prox.entrega_longitude))
+    return retirar + ordem + com + sem
+
+
+def _paradas(pedidos) -> dict:
+    rua = [p for p in pedidos if p.status == S.SAIU_PARA_ENTREGA]
+    return {p.id: {"parada": i + 1, "paradas": len(rua)} for i, p in enumerate(rua)} if len(rua) > 1 else {}
+
+
 class EstadoView(Base):
     def get(self, request):
         es = entregadores_da(request)
         ch = chamadas.oferta_para(es)
-        entregas = (Pedido.objects.filter(entregador__in=es, status__in=EM_ANDAMENTO)
-                    .select_related("loja").prefetch_related("pagamentos").order_by("criado_em"))
+        entregas = rota(list(Pedido.objects.filter(entregador__in=es, status__in=EM_ANDAMENTO)
+                             .select_related("loja").prefetch_related("pagamentos").order_by("criado_em")), es)
         por_id = {e.id: e for e in es}
+        paradas = _paradas(entregas)
         return Response({
             "nome": es[0].nome, "online": any(e.online for e in es), "lojas": [e.loja.nome for e in es],
             "trocar_pin": not all(e.pin_trocado for e in es),
             "oferta": _oferta(ch, es) if ch else None,
-            "entregas": [_entrega(p, por_id[p.entregador_id]) for p in entregas],
+            "entregas": [{**_entrega(p, por_id[p.entregador_id]), **paradas.get(p.id, {})} for p in entregas],
             "ganhos": {**resumo_ganhos(es), **acertos.para_app(es)},
             "repasses": cobranca_entrega.para_app(es),
         })
@@ -361,3 +394,16 @@ class RepasseView(Base):
             raise ErroNegocio("escolha a loja")
         r = cobranca_entrega.informar(e, request.data.get("valor_centavos"))
         return Response({"ok": True, "repasse": str(r.id)}, status=201)
+
+
+class FotoEntregaView(Base):
+    """Cliente não estava: conclui com a foto do pedido deixado no local (multipart: foto, observacao)."""
+
+    def post(self, request, pedido):
+        es = entregadores_da(request)
+        p = Pedido.objects.filter(pk=pedido, entregador__in=es).first()
+        if p is None:
+            raise ErroNegocio("pedido não encontrado")
+        e = next(x for x in es if x.id == p.entregador_id)
+        chamadas.entregar_com_foto(p.id, e, request.FILES.get("foto"), str(request.data.get("observacao") or ""))
+        return Response({"ok": True})

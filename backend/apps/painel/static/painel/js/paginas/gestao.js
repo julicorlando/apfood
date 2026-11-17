@@ -27,7 +27,7 @@ function seletorPeriodo(aoMudar) {
   return { el: [sel, ini, fim], params };
 }
 
-function paginaRelatorio(titulo, desenhar) {
+export function paginaRelatorio(titulo, desenhar) {
   return {
     titulo,
     async render(raiz) {

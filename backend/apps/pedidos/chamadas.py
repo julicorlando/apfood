@@ -90,6 +90,7 @@ def resumo(ch: ChamadaEntrega | None) -> dict | None:
         "segundos_oferta": restante(ch.oferta_ate) if ch.entregador_atual_id else 0,
         "segundos_total": restante(ch.expira_em) if ch.status == ChamadaEntrega.PROCURANDO else 0,
         "tentativas": len(ch.ofertados), "recusas": len(ch.recusados),
+        "juntos": list(Pedido.objects.filter(pk__in=ch.juntos).values_list("numero", flat=True)) if ch.juntos else [],
         "aceita_por": ch.aceita_por.nome if ch.aceita_por_id else None,
         "disponiveis": disponiveis(ch.loja).count() if ch.status == ChamadaEntrega.PROCURANDO else None,
     }
@@ -116,7 +117,8 @@ def _avisar_entregador(ch: ChamadaEntrega, e: Entregador) -> None:
     if integ is None:
         return
     p = ch.pedido
-    texto = (f"🛵 *{ch.loja.nome}*: entrega disponível para {p.entrega_bairro or 'o cliente'}"
+    n = 1 + len(juntos_validos(ch))
+    texto = (f"🛵 *{ch.loja.nome}*: {'%d entregas' % n if n > 1 else 'entrega'} disponível para {p.entrega_bairro or 'o cliente'}"
              f" (pedido #{p.numero}). Abra o app *ApFood Entregador* para aceitar — você tem {OFERTA_S} s.")
     enfileirar("whatsapp.enviar", {"integracao_id": str(integ.id), "telefone": e.telefone, "mensagem": texto},
                chave=f"oferta-{ch.id}-{len(ch.ofertados)}")
@@ -138,8 +140,39 @@ def ultima(pedido) -> ChamadaEntrega | None:
     return avancar(ch) if ch and ch.status == ChamadaEntrega.PROCURANDO else ch
 
 
+def _pode_juntar(p: Pedido, outro: Pedido) -> bool:
+    return (outro.loja_id == p.loja_id and outro.pk != p.pk and outro.tipo_atendimento == "ENTREGA"
+            and outro.status in PODE_CHAMAR and not outro.entregador_id)
+
+
+def juntos_validos(ch: ChamadaEntrega) -> list[Pedido]:
+    """Pedidos que ainda podem ir junto nesta viagem (alguém pode ter mandado por outro entregador)."""
+    if not ch.juntos:
+        return []
+    return [o for o in Pedido.objects.filter(pk__in=ch.juntos).order_by("criado_em") if _pode_juntar(ch.pedido, o)]
+
+
+def sugestoes_juntar(p: Pedido, limite: int = 8) -> list[dict]:
+    """Outros pedidos de entrega ainda sem entregador, do mais perto do destino deste ao mais longe."""
+    from apfood_core.entrega import distancia_km
+
+    out = []
+    for o in Pedido.objects.filter(loja=p.loja, tipo_atendimento="ENTREGA", status__in=PODE_CHAMAR,
+                                   entregador__isnull=True).exclude(pk=p.pk).order_by("criado_em")[:50]:
+        km = None
+        if None not in (p.entrega_latitude, p.entrega_longitude, o.entrega_latitude, o.entrega_longitude):
+            km = round(distancia_km(float(p.entrega_latitude), float(p.entrega_longitude),
+                                    float(o.entrega_latitude), float(o.entrega_longitude)), 1)
+        mesmo = bool(p.entrega_bairro) and o.entrega_bairro.strip().lower() == p.entrega_bairro.strip().lower()
+        out.append({"id": str(o.id), "numero": o.numero, "bairro": o.entrega_bairro, "status": o.status,
+                    "cliente": o.nome_cliente, "distancia_km": km, "mesmo_bairro": mesmo})
+    out.sort(key=lambda x: (not x["mesmo_bairro"] and (x["distancia_km"] is None or x["distancia_km"] > 3),
+                            x["distancia_km"] if x["distancia_km"] is not None else 99))
+    return out[:limite]
+
+
 @transaction.atomic
-def iniciar(pedido: Pedido, usuario=None) -> ChamadaEntrega:
+def iniciar(pedido: Pedido, usuario=None, juntar=None) -> ChamadaEntrega:
     p = Pedido.objects.select_for_update().select_related("loja").get(pk=pedido.pk)
     if p.tipo_atendimento != "ENTREGA":
         raise ErroNegocio("só pedidos de entrega podem chamar entregador")
@@ -147,10 +180,20 @@ def iniciar(pedido: Pedido, usuario=None) -> ChamadaEntrega:
         raise ErroNegocio("chame o entregador antes de o pedido sair para entrega")
     if p.entregador_id:
         raise ErroNegocio("este pedido já tem entregador")
+    extras = []
+    for oid in dict.fromkeys(str(x) for x in (juntar or [])):
+        o = Pedido.objects.select_for_update().filter(pk=oid).first()
+        if o is None or not _pode_juntar(p, o):
+            raise ErroNegocio(f"o pedido #{o.numero if o else '?'} não pode ir junto (já tem entregador ou não é entrega)")
+        extras.append(o)
     if (existente := ativa(p)) is not None:
-        return avancar(existente)
+        if not extras:
+            return avancar(existente)
+        cancelar(p)  # chamando de novo com mais pedidos juntos
+    for o in extras:
+        cancelar(o)  # a chamada que o outro pedido tinha passa a ser esta
     ch = ChamadaEntrega.objects.create(loja=p.loja, pedido=p, expira_em=timezone.now() + timedelta(seconds=TOTAL_S),
-                                       criado_por=usuario)
+                                       criado_por=usuario, juntos=[str(o.id) for o in extras])
     return avancar(ch)
 
 
@@ -229,6 +272,12 @@ def aceitar(chamada_id, e: Entregador) -> ChamadaEntrega:
     from apps.realtime import eventos
 
     eventos.pedido_status(p)
+    for o in juntos_validos(ch):  # a viagem leva os outros pedidos juntos
+        o = Pedido.objects.select_for_update().get(pk=o.pk)
+        if not o.entregador_id:
+            o.entregador = e
+            o.save(update_fields=["entregador", "atualizado_em"])
+            eventos.pedido_status(o)
     _evento(ch)
     return ch
 
@@ -301,3 +350,41 @@ def entregar(pedido_id, e: Entregador, codigo: str, *, exigir_pagamento: bool = 
     _conferir(p, codigo, "codigo_entrega", "recebimento")
     with transaction.atomic():
         return services.transicionar(p, S.CONCLUIDO, None, motivo=f"entregue por {e.nome}")
+
+
+def entregar_com_foto(pedido_id, e: Entregador, arquivo, observacao: str = "") -> Pedido:
+    """Cliente não estava / não atendeu: o entregador deixa o pedido e registra uma foto no lugar do
+    código de recebimento. A foto fica no pedido (loja e cliente veem)."""
+    import io
+
+    from django.core.files.base import ContentFile
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    from . import services
+    from .cobranca_entrega import falta
+
+    p = Pedido.objects.filter(pk=pedido_id, entregador=e).select_related("loja").first()
+    if p is None:
+        raise ErroNegocio("pedido não encontrado")
+    if p.status == S.CONCLUIDO:
+        return p
+    if p.status != S.SAIU_PARA_ENTREGA:
+        raise ErroNegocio("confirme a retirada na loja antes")
+    if falta(p) > 0:
+        raise ErroNegocio("este pedido ainda não está pago: sem o cliente não dá para cobrar — fale com a loja")
+    if arquivo is None:
+        raise ErroNegocio("tire a foto do pedido no local da entrega", "foto")
+    if getattr(arquivo, "size", 0) > 12 * 1024 * 1024:
+        raise ErroNegocio("foto muito grande", "foto")
+    try:
+        img = ImageOps.exif_transpose(Image.open(arquivo)).convert("RGB")
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ErroNegocio("não consegui ler a foto: tente de novo", "foto") from exc
+    img.thumbnail((1600, 1600))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=82, optimize=True)
+    p.foto_entrega.save(f"{p.id}.jpg", ContentFile(buf.getvalue()), save=False)
+    p.save(update_fields=["foto_entrega", "atualizado_em"])
+    motivo = "entregue com foto (cliente ausente)" + (f": {observacao.strip()[:120]}" if observacao and observacao.strip() else "")
+    with transaction.atomic():
+        return services.transicionar(p, S.CONCLUIDO, None, motivo=f"{motivo} — {e.nome}")

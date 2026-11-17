@@ -59,6 +59,43 @@ class Categoria(DaLoja, ModeloSincronizavel):
     def __str__(self):
         return self.nome
 
+    def _faixas(self):
+        out = []
+        for f in self.disponibilidade or []:
+            try:
+                out.append((int(f["dia_semana"]), str(f["inicio"])[:5], str(f["fim"])[:5]))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    def disponivel_em(self, quando) -> bool:
+        """Cardápio por horário: sem faixas = sempre. Faixa que passa da meia-noite vale até o dia seguinte."""
+        faixas = self._faixas()
+        if not faixas:
+            return True
+        from django.utils import timezone
+
+        t = timezone.localtime(quando)
+        hhmm, dia = t.strftime("%H:%M"), t.weekday()
+        for d, ini, fim in faixas:
+            if ini <= fim:
+                if d == dia and ini <= hhmm < fim:
+                    return True
+            elif (d == dia and hhmm >= ini) or ((d + 1) % 7 == dia and hhmm < fim):
+                return True
+        return False
+
+    def texto_horario(self, quando) -> str:
+        """"Disponível das 06:00 às 11:00" (horário de hoje, ou o primeiro cadastrado)."""
+        from django.utils import timezone
+
+        faixas = self._faixas()
+        if not faixas:
+            return ""
+        hoje = timezone.localtime(quando).weekday()
+        do_dia = [f for f in faixas if f[0] == hoje] or faixas
+        return "Disponível " + " e ".join(f"das {ini} às {fim}" for _, ini, fim in do_dia[:2])
+
 
 class Produto(DaLoja, ModeloSincronizavel):
     """Produtos vendáveis E insumos na mesma tabela (campo `tipo`), o que
@@ -176,6 +213,28 @@ class ProdutoVariacao(ModeloSincronizavel):
 
     def __str__(self):
         return f"{self.produto} {self.nome}"
+
+
+class ComboItem(models.Model):
+    """Combo com preço fechado: o produto `combo` é vendido pelo preço dele e inclui estes itens
+    (o cardápio mostra a economia e o estoque baixa cada item)."""
+
+    combo = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name="componentes")
+    produto = models.ForeignKey(Produto, on_delete=models.PROTECT, related_name="em_combos")
+    quantidade = models.PositiveSmallIntegerField(default=1)
+    ordem = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "combo_itens"
+        ordering = ["ordem", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["combo", "produto"], name="combo_item_unico"),
+            models.CheckConstraint(condition=~Q(combo=F("produto")), name="combo_nao_recursivo"),
+            models.CheckConstraint(condition=Q(quantidade__gt=0), name="combo_quantidade_positiva"),
+        ]
+
+    def __str__(self):
+        return f"{self.combo} ← {self.quantidade}x {self.produto}"
 
 
 class FichaTecnicaItem(models.Model):

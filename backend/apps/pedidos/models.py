@@ -96,6 +96,8 @@ class Pedido(DaLoja, ModeloBase):
     codigo_retirada = models.CharField(max_length=4, default=gerar_codigo, editable=False)
     codigo_entrega = models.CharField(max_length=4, default=gerar_codigo, editable=False)
     agendado_para = models.DateTimeField(null=True, blank=True, db_index=True, help_text="pedido agendado / encomenda")
+    foto_entrega = models.ImageField(upload_to="entregas/%Y/%m/", blank=True,
+                                     help_text="tirada pelo entregador quando o cliente não estava")
     acerto_entregador = models.ForeignKey("pedidos.AcertoEntregador", on_delete=models.SET_NULL, null=True, blank=True,
                                           related_name="pedidos", editable=False)
 
@@ -346,6 +348,7 @@ class ChamadaEntrega(DaLoja, ModeloBase):
     oferta_ate = models.DateTimeField(null=True, blank=True)
     ofertados = models.JSONField(default=list, blank=True, help_text="ids na ordem em que receberam a oferta")
     recusados = models.JSONField(default=list, blank=True)
+    juntos = models.JSONField(default=list, blank=True, help_text="outros pedidos levados na mesma viagem (ids)")
     aceita_por = models.ForeignKey("clientes.Entregador", on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name="+")
     aceita_em = models.DateTimeField(null=True, blank=True)

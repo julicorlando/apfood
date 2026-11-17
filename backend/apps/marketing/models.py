@@ -149,3 +149,19 @@ class Promocao(DaLoja, ModeloSincronizavel):
 def promocoes_da_loja(loja) -> list:
     """Regras (apfood_core) das promoções ativas cadastradas na loja."""
     return [p.regra() for p in Promocao.objects.ativos().filter(loja=loja, ativa=True)]
+
+
+class CarrinhoAberto(DaLoja, ModeloBase):
+    """Cliente montou o pedido no cardápio, informou o telefone e não finalizou."""
+
+    telefone = models.CharField(max_length=13)
+    nome = models.CharField(max_length=120, blank=True)
+    itens = models.JSONField(default=list, blank=True, help_text='resumo: ["1x X-Burger", ...]')
+    total_centavos = models.PositiveIntegerField(default=0)
+    avisado_em = models.DateTimeField(null=True, blank=True)
+    convertido_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "carrinhos_abertos"
+        ordering = ["-atualizado_em"]
+        constraints = [models.UniqueConstraint(fields=["loja", "telefone"], name="carrinho_por_telefone")]

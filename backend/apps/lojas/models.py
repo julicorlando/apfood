@@ -136,6 +136,14 @@ class Loja(ModeloBase):
     indicacao_ativa = models.BooleanField(default=False)
     indicacao_desconto_centavos = models.PositiveIntegerField(default=1000, help_text="desconto do amigo no 1º pedido")
     indicacao_premio_centavos = models.PositiveIntegerField(default=1000, help_text="cashback de quem indicou")
+    # Carrinho abandonado: quem montou o pedido e não finalizou recebe um WhatsApp
+    carrinho_ativo = models.BooleanField(default=False)
+    carrinho_minutos = models.PositiveSmallIntegerField(default=30, help_text="espera antes de lembrar")
+    carrinho_cupom = models.CharField(max_length=30, blank=True, help_text="cupom a oferecer no lembrete (opcional)")
+    # Resumo do dia para o dono (push no app Empresa + WhatsApp)
+    resumo_diario_ativo = models.BooleanField(default=False)
+    resumo_diario_hora = models.PositiveSmallIntegerField(default=23, help_text="hora local do envio (0 a 23)")
+    resumo_diario_whatsapp = models.CharField(max_length=120, blank=True, help_text="números que recebem; separe por vírgula")
     # Reservas de mesa pelo link da loja
     aceita_reservas = models.BooleanField(default=False)
     # Totem de autoatendimento (link secreto)

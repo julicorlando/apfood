@@ -87,6 +87,8 @@ def _carregar_executores():
     from apps.integracoes import push as _p  # noqa: F401
     from apps.marketing import reconquista as _r  # noqa: F401
     from apps.pedidos import agendados as _ag  # noqa: F401
+    from apps.marketing import carrinho as _ca  # noqa: F401
+    from apps.lojas import resumo_diario as _rd  # noqa: F401
     from apps.plataforma import cobranca as _c  # noqa: F401
     from apps.plataforma import demonstracao as _d  # noqa: F401
 

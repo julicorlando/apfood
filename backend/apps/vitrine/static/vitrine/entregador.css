@@ -144,3 +144,5 @@ button { cursor: pointer; }
 .cobranca p { margin: 0; }
 .cobranca .qr { width: min(260px, 80vw); height: auto; justify-self: center; border-radius: 12px; background: #fff; padding: 8px; border: 1px solid var(--linha); }
 .cobranca .centro { text-align: center; font-weight: 700; }
+.parada { background: #fff4d6; color: #7a5200; font-weight: 700; border-radius: 10px; padding: 6px 10px; margin: 6px 0; font-size: 14px; }
+.foto-entrega { margin-top: 8px; display: grid; gap: 6px; }

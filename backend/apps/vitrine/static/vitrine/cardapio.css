@@ -205,3 +205,18 @@ textarea { min-height: 64px; resize: vertical; }
 .dica-cep.ok { color: #1f8a4c; }
 .dica-cep.erro { color: #c0392b; }
 @media (max-width: 380px) { .linha-cep { grid-template-columns: 1fr; } .linha-cep .dica-cep { padding-bottom: 0; } }
+
+/* previsão de chegada, foto da entrega, pedir de novo, combos, horários */
+.previsao { text-align: center; }
+.previsao-min { font-size: 28px; font-weight: 800; color: var(--cor); margin: 4px 0; }
+.foto-entrega { width: 100%; max-height: 320px; object-fit: cover; border-radius: 12px; margin-top: 8px; }
+.repetir { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.repetir .txt { min-width: 0; }
+.repetir .txt small { display: block; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo-itens { font-size: 13px; color: var(--suave); margin-top: 2px; }
+.combo-economia { display: inline-block; font-size: 12px; font-weight: 700; color: #1f8a4c; background: #e5f5ec; border-radius: 999px; padding: 2px 8px; margin-top: 4px; }
+.preco-de { text-decoration: line-through; color: var(--suave); font-size: 13px; margin-right: 6px; }
+.fora-horario { opacity: .55; }
+.horario-cat { font-size: 13px; color: var(--suave); margin: -4px 0 8px; }
+.sugestao-combo { position: fixed; left: 12px; right: 12px; bottom: 84px; z-index: 30; background: #fff; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.18); padding: 12px; display: flex; gap: 10px; align-items: center; }
+.sugestao-combo .txt { flex: 1; font-size: 14px; }

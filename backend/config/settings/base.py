@@ -166,6 +166,9 @@ APFOOD = {
     "DEMO_SLUG": env("APFOOD_DEMO_SLUG", default="testehh"),
     # Push (Firebase): JSON da conta de serviço em base64. Vazio = sem push.
     "FCM_CREDENCIAIS": env("APFOOD_FCM_CREDENCIAIS", default=""),
+    # IA para ler cardápio por foto/PDF (Claude API). Sem a chave: só pelo texto colado / PDF com texto.
+    "IA_CHAVE": env("APFOOD_ANTHROPIC_KEY", default=""),
+    "IA_MODELO": env("APFOOD_IA_MODELO", default="claude-sonnet-5-5"),
     # Atualização automática do PDV: versão publicada, link do .exe e SHA-256 (gerados pela CI)
     "PDV_VERSAO": env("APFOOD_PDV_VERSAO", default=""),
     "PDV_URL": env("APFOOD_PDV_URL", default=""),

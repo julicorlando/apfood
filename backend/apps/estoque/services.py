@@ -87,7 +87,8 @@ def consumo_do_pedido(pedido) -> dict[str, Decimal]:
     • produto com controla_estoque → baixa ele mesmo;
     • produto com baixar_insumos  → baixa a ficha técnica × fator da variação;
     • item com N sabores          → cada sabor baixa 1/N da sua ficha;
-    • adicional com insumo         → baixa quantidade_insumo × qtd do adicional.
+    • adicional com insumo         → baixa quantidade_insumo × qtd do adicional;
+    • combo                        → baixa cada item do combo (com a regra de estoque dele).
     """
     consumo: dict[str, Decimal] = defaultdict(lambda: ZERO)
 
@@ -115,6 +116,12 @@ def consumo_do_pedido(pedido) -> dict[str, Decimal]:
                 consumo[str(item.produto_id)] += qtd
             if item.produto.baixar_insumos:
                 ficha(item.produto, qtd * fator_var)
+            for ci in item.produto.componentes.select_related("produto"):  # combo: baixa cada item dele
+                comp = ci.produto
+                if comp.controla_estoque:
+                    consumo[str(comp.id)] += qtd * ci.quantidade
+                if comp.baixar_insumos:
+                    ficha(comp, qtd * ci.quantidade)
         for ad in item.adicionais.all():
             a = ad.adicional
             if a and a.insumo_id and a.quantidade_insumo and a.insumo.controla_estoque:

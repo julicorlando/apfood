@@ -11,10 +11,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         total = {"reconquista": 0, "aniversario": 0}
+        from apps.lojas import resumo_diario
+
+        total["resumo"] = 0
         for loja in Loja.objects.filter(ativa=True, empresa__ativa=True).select_related("empresa"):
+            if resumo_diario.rodar(loja):
+                total["resumo"] += 1
             if not (loja.reconquista_ativa or loja.aniversario_ativo):
                 continue
             r = reconquista.rodar(loja)
-            for k in total:
+            for k in ("reconquista", "aniversario"):
                 total[k] += r[k]
         self.stdout.write(f"rotinas: {total}")
