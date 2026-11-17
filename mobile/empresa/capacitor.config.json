@@ -3,11 +3,15 @@
   "appName": "ApFood Empresa",
   "webDir": "www",
   "server": {
-    "url": "https://apfood.axionwebdigital.com.br/painel/",
-    "allowNavigation": ["apfood.axionwebdigital.com.br"],
+    "url": "https://apfood.axionwebdigital.com.br/painel/?app=1",
+    "allowNavigation": [
+      "apfood.axionwebdigital.com.br"
+    ],
     "cleartext": false
   },
   "android": {
-    "allowMixedContent": false
-  }
+    "allowMixedContent": false,
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "appendUserAgent": "ApFoodEmpresa/1.0.1"
 }

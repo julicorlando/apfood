@@ -101,8 +101,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--cor); outline: n
 .cartao { background: var(--cartao); border-radius: var(--raio); box-shadow: var(--sombra); padding: 18px; }
 .cartao + .cartao { margin-top: 16px; }
 .grade { display: grid; gap: 16px; }
-.grade-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.grade-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grade-2 { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.grade-3 { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 .grade-kpi { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .kpi { background: var(--cartao); border-radius: var(--raio); box-shadow: var(--sombra); padding: 16px; }
 .kpi-rotulo { color: var(--suave); font-size: 13px; }
@@ -261,3 +261,49 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .qr-whatsapp { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin: 14px 0; }
 .qr-whatsapp img { background: #fff; padding: 8px; border-radius: 10px; border: 1px solid var(--linha); }
 .passos-qr { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 360px; }
+
+/* botão "ver pedido" do PDV em telas estreitas (carrinho fica abaixo dos produtos) */
+.pdv-ir-carrinho { display: none; }
+@media (max-width: 1000px) {
+  .pdv-ir-carrinho { display: flex; justify-content: space-between; align-items: center; gap: 10px; position: sticky; bottom: 12px; z-index: 6;
+    margin-top: 12px; width: 100%; padding: 14px 16px; border: 0; border-radius: 12px; background: var(--cor); color: #fff; font-weight: 800;
+    font-size: 16px; box-shadow: 0 6px 18px rgba(242,106,15,.35); cursor: pointer; }
+  .pdv-ir-carrinho[data-vazio] { display: none; }
+}
+
+/* modais ocupam a tela no celular */
+@media (max-width: 600px) {
+  .modal-fundo { padding: 0; align-items: stretch; }
+  .modal, .modal-pequeno, .modal-grande { max-width: none; max-height: none; min-height: 100%; border-radius: 0; }
+  .modal-corpo { flex: 1; padding: 16px; }
+  .modal-rodape { position: sticky; bottom: 0; background: var(--cartao); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .modal-rodape .botao { flex: 1 1 auto; }
+  .barra-ferramentas input[type=search] { max-width: none; flex: 1 1 100%; }
+}
+
+/* ---------- App ApFood Empresa: só operação, abas embaixo, qualquer tela ---------- */
+.abas-app { display: none; }
+.modo-app .menu, .modo-app #abrir-menu, .modo-app .fundo-menu { display: none !important; }
+.modo-app .topo { padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top)); }
+.modo-app .conteudo { max-width: none; padding: 16px; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+.modo-app .abas-app { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--cartao); border-top: 1px solid var(--linha); box-shadow: 0 -4px 16px rgba(0,0,0,.06); padding-bottom: env(safe-area-inset-bottom); }
+.abas-app a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 4px 10px; min-height: 60px;
+  color: var(--suave); text-decoration: none; font-size: 12px; font-weight: 600; }
+.abas-app a .icone { font-size: 22px; line-height: 1; filter: grayscale(1); opacity: .75; }
+.abas-app a.ativo { color: var(--cor-escura); }
+.abas-app a.ativo .icone { filter: none; opacity: 1; }
+.modo-app .pdv-ir-carrinho { bottom: calc(76px + env(safe-area-inset-bottom)); }
+.modo-app .modal-fundo { z-index: 60; }
+/* tablet/PC deitado: abas maiores e centralizadas */
+@media (min-width: 900px) {
+  .abas-app a { flex-direction: row; gap: 8px; font-size: 15px; min-height: 58px; }
+  .modo-app .abas-app { padding-left: max(0px, calc((100vw - 900px) / 2)); padding-right: max(0px, calc((100vw - 900px) / 2)); }
+}
+/* toque: alvos maiores */
+@media (pointer: coarse) {
+  .modo-app .pdv-produto { min-height: 96px; }
+  .modo-app .qtd button { width: 36px; height: 36px; }
+  .modo-app .botao { min-height: 42px; }
+}
+.modo-app .avisos { bottom: calc(84px + env(safe-area-inset-bottom)); }
