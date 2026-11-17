@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from apfood_core.enums import PapelUsuario, StatusAssinatura
 from django import forms
+from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
@@ -25,7 +26,7 @@ from .models import Plano
 
 DIAS_TRIAL_PADRAO = 14
 MAX_CADASTROS_POR_IP_HORA = 5
-RESERVADOS = {"app", "apps", "admin", "api", "painel", "static", "media", "health", "pedido", "ws", "planos", "cadastro", "entrega",
+RESERVADOS = {"app", "apps", "empresas", "admin", "api", "painel", "static", "media", "health", "pedido", "ws", "planos", "cadastro", "entrega",
               "termos", "privacidade"}
 
 
@@ -115,5 +116,8 @@ def planos(request):
             return redirect("/painel/#/loja")
     else:
         form = FormCadastro(initial={"plano": planos_publicos[0].pk if planos_publicos else None})
+    demo = settings.APFOOD.get("DEMO_SLUG") or "testehh"
+    demo = demo if Loja.objects.filter(slug=demo, ativa=True, empresa__ativa=True).exists() else ""
     return render(request, "plataforma/planos.html", {"form": form, "planos": planos_publicos,
-                                                      "dias_trial": DIAS_TRIAL_PADRAO})
+                                                      "dias_trial": DIAS_TRIAL_PADRAO, "demo": demo,
+                                                      "erro": request.method == "POST"})

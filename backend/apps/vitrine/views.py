@@ -17,8 +17,8 @@ URL_RELEASES_PDV = "https://github.com/julicorlando/apfood/releases/latest"
 
 
 @cache_control(max_age=300, public=True)
-def inicio(request):
-    """Página inicial do domínio: leva ao painel e ao download do PDV."""
+def empresas(request):
+    """“Login empresas”: leva ao painel, ao teste grátis e aos downloads (PDV e apps)."""
     url_pdv = settings.APFOOD.get("PDV_URL") or URL_RELEASES_PDV
     return render(request, "vitrine/inicio.html", {"url_pdv": url_pdv})
 
@@ -55,7 +55,7 @@ def cardapio_mesa(request, slug, token):
 
 
 def app_cliente(request):
-    """App do cliente (também é o que o APK "ApFood" abre): restaurantes da região."""
+    """Página inicial e app do cliente (o APK "ApFood" abre /app/): restaurantes da região."""
     return render(request, "vitrine/app.html", {"cor": "#f26a0f"})
 
 

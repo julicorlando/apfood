@@ -5,6 +5,8 @@
   const $ = (s) => document.querySelector(s);
   const LS_LOCAL = "apfood_app_local";
   try { localStorage.setItem("apfood_modo_app", "1"); } catch (e) { /* ok */ }
+  // no APK do cliente não mostra o acesso das empresas (elas têm o app próprio)
+  if (window.Capacitor) { const le = document.getElementById("login-empresas"); if (le) le.remove(); }
 
   function el(tag, attrs, filhos) {
     const n = document.createElement(tag);

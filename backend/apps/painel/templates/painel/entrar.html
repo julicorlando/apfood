@@ -12,7 +12,7 @@
   <main class="entrar">
     <form method="post" class="entrar-cartao" novalidate>
       {% csrf_token %}
-      <a href="/" class="marca marca-grande"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
+      <a href="/empresas/" class="marca marca-grande"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
       <p class="entrar-sub">Entre para gerenciar sua loja</p>
       {% if form.non_field_errors %}
         <div class="alerta alerta-erro" role="alert">

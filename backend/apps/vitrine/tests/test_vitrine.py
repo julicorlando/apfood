@@ -90,8 +90,10 @@ def test_fluxo_completo_pedido_online_e_acompanhamento(loja, cardapio):
 
 
 @pytest.mark.django_db
-def test_pagina_inicial_leva_ao_painel(client):
-    resposta = client.get("/")
+def test_pagina_inicial_e_o_explorador_e_empresas_tem_o_login(client):
+    html = client.get("/").content.decode()
+    assert "vitrine/app.js" in html and 'href="/empresas/"' in html
+    resposta = client.get("/empresas/")
     assert resposta.status_code == 200
     html = resposta.content.decode()
     assert 'href="/painel/"' in html
@@ -142,5 +144,5 @@ def test_paginas_do_app(loja):
     r = c.get("/app/baixar/cliente/")
     assert r.status_code == 302 and r["Location"].endswith("/ApFood-Cliente.apk")
     assert c.get("/app/baixar/outro/").status_code == 404
-    assert "ApFood-Empresa" not in c.get("/").content.decode()  # home só tem os links /app/baixar/
-    assert "/app/baixar/empresa/" in c.get("/").content.decode()
+    assert "ApFood-Empresa" not in c.get("/empresas/").content.decode()  # só os links /app/baixar/
+    assert "/app/baixar/empresa/" in c.get("/empresas/").content.decode()
