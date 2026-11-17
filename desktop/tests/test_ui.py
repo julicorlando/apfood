@@ -140,6 +140,8 @@ def test_janela_abre_todas_as_telas(ctx):
 
     j = JanelaPrincipal(ctx)
     for linha in range(len(JanelaPrincipal.MENU) - 1):  # menos "Trocar operador"
+        if JanelaPrincipal.MENU[linha][0] == "Painel web":
+            continue  # abre o navegador
         j.menu.setCurrentRow(linha)
         assert j.pilha.currentWidget() is j.paginas[linha]
     j.p_venda.novo_delivery()
@@ -309,3 +311,42 @@ def test_dialogo_pagamento_parcial_da_mesa(ctx):
     d2.valor.setText("10,00")
     d2.accept()
     assert d2.result() == 0
+
+
+
+def test_seletor_de_impressora_e_modo_driver(ctx):
+    from apfood_pdv.ui.paginas.gestao import SeletorImpressora
+
+    s = SeletorImpressora("windows:HP LaserJet")
+    assert s.nome.currentText() == "HP LaserJet" and s.modo.currentData() == "driver" and s.valor() == "windows:HP LaserJet"
+    s.modo.setCurrentIndex(0)
+    assert s.valor() == "HP LaserJet"  # térmica ESC/POS (RAW), como antes
+    s.nome.setCurrentText("192.168.0.50:9100")
+    assert s.valor() == "192.168.0.50:9100" and not s.modo.isEnabled()
+    assert SeletorImpressora("").valor() == ""
+
+
+def test_impressora_do_windows_inexistente(ctx):
+    from apfood_pdv.impressao import ErroImpressao, descrever, imprimir
+
+    with pytest.raises(ErroImpressao, match="não está instalada"):
+        imprimir("windows:Impressora Que Nao Existe", ["teste"])
+    assert "driver" in descrever("windows:X") and "rede" in descrever("10.0.0.1:9100")
+
+
+def test_pedido_mostra_entregador_codigo_e_agendado(ctx):
+    from apfood_pdv.ui.paginas.pedidos import PaginaPedidos
+
+    pg = PaginaPedidos(ctx)
+    p = {"id": "p1", "numero": 7, "status": "PRONTO", "tipo_atendimento": "ENTREGA", "canal": "DELIVERY",
+         "entregador": "e1", "entregador_nome": "Rui", "codigo_retirada": "4821", "agendado_para": "2026-11-18T19:30:00-03:00",
+         "criado_em": "2026-11-17T12:00:00-03:00", "itens": [], "pagamentos": [], "total_centavos": 0, "subtotal_centavos": 0,
+         "taxa_entrega_centavos": 0, "desconto_centavos": 0, "nome_cliente": "Ana"}
+    pg.pedidos = [p]
+    from apfood_pdv.ui.util import preencher_tabela
+
+    preencher_tabela(pg.tabela, ["Nº"], [["#7"]], [p])
+    pg.tabela.selectRow(0)
+    texto = pg.detalhe.toPlainText()
+    assert "CÓDIGO DE RETIRADA: 4821" in texto and "Entregador: Rui" in texto and "AGENDADO PARA 18/11 às 19:30" in texto
+    assert not pg.btn_chamar.isEnabled()  # já tem entregador

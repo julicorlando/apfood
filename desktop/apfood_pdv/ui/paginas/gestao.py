@@ -77,6 +77,16 @@ class PaginaCaixa(QWidget):
         linhas = [[k.replace("_", " ").title(), reais(v)] for k, v in (r.get("totais_por_tipo") or {}).items()]
         if "esperado" in r:
             linhas += [["— esperado " + FORMAS.get(k, k), reais(v)] for k, v in r["esperado"].items()]
+        d = r.get("delivery")  # gerente/administrador: delivery do período deste caixa
+        if d and d.get("pedidos"):
+            linhas += [["", ""], [f"🛵 DELIVERY — {d['pedidos']} entrega(s)", reais(d["total_centavos"])],
+                       ["— taxas de entrega", reais(d["taxas_centavos"])],
+                       ["— pago online", reais(d["online_centavos"])],
+                       ["— recebido na entrega", reais(d["na_entrega_centavos"])]]
+            linhas += [[f"     na entrega · {FORMAS.get(k, k)}", reais(v)] for k, v in d.get("na_entrega", {}).items()]
+            if d.get("a_receber_centavos"):
+                linhas.append(["— A RECEBER (entregue sem pagamento)", reais(d["a_receber_centavos"])])
+            linhas += [[f"     {e['entregador']} ({e['entregas']})", reais(e["total_centavos"])] for e in d.get("por_entregador", [])]
         preencher_tabela(self.resumo, ["Movimento", "Valor"], linhas)
 
     def abrir(self):
@@ -398,6 +408,53 @@ class PaginaRelatorios(QWidget):
 
 
 # =============================================================================
+class SeletorImpressora(QWidget):
+    """Impressora instalada no PC (lista) ou digitada (IP:porta, arquivo:...), e o modo:
+    térmica ESC/POS (RAW: corta o papel e abre a gaveta) ou comum (driver do Windows: qualquer impressora)."""
+
+    MODOS = [("Térmica (ESC/POS)", "raw"), ("Comum (driver do Windows)", "driver")]
+
+    def __init__(self, valor: str, vazio: str = "", parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QComboBox, QHBoxLayout
+
+        from ...impressao_qt import impressoras_instaladas
+
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        self.nome = QComboBox()
+        self.nome.setEditable(True)
+        self.nome.setMinimumWidth(320)
+        self.nome.addItem("")
+        self.nome.addItems(impressoras_instaladas())
+        self.nome.lineEdit().setPlaceholderText(vazio or "escolha na lista, ou digite 192.168.0.50:9100 / arquivo:C:/cupons")
+        self.modo = QComboBox()
+        for rot, v in self.MODOS:
+            self.modo.addItem(rot, v)
+        valor = (valor or "").strip()
+        driver = valor.startswith("windows:")
+        self.nome.setCurrentText(valor.removeprefix("windows:"))
+        self.modo.setCurrentIndex(1 if driver else 0)
+        self.nome.currentTextChanged.connect(self._ajustar)
+        h.addWidget(self.nome, 1)
+        h.addWidget(self.modo)
+        self._ajustar()
+
+    @staticmethod
+    def _rede_ou_arquivo(t: str) -> bool:
+        host, _, porta = t.rpartition(":")
+        return t.startswith("arquivo:") or bool(host and porta.isdigit())
+
+    def _ajustar(self, *_):
+        self.modo.setEnabled(bool(self.nome.currentText().strip()) and not self._rede_ou_arquivo(self.nome.currentText().strip()))
+
+    def valor(self) -> str:
+        t = self.nome.currentText().strip()
+        if not t or self._rede_ou_arquivo(t) or self.modo.currentData() == "raw":
+            return t
+        return f"windows:{t}"
+
+
 class PaginaConfig(QWidget):
     def __init__(self, ctx, parent=None):
         super().__init__(parent)
@@ -407,10 +464,8 @@ class PaginaConfig(QWidget):
         lay.addWidget(_titulo("Configurações deste computador"))
         f = QFormLayout()
         self.terminal = QLineEdit(cfg.nome_terminal)
-        self.imp_caixa = QLineEdit(cfg.impressora_caixa)
-        self.imp_caixa.setPlaceholderText('ex.: 192.168.0.50:9100  |  EPSON TM-T20  |  arquivo:C:/cupons')
-        self.imp_cozinha = QLineEdit(cfg.impressora_cozinha_padrao)
-        self.imp_cozinha.setPlaceholderText("vazio = usa a do setor ou a do caixa")
+        self.imp_caixa = SeletorImpressora(cfg.impressora_caixa)
+        self.imp_cozinha = SeletorImpressora(cfg.impressora_cozinha_padrao, "vazio = usa a do setor ou a do caixa")
         self.bobina = QComboBox()
         self.bobina.addItem("80 mm (48 colunas)", 48)
         self.bobina.addItem("58 mm (32 colunas)", 32)
@@ -425,6 +480,11 @@ class PaginaConfig(QWidget):
         f.addRow("Nome do terminal", self.terminal)
         f.addRow("Impressora do caixa", self.imp_caixa)
         f.addRow("Impressora da cozinha", self.imp_cozinha)
+        dica = QLabel("Térmica (ESC/POS): corta o papel e abre a gaveta. Comum: qualquer impressora instalada no "
+                      "Windows (laser, jato de tinta ou térmica só com driver).")
+        dica.setWordWrap(True)
+        dica.setStyleSheet("color:#66666d")
+        f.addRow("", dica)
         f.addRow("Bobina", self.bobina)
         f.addRow(self.auto_cozinha)
         f.addRow(self.som)
@@ -433,7 +493,8 @@ class PaginaConfig(QWidget):
         lay.addLayout(f)
         h = QHBoxLayout()
         h.addWidget(botao("Salvar", self.salvar, "primario"))
-        h.addWidget(botao("Imprimir teste", self.teste))
+        h.addWidget(botao("Testar impressora do caixa", self.teste))
+        h.addWidget(botao("Testar da cozinha", lambda: self.teste(cozinha=True)))
         h.addWidget(botao("Sincronizar cardápio agora", self.sincronizar))
         h.addWidget(botao("Operações recusadas pelo servidor", self.rejeitadas))
         h.addStretch()
@@ -445,21 +506,26 @@ class PaginaConfig(QWidget):
 
     def salvar(self):
         c = self.ctx.cfg
-        c.nome_terminal, c.impressora_caixa = self.terminal.text().strip() or "Caixa 1", self.imp_caixa.text().strip()
-        c.impressora_cozinha_padrao, c.largura_bobina = self.imp_cozinha.text().strip(), self.bobina.currentData()
+        c.nome_terminal, c.impressora_caixa = self.terminal.text().strip() or "Caixa 1", self.imp_caixa.valor()
+        c.impressora_cozinha_padrao, c.largura_bobina = self.imp_cozinha.valor(), self.bobina.currentData()
         c.imprimir_cozinha_automatico, c.som_novo_pedido = self.auto_cozinha.isChecked(), self.som.isChecked()
         c.intervalo_sync_s = self.sync.value()
         c.salvar()
         self.ctx.status("Configurações salvas")
 
-    def teste(self):
+    def teste(self, cozinha: bool = False):
         from apfood_core.cupom import Linha
 
+        from ...impressao import descrever
+
         self.salvar()
+        destino = (self.ctx.cfg.impressora_cozinha_padrao or self.ctx.cfg.impressora_caixa) if cozinha else self.ctx.cfg.impressora_caixa
         linhas = [Linha("APFOOD - TESTE DE IMPRESSAO", negrito=True, alinhamento="centro"),
+                  Linha(f"Impressora: {descrever(destino)}"[: self.bobina.currentData()]),
                   Linha("Acentuação: ação, café, pão, maçã"), Linha("-" * self.bobina.currentData()),
                   Linha("Texto grande", grande=True), Linha("https://apfood.app", qrcode=True), Linha(corte=True)]
-        seguro(self, self.ctx.imprimir, linhas)
+        if seguro(self, self.ctx.imprimir, linhas, destino) is not None:
+            self.ctx.status(f"Teste enviado para {descrever(destino)}")
 
     def sincronizar(self):
         r = seguro(self, self.ctx.sincronizador.ciclo)

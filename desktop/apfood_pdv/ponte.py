@@ -52,9 +52,14 @@ class Ponte:
 
     def status(self) -> dict:
         cfg = self.config()
+        from .impressao import descrever
+        from .impressao_qt import impressoras_instaladas
+
         return {"app": "ApFoodPDV", "versao": __version__, "terminal": cfg.nome_terminal,
                 "caixa": bool(cfg.impressora_caixa),
-                "cozinha": bool(cfg.impressora_cozinha_padrao or cfg.impressora_caixa)}
+                "cozinha": bool(cfg.impressora_cozinha_padrao or cfg.impressora_caixa),
+                "impressora_caixa": descrever(cfg.impressora_caixa),
+                "impressoras": impressoras_instaladas()}
 
     def imprimir(self, pedido: dict) -> dict:
         linhas = pedido.get("linhas")

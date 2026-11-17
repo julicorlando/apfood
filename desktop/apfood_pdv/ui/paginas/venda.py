@@ -130,6 +130,28 @@ class PaginaVenda(QWidget):
         self.logradouro, self.numero, self.complemento = QLineEdit(), QLineEdit(), QLineEdit()
         self.bairro, self.referencia = QLineEdit(), QLineEdit()
         self.numero.setMaximumWidth(80)
+        # CEP → rua, bairro e cidade (ViaCEP); o bairro continua editável, com a lista dos bairros cadastrados
+        self.cep = QLineEdit()
+        self.cep.setPlaceholderText("00000-000 (preenche o endereço)")
+        self.cep.setMaximumWidth(170)
+        self.cep.textEdited.connect(self._cep_digitado)
+        self.lbl_cep = QLabel("")
+        self.lbl_cep.setStyleSheet("color:#66666d")
+        self._ultimo_cep = ""
+        self.cidade = ""
+        rc = QHBoxLayout()
+        rc.addWidget(self.cep)
+        rc.addWidget(self.lbl_cep, 1)
+        fd.addRow("CEP", rc)
+        from PySide6.QtCore import QStringListModel
+        from PySide6.QtWidgets import QCompleter
+
+        self._modelo_bairros = QStringListModel([])
+        self._completar = QCompleter(self._modelo_bairros, self)
+        self._completar.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completar.setFilterMode(Qt.MatchContains)
+        self.bairro.setCompleter(self._completar)
+        self.bairro.setPlaceholderText("digite ou escolha na lista ▾")
         r1 = QHBoxLayout()
         r1.addWidget(self.logradouro, 1)
         r1.addWidget(QLabel("Nº"))
@@ -138,6 +160,7 @@ class PaginaVenda(QWidget):
         fd.addRow("Complemento", self.complemento)
         r2 = QHBoxLayout()
         r2.addWidget(self.bairro, 1)
+        r2.addWidget(botao("▾ Bairros", self._lista_bairros))
         r2.addWidget(botao("Calcular taxa", self.calcular_taxa))
         fd.addRow("Bairro", r2)
         fd.addRow("Referência", self.referencia)
@@ -461,8 +484,63 @@ class PaginaVenda(QWidget):
         campos = (self.logradouro, self.numero, self.complemento, self.bairro, self.referencia)
         for campo, chave in zip(campos, ("logradouro", "numero", "complemento", "bairro", "referencia"), strict=True):
             campo.setText((e or {}).get(chave, "") or "")
+        self.cep.setText((e or {}).get("cep", "") or "")
+        self._ultimo_cep = "".join(c for c in self.cep.text() if c.isdigit())
+        self.cidade = (e or {}).get("cidade", "") or ""
         if e:
             self.calcular_taxa(silencioso=True)
+
+    # ---------------------------------------------------------------- CEP e bairros
+    def _bairros_cadastrados(self) -> list[str]:
+        nomes = {z.get("nome", "").strip() for z in self.ctx.banco.listar("zonas_entrega")
+                 if z.get("tipo") == "BAIRRO" and z.get("ativa", True) and not z.get("excluido_em")}
+        return sorted(n for n in nomes if n)
+
+    def _lista_bairros(self):
+        self._modelo_bairros.setStringList(self._bairros_cadastrados())
+        self._completar.setCompletionPrefix("")
+        self.bairro.setFocus()
+        self._completar.complete()
+
+    def _cep_digitado(self, texto: str):
+        cep = "".join(c for c in texto if c.isdigit())
+        if len(cep) != 8 or cep == self._ultimo_cep:
+            return
+        self._ultimo_cep = cep
+        self.cep.setText(f"{cep[:5]}-{cep[5:]}")
+        self.lbl_cep.setText("Buscando…")
+        from PySide6.QtCore import QUrl
+        from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+
+        if not hasattr(self, "_rede"):
+            self._rede = QNetworkAccessManager(self)
+        resp = self._rede.get(QNetworkRequest(QUrl(f"https://viacep.com.br/ws/{cep}/json/")))
+        resp.finished.connect(lambda: self._cep_resposta(resp))
+
+    def _cep_resposta(self, resp):
+        import json
+        import unicodedata
+
+        try:
+            d = json.loads(bytes(resp.readAll()).decode() or "{}")
+        except ValueError:
+            d = {"erro": True}
+        resp.deleteLater()
+        if not d or d.get("erro"):
+            self.lbl_cep.setText("CEP não encontrado (ou sem internet): preencha o endereço.")
+            return
+        sem = lambda t: unicodedata.normalize("NFD", t or "").encode("ascii", "ignore").decode().lower().strip()  # noqa: E731
+        cadastrados = self._bairros_cadastrados()
+        self._modelo_bairros.setStringList(cadastrados)
+        igual = next((b for b in cadastrados if sem(b) == sem(d.get("bairro"))), None)
+        if d.get("logradouro"):
+            self.logradouro.setText(d["logradouro"])
+        self.bairro.setText(igual or d.get("bairro") or self.bairro.text())
+        self.cidade = d.get("localidade", "")
+        dica = "" if igual or not cadastrados else " · bairro fora da lista: confira ou escolha em ▾ Bairros"
+        self.lbl_cep.setText(f"✓ {d.get('localidade', '')} - {d.get('uf', '')}{dica}")
+        self.numero.setFocus()
+        self.calcular_taxa(silencioso=True)
 
     def calcular_taxa(self, silencioso: bool = False):
         if not self.bairro.text().strip():
@@ -501,6 +579,7 @@ class PaginaVenda(QWidget):
                 nome_cliente=self.nome.text().strip(), telefone_cliente=self.telefone.text().strip(),
                 endereco={"logradouro": self.logradouro.text().strip(), "numero": self.numero.text().strip(),
                           "complemento": self.complemento.text().strip(), "bairro": self.bairro.text().strip(),
+                          "cep": self.cep.text().strip(), "cidade": self.cidade,
                           "referencia": self.referencia.text().strip()},
                 taxa_entrega_centavos=self._valor(self.taxa), entregador_id=self.entregador.currentData(),
                 troco_para_centavos=self._valor(self.troco_para) or None,
@@ -596,8 +675,10 @@ class PaginaVenda(QWidget):
         for campo in (self.nome_balcao, self.senha, self.mesa_balcao, self.telefone_balcao, self.telefone, self.nome,
                       self.logradouro,
                       self.numero, self.complemento, self.bairro, self.referencia, self.taxa, self.troco_para,
-                      self.desconto, self.observacao, self.cpf, self.busca):
+                      self.desconto, self.observacao, self.cpf, self.busca, self.cep):
             campo.clear()
+        self._ultimo_cep, self.cidade = "", ""
+        self.lbl_cep.clear()
         self.enderecos.clear()
         self.cliente = None
         self._mostrar_cashback()

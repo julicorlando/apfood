@@ -50,19 +50,44 @@ export function ouvir(f) { ouvintes.add(f); return () => ouvintes.delete(f); }
 
 // Sinal sonoro curto (sem arquivo de áudio).
 let ctx = null;
-export function bipe() {
+// Volume do alerta de pedido (0 a 1; padrão máximo). Ajustável em Configurações → Impressão.
+export function volumeAlerta() {
+  try { const v = parseFloat(localStorage.getItem("apfood_volume_alerta")); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; } catch { return 1; }
+}
+export function definirVolumeAlerta(v) {
+  try { localStorage.setItem("apfood_volume_alerta", String(v)); } catch { /* ok */ }
+}
+
+// Alerta de pedido novo: onda quadrada (bem audível na cozinha), 3 toques, repetido 3 vezes, com compressor
+// para soar alto sem distorcer.
+export function bipe(repeticoes = 3) {
   try {
     ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-    const agora = ctx.currentTime;
-    for (const [i, freq] of [880, 1175].entries()) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0.15, agora + i * 0.18);
-      g.gain.exponentialRampToValueAtTime(0.001, agora + i * 0.18 + 0.16);
-      o.connect(g).connect(ctx.destination);
-      o.start(agora + i * 0.18);
-      o.stop(agora + i * 0.18 + 0.17);
+    if (ctx.state === "suspended") ctx.resume();
+    const vol = volumeAlerta();
+    if (!vol) return;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -6;
+    comp.ratio.value = 4;
+    const mestre = ctx.createGain();
+    mestre.gain.value = vol;
+    comp.connect(mestre).connect(ctx.destination);
+    const inicio = ctx.currentTime + 0.02;
+    for (let r = 0; r < repeticoes; r++) {
+      for (const [i, freq] of [988, 1319, 1760].entries()) {
+        const t = inicio + r * 1.1 + i * 0.2;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "square";
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.9, t + 0.01);
+        g.gain.setValueAtTime(0.9, t + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+        o.connect(g).connect(comp);
+        o.start(t);
+        o.stop(t + 0.19);
+      }
     }
   } catch { /* navegador sem áudio */ }
 }
