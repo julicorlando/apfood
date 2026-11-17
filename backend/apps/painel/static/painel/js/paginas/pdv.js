@@ -440,12 +440,42 @@ export function pdv() {
 
       function editarEndereco() {
         const e = estado.endereco || {};
-        const campos = [["logradouro", "Rua"], ["numero", "Número"], ["complemento", "Complemento"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["referencia", "Referência"]];
+        const campos = [["cep", "CEP"], ["logradouro", "Rua"], ["numero", "Número"], ["complemento", "Complemento"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["referencia", "Referência"]];
         const entradas = Object.fromEntries(campos.map(([k]) => [k, h("input", { type: "text", value: e[k] || "" })]));
+        entradas.cep.setAttribute("inputmode", "numeric");
+        entradas.cep.setAttribute("placeholder", "00000-000 (preenche o endereço)");
+        // bairros com taxa cadastrada: sugestões no campo (dá para digitar outro)
+        const listaBairros = h("datalist", { id: "pdv-bairros" });
+        entradas.bairro.setAttribute("list", "pdv-bairros");
+        lista("/api/zonas/", { ativa: "true" }).then((zs) => trocar(listaBairros,
+          [...new Set(zs.filter((z) => z.tipo === "BAIRRO").map((z) => z.nome))].sort().map((n) => h("option", { value: n })))).catch(() => {});
+        const dicaCep = h("small", { class: "muted" });
+        let ultimoCep = (e.cep || "").replace(/\D/g, "");
+        const semAcento = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        const buscarCep = async () => {
+          const cep = entradas.cep.value.replace(/\D/g, "");
+          if (cep.length === 8) entradas.cep.value = `${cep.slice(0, 5)}-${cep.slice(5)}`;
+          if (cep.length !== 8 || cep === ultimoCep) return;
+          ultimoCep = cep;
+          dicaCep.textContent = "Buscando…";
+          try {
+            const d = await (await fetch(`https://viacep.com.br/ws/${cep}/json/`)).json();
+            if (d.erro) { dicaCep.textContent = "CEP não encontrado."; return; }
+            const cadastrado = [...listaBairros.options].map((o) => o.value).find((b) => semAcento(b) === semAcento(d.bairro));
+            if (d.logradouro) entradas.logradouro.value = d.logradouro;
+            entradas.bairro.value = cadastrado || d.bairro || entradas.bairro.value;
+            entradas.cidade.value = d.localidade || entradas.cidade.value;
+            dicaCep.textContent = `✓ ${d.localidade || ""}${d.uf ? ` - ${d.uf}` : ""} · confira o bairro (pode trocar pela lista)`;
+            entradas.numero.focus();
+          } catch { dicaCep.textContent = "Não deu para buscar o CEP agora."; }
+        };
+        entradas.cep.addEventListener("input", buscarCep);
+        entradas.cep.addEventListener("blur", buscarCep);
         const taxa = h("input", { type: "text", inputmode: "decimal", placeholder: "Automática pela zona", value: "" });
         const m = modal({
           titulo: "Endereço de entrega",
-          corpo: h("div", { class: "form-grade" }, campos.map(([k, r]) => h("label", { class: `campo ${k === "logradouro" ? "largo" : ""}` }, h("span", null, r), entradas[k])),
+          corpo: h("div", { class: "form-grade" }, campos.map(([k, r]) => h("label", { class: `campo ${k === "logradouro" ? "largo" : ""}` }, h("span", null, r), entradas[k],
+            k === "cep" ? dicaCep : null)), listaBairros,
             h("label", { class: "campo" }, h("span", null, "Taxa manual (opcional)"), taxa)),
           rodape: [botaoAcao("Usar este endereço", async () => {
             const d = Object.fromEntries(campos.map(([k]) => [k, entradas[k].value.trim()]));
