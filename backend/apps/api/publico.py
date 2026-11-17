@@ -57,6 +57,8 @@ def dados_loja_publica(loja, request) -> dict:
         "pix_online": Integracao.ativa(loja, "PAGAMENTO", "mercadopago") is not None,
         "agendamento": _agendamento(loja),
         "reservas": loja.aceita_reservas,
+        # bairros com taxa cadastrada: sugestões no campo Bairro (o cliente ainda pode digitar outro)
+        "bairros": sorted({z.nome.strip() for z in ZonaEntrega.objects.ativos().filter(loja=loja, ativa=True, tipo="BAIRRO")}),
         "fidelidade": {"selos": loja.fidelidade_selos, "premio": loja.fidelidade_premio_descricao
                        or (f"R$ {loja.fidelidade_premio_centavos / 100:.2f} de crédito".replace(".", ",")
                            if loja.fidelidade_premio_centavos else "")} if loja.fidelidade_selos else None,

@@ -200,3 +200,8 @@ textarea { min-height: 64px; resize: vertical; }
 .totem-senha .btn { max-width: 420px; justify-content: center; }
 .totem-pix { display: grid; justify-items: center; gap: 8px; }
 .totem-pix img { width: min(260px, 60vw); height: auto; }
+.linha-cep { display: grid; grid-template-columns: minmax(130px, 170px) 1fr; gap: 10px; align-items: end; }
+.linha-cep .dica-cep { padding-bottom: 12px; color: var(--suave, #6b6b70); font-size: 13px; }
+.dica-cep.ok { color: #1f8a4c; }
+.dica-cep.erro { color: #c0392b; }
+@media (max-width: 380px) { .linha-cep { grid-template-columns: 1fr; } .linha-cep .dica-cep { padding-bottom: 0; } }

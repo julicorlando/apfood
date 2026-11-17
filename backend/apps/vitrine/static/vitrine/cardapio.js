@@ -450,29 +450,46 @@
         onchange: function () { estado.tipo = v; endereco.classList.toggle("oculto", v !== "ENTREGA"); atualizar(); } }), r]);
     })));
 
+    // bairros com entrega cadastrada: sugestões (o cliente pode escolher outro da lista ou digitar)
+    const listaBairros = el("datalist", { id: "bairros-loja" }, (LOJA.bairros || []).map(function (b) { return el("option", { value: b }); }));
+    const msgCep = el("small", { class: "dica-cep", text: "Digite o CEP para preencher o endereço." });
     const endereco = el("div", { class: estado.tipo === "ENTREGA" ? "" : "oculto" }, [
+      el("div", { class: "linha-cep" }, [campo("cep", "CEP", { inputmode: "numeric", maxlength: "9", placeholder: "00000-000", autocomplete: "postal-code" }), msgCep]),
       el("div", { class: "linha2" }, [campo("logradouro", "Rua *", { autocomplete: "address-line1" }), campo("numero", "Número *", { inputmode: "numeric" })]),
-      el("div", { class: "linha2b" }, [campo("bairro", "Bairro *", {}), campo("cep", "CEP", { inputmode: "numeric", maxlength: "9" })]),
+      campo("bairro", "Bairro *", { list: "bairros-loja", placeholder: (LOJA.bairros || []).length ? "Escolha da lista ou digite" : "" }), listaBairros,
       campo("complemento", "Complemento", { placeholder: "Apto, bloco…" }), campo("referencia", "Ponto de referência", {}),
       msgTaxa,
     ]);
     corpo.appendChild(endereco);
 
-    // CEP → endereço (ViaCEP) e cálculo de taxa
-    f.cep.addEventListener("blur", async function () {
+    // CEP → endereço (ViaCEP): preenche ao completar os 8 números; o bairro continua editável
+    const semAcento = function (t) { return (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); };
+    let ultimoCep = f.cep.value.replace(/\D/g, "");  // endereço salvo: só busca de novo se o CEP mudar
+    async function buscarCep() {
       const cep = f.cep.value.replace(/\D/g, "");
-      if (cep.length !== 8) return;
+      if (cep.length === 8) f.cep.value = cep.slice(0, 5) + "-" + cep.slice(5);
+      if (cep.length !== 8 || cep === ultimoCep) return;
+      ultimoCep = cep;
+      msgCep.className = "dica-cep"; msgCep.textContent = "Buscando o endereço…";
       try {
         const r = await fetch("https://viacep.com.br/ws/" + cep + "/json/");
         const d = await r.json();
-        if (!d.erro) {
-          if (!f.logradouro.value) f.logradouro.value = d.logradouro || "";
-          if (!f.bairro.value) f.bairro.value = d.bairro || "";
-          f.cidade = { value: d.localidade || "" };
-          calcularTaxa();
-        }
-      } catch (e) { /* sem ViaCEP: segue manual */ }
-    });
+        if (d.erro) { msgCep.className = "dica-cep erro"; msgCep.textContent = "CEP não encontrado: preencha o endereço."; return; }
+        if (d.logradouro) f.logradouro.value = d.logradouro;
+        const cadastrado = (LOJA.bairros || []).find(function (b) { return semAcento(b) === semAcento(d.bairro); });
+        f.bairro.value = cadastrado || d.bairro || f.bairro.value;
+        f.cidade = { value: d.localidade || "" };
+        msgCep.className = "dica-cep ok";
+        msgCep.textContent = "✓ " + [d.localidade, d.uf].filter(Boolean).join(" - ") +
+          ((LOJA.bairros || []).length && !cadastrado ? ". Confira o bairro: se quiser, escolha um da lista." : ". Se quiser, troque o bairro.");
+        estado.taxa = null;
+        calcularTaxa();
+        atualizar();
+        (f.logradouro.value ? f.numero : f.logradouro).focus();
+      } catch (e) { msgCep.className = "dica-cep"; msgCep.textContent = "Não deu para buscar o CEP agora: preencha o endereço."; }
+    }
+    f.cep.addEventListener("input", buscarCep);
+    f.cep.addEventListener("blur", buscarCep);
     let tTaxa = null;
     ["bairro", "numero", "logradouro"].forEach(function (n) {
       f[n].addEventListener("input", function () { estado.taxa = null; clearTimeout(tTaxa); tTaxa = setTimeout(calcularTaxa, 700); atualizar(); });
