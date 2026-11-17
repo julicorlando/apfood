@@ -57,3 +57,35 @@ class Fatura(ModeloBase):
 
     def __str__(self):
         return f"{self.empresa} {self.competencia:%m/%Y}"
+
+
+class ConfiguracaoPlataforma(ModeloBase):
+    """Recebimento das assinaturas (uma linha só). O token do Mercado Pago fica
+    cifrado (APFOOD_CHAVE_CRIPTO); sem ele, vale a variável APFOOD_MP_TOKEN_PLATAFORMA."""
+
+    METODOS = [("PIX", "Só Pix (QR Code)"), ("CHECKOUT", "Página do Mercado Pago: Pix, cartão e boleto")]
+
+    mp_token_cifrado = models.TextField(blank=True, editable=False)
+    mp_conta = models.CharField(max_length=120, blank=True, help_text="conta conferida no Mercado Pago")
+    metodo = models.CharField(max_length=10, choices=METODOS, default="CHECKOUT")
+
+    class Meta:
+        db_table = "configuracao_plataforma"
+        verbose_name = "configuração da plataforma"
+
+    @classmethod
+    def atual(cls) -> "ConfiguracaoPlataforma":
+        obj = cls.objects.order_by("criado_em").first()
+        return obj or cls.objects.create()
+
+    def definir_token(self, token: str) -> None:
+        from apps.integracoes.cripto import cifrar
+
+        self.mp_token_cifrado = cifrar({"access_token": token}) if token else ""
+
+    def token(self) -> str:
+        from apps.integracoes.cripto import decifrar
+
+        if self.mp_token_cifrado:
+            return decifrar(self.mp_token_cifrado).get("access_token", "")
+        return ""

@@ -62,9 +62,9 @@ class DialogoValor(QDialog):
 class DialogoItem(QDialog):
     """Monta o item: tamanho, sabores (meio a meio), adicionais, quantidade, observação."""
 
-    def __init__(self, pdv, produto: dict, parent=None):
+    def __init__(self, pdv, produto: dict, parent=None, canal: str = "BALCAO"):
         super().__init__(parent)
-        self.pdv, self.produto = pdv, produto
+        self.pdv, self.produto, self.canal = pdv, produto, canal
         self.setWindowTitle(produto["nome"])
         self.setMinimumWidth(460)
         raiz = QVBoxLayout(self)
@@ -186,7 +186,7 @@ class DialogoItem(QDialog):
         return erros
 
     def _atualizar(self, *_):
-        self.total.setText(reais(self.pdv.precificar_item(self.item())))
+        self.total.setText(reais(self.pdv.precificar_item(self.item(), self.canal)))
 
     def accept(self):
         if erros := self._erros():
@@ -205,13 +205,15 @@ class DialogoPagamento(QDialog):
 
     FORMAS_PDV = ["DINHEIRO", "PIX", "CARTAO_DEBITO", "CARTAO_CREDITO", "VOUCHER", "OUTRO"]
 
-    def __init__(self, total_centavos: int, *, ja_pago: int = 0, pix_fn=None, parent=None, permitir_pendente=False):
+    def __init__(self, total_centavos: int, *, ja_pago: int = 0, pix_fn=None, parent=None, permitir_pendente=False,
+                 permitir_parcial=False):
         super().__init__(parent)
         self.setWindowTitle("Receber pagamento")
         self.setMinimumWidth(420)
         self.total, self.pagamentos, self.pix_fn = total_centavos, [], pix_fn
         self.ja_pago = ja_pago
         self.pendente = False
+        self.permitir_parcial = permitir_parcial  # mesa: recebe só uma parte e a conta continua aberta
         lay = QVBoxLayout(self)
         self.rotulo = QLabel()
         self.rotulo.setProperty("papel", "total")
@@ -239,6 +241,17 @@ class DialogoPagamento(QDialog):
         f.addRow("Recebido (R$)", self.recebido)
         f.addRow("Bandeira", self.bandeira)
         f.addRow("Troco", self.troco)
+        self.pagador = QLineEdit()
+        self.pagador.setPlaceholderText("Ex.: Cliente 1, João (opcional)")
+        self.pagador.setMaxLength(60)
+        if permitir_parcial:
+            f.addRow("Quem paga", self.pagador)
+            dividir = QHBoxLayout()
+            dividir.addWidget(QLabel("Dividir o que falta por:"))
+            for n in (2, 3, 4, 5):
+                dividir.addWidget(botao(str(n), lambda _=False, n=n: self._dividir(n)))
+            dividir.addStretch()
+            f.addRow(dividir)
         lay.addLayout(f)
         self.lista = QListWidget()
         self.lista.setMaximumHeight(100)
@@ -281,7 +294,12 @@ class DialogoPagamento(QDialog):
         self.valor.setText(reais(self.restante).replace("R$ ", "") if self.restante > 0 else "")
         self.lista.clear()
         for p in self.pagamentos:
-            self.lista.addItem(f"{FORMAS[p['forma']]}  {reais(p['valor_centavos'])}")
+            quem = f"  ({p['pagador']})" if p.get("pagador") else ""
+            self.lista.addItem(f"{FORMAS[p['forma']]}  {reais(p['valor_centavos'])}{quem}")
+
+    def _dividir(self, n: int):
+        self.valor.setText(reais(-(-self.restante // n)).replace("R$ ", ""))
+        self._troco()
 
     def _adicionar(self) -> bool:
         try:
@@ -297,7 +315,8 @@ class DialogoPagamento(QDialog):
             QMessageBox.warning(self, "ApFood", "O valor recebido é menor que o pagamento.")
             return False
         self.pagamentos.append({"forma": self._forma_atual(), "valor_centavos": v, "recebido_centavos": r,
-                                "bandeira": self.bandeira.currentText() if self.bandeira.isEnabled() else ""})
+                                "bandeira": self.bandeira.currentText() if self.bandeira.isEnabled() else "",
+                                "pagador": self.pagador.text().strip()})
         self.recebido.clear()
         self._atualizar()
         return True
@@ -325,6 +344,9 @@ class DialogoPagamento(QDialog):
             if not self._adicionar():
                 return
         if self.restante > 0:
+            if self.permitir_parcial and self.pagamentos:
+                super().accept()  # recebeu uma parte: a mesa continua aberta
+                return
             QMessageBox.warning(self, "ApFood", f"Ainda falta {reais(self.restante)}.")
             return
         super().accept()

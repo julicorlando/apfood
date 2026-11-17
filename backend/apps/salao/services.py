@@ -78,11 +78,9 @@ def pedir_conta(comanda, usuario) -> Comanda:
 
 @transaction.atomic
 def reabrir(comanda, usuario) -> Comanda:
-    from apps.pedidos.services import total_pago
-
+    # Pode reabrir mesmo com pagamento parcial: quem ficou continua consumindo
+    # e paga o resto depois (os pagamentos já feitos continuam abatidos).
     c = _travar(comanda, C.FECHANDO)
-    if total_pago(comanda=c):
-        raise ErroNegocio("comanda com pagamento lançado não pode ser reaberta")
     c.status = C.ABERTA
     c.save()
     return recalcular(c)

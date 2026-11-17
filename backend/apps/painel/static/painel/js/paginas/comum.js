@@ -173,11 +173,19 @@ export function receber(alvo) {
       const r = await post(`/api/${alvo.tipo === "comanda" ? "comandas" : "pedidos"}/${alvo.id}/pix/`, { valor_centavos: centavos(valor.value) });
       mostrarPix(r);
     });
+    // Mesa: recebe só a parte de um cliente (a conta continua aberta)
+    const pagador = h("input", { type: "text", maxlength: 60, placeholder: "Ex.: Cliente 1, João (opcional)" });
+    const dividir = alvo.parcial ? h("div", { class: "acoes" }, h("span", { class: "muted" }, "Dividir o que falta por:"),
+      ...[2, 3, 4, 5].map((n) => h("button", { type: "button", class: "botao botao-pequeno", onclick: () => {
+        valor.value = reais(Math.ceil(alvo.restante / n)); atualizar();
+      } }, `${n}`))) : null;
     const corpo = h("div", { class: "grade" },
       h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Falta pagar"), h("div", { class: "kpi-valor" }, dinheiro(alvo.restante))),
       msg,
       h("div", { class: "formas" }, botoes),
-      h("label", { class: "campo" }, h("span", null, "Valor deste pagamento"), valor),
+      h("label", { class: "campo" }, h("span", null, alvo.parcial ? "Valor deste pagamento (pode ser só uma parte)" : "Valor deste pagamento"), valor),
+      dividir,
+      alvo.parcial ? h("label", { class: "campo" }, h("span", null, "Quem está pagando"), pagador) : null,
       blocoDinheiro, blocoCartao,
       h("small", { class: "muted" }, "Pix pela integração Mercado Pago gera o QR Code e confirma sozinho. Sem integração, receba e registre como Pix."),
     );
@@ -185,7 +193,8 @@ export function receber(alvo) {
       msg.hidden = true;
       const v = centavos(valor.value);
       if (v <= 0) { msg.textContent = "Informe o valor."; msg.hidden = false; return; }
-      const corpoReq = { id: uuid(), forma, valor_centavos: v, bandeira: bandeira.value.trim() };
+      if (v > alvo.restante) { msg.textContent = `O valor passa do que falta (${dinheiro(alvo.restante)}).`; msg.hidden = false; return; }
+      const corpoReq = { id: uuid(), forma, valor_centavos: v, bandeira: bandeira.value.trim(), pagador: pagador.value.trim() };
       if (forma === "DINHEIRO" && recebido.value) corpoReq.valor_recebido_centavos = centavos(recebido.value);
       try {
         const pg = await post(`/api/${alvo.tipo === "comanda" ? "comandas" : "pedidos"}/${alvo.id}/pagamentos/`, corpoReq);

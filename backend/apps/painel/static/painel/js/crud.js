@@ -7,7 +7,7 @@ import { aviso, botaoAcao, carregando, confirmar, erro, h, modal, tabela, trocar
  * cfg = {
  *   titulo, singular, url, params, colunas, campos, busca: ["nome", ...],
  *   podeCriar(), podeEditar(l), podeExcluir(l), novo: {...},
- *   antesDeSalvar(dados, obj), depoisDeSalvar(obj, ehNovo), acoes(l, recarregar), extras(obj, recarregar),
+ *   paraFormulario(obj) → valores do formulário, antesDeSalvar(dados, obj), depoisDeSalvar(obj, ehNovo), acoes(l, recarregar), extras(obj, recarregar),
  *   filtros: [{nome, rotulo, opcoes:[{valor, rotulo}]}], ordenar(a, b), textoExcluir, topo(recarregar)
  * }
  */
@@ -81,7 +81,7 @@ export function paginaCadastro(cfg) {
 
       function abrir(obj) {
         const editavel = obj ? (cfg.podeEditar ? cfg.podeEditar(obj) : ehGerente()) : true;
-        const valores = obj ? { ...obj } : { ...(cfg.novo || {}) };
+        const valores = obj ? (cfg.paraFormulario ? cfg.paraFormulario({ ...obj }) : { ...obj }) : { ...(cfg.novo || {}) };
         const campos = (typeof cfg.campos === "function" ? cfg.campos(obj) : cfg.campos)
           .filter((c) => !(obj && c.somenteNovo) && !(!obj && c.somenteEdicao));
         let m;

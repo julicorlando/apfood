@@ -8,8 +8,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton, QScrollArea, QSplitter, QTableWidget,
-    QVBoxLayout, QWidget,
+    QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton, QScrollArea, QSplitter, QStackedWidget,
+    QTableWidget, QVBoxLayout, QWidget,
 )
 
 from ...api import ErroApi, SemConexao
@@ -86,6 +86,8 @@ class PaginaVenda(QWidget):
         self.nome_balcao = QLineEdit()
         self.senha = QLineEdit()
         self.senha.setMaximumWidth(90)
+        self.senha.setPlaceholderText("automático")
+        self.senha.setToolTip("Número para chamar o cliente. Em branco, sai automático (ex.: 0124).")
         self.mesa_balcao = QLineEdit()
         self.mesa_balcao.setMaximumWidth(90)
         fb.addRow("Atendimento", self.atendimento)
@@ -98,7 +100,7 @@ class PaginaVenda(QWidget):
         tb.addWidget(botao("Buscar", self.buscar_cliente_balcao))
         fb.addRow("Telefone", tb)
         linha = QHBoxLayout()
-        linha.addWidget(QLabel("Senha"))
+        linha.addWidget(QLabel("Nº / senha"))
         linha.addWidget(self.senha)
         linha.addWidget(QLabel("Mesa"))
         linha.addWidget(self.mesa_balcao)
@@ -156,11 +158,19 @@ class PaginaVenda(QWidget):
         fd.addRow(r3)
         ld.addWidget(self.box_delivery)
 
-        # carrinho
+        # carrinho (sem itens: tela de CAIXA LIVRE)
         self.tabela = QTableWidget()
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setMinimumHeight(160)
-        ld.addWidget(self.tabela, 1)
+        self.caixa_livre = QLabel()
+        self.caixa_livre.setAlignment(Qt.AlignCenter)
+        self.caixa_livre.setWordWrap(True)
+        self.caixa_livre.setMinimumHeight(160)
+        self.ultimo_numero = ""
+        self.pilha_carrinho = QStackedWidget()
+        self.pilha_carrinho.addWidget(self.caixa_livre)
+        self.pilha_carrinho.addWidget(self.tabela)
+        ld.addWidget(self.pilha_carrinho, 1)
         acoes = QHBoxLayout()
         acoes.addWidget(botao("Remover item", self.remover_item, atalho="Del"))
         acoes.addWidget(botao("+1", lambda: self._quantidade(1)))
@@ -201,6 +211,7 @@ class PaginaVenda(QWidget):
     # ------------------------------------------------------------------ dados
     def ao_mostrar(self):
         self.recarregar_cardapio()
+        self.mostrar_caixa_livre()
 
     def recarregar_cardapio(self):
         atual = self.categorias.currentItem().data(Qt.UserRole) if self.categorias.currentItem() else None
@@ -242,8 +253,14 @@ class PaginaVenda(QWidget):
         colunas = 4
         for n, p in enumerate(produtos):
             vars_ = self.ctx.pdv.variacoes(p["id"])
-            preco = f"a partir de {reais(min(v['preco_centavos'] for v in vars_))}" if vars_ else reais(p["preco_centavos"])
+            base = min(v["preco_centavos"] for v in vars_) if vars_ else p["preco_centavos"]
+            desc, promo = self.ctx.pdv.promocao(p, base, self.modo)
+            preco = ("a partir de " if vars_ else "") + reais(base - desc)
+            if promo:
+                preco = f"🔥 {preco}  (de {reais(base)})"
             b = QPushButton(f"{p['nome']}\n{preco}")
+            if promo:
+                b.setToolTip(f"Promoção: {promo.nome}")
             b.setProperty("papel", "produto")
             b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda _=False, prod=p: self.adicionar_produto(prod))
@@ -264,14 +281,14 @@ class PaginaVenda(QWidget):
                       or ((self.ctx.banco.obter("categorias", produto.get("categoria")) or {}).get("max_sabores", 1) > 1))
         descricao = produto["nome"]
         if item is None and tem_opcoes:
-            d = DialogoItem(self.ctx.pdv, produto, self)
+            d = DialogoItem(self.ctx.pdv, produto, self, canal=self.modo)
             if not d.exec():
                 return
             item, descricao = d.item(), d.descricao()
         item = item or {"produto_id": produto["id"], "quantidade": 1, "adicionais": [], "sabores": [],
                         "variacao_id": None, "observacao": ""}
         self.carrinho.append({"item": item, "descricao": descricao, "setor": self._setor_do_produto(produto),
-                              "total": self.ctx.pdv.precificar_item(item)})
+                              "total": self.ctx.pdv.precificar_item(item, self.modo)})
         self._atualizar_carrinho()
 
     def _quantidade(self, delta: int):
@@ -280,7 +297,7 @@ class PaginaVenda(QWidget):
             return
         linha = self.carrinho[r]
         linha["item"]["quantidade"] = max(1, linha["item"]["quantidade"] + delta)
-        linha["total"] = self.ctx.pdv.precificar_item(linha["item"])
+        linha["total"] = self.ctx.pdv.precificar_item(linha["item"], self.modo)
         self._atualizar_carrinho()
         self.tabela.selectRow(r)
 
@@ -294,7 +311,32 @@ class PaginaVenda(QWidget):
         preencher_tabela(self.tabela, ["Qtd", "Item", "Obs", "Total"],
                          [[c["item"]["quantidade"], c["descricao"], c["item"].get("observacao", ""), reais(c["total"])]
                           for c in self.carrinho])
+        self.mostrar_caixa_livre()
         self._atualizar_total()
+
+    def caixa_aberto(self) -> bool:
+        try:
+            return bool(self.ctx.banco.ler("turno_atual"))
+        except Exception:  # noqa: BLE001
+            return True
+
+    def mostrar_caixa_livre(self):
+        """Sem itens no pedido: mostra CAIXA LIVRE (ou CAIXA FECHADO se não abriu o caixa)."""
+        if self.carrinho or self.comanda is not None:
+            self.pilha_carrinho.setCurrentWidget(self.tabela)
+            return
+        if self.caixa_aberto():
+            ultimo = f"<div style='font-size:15px;color:#555;margin-top:10px'>Último pedido: <b>{self.ultimo_numero}</b></div>" \
+                if self.ultimo_numero else ""
+            self.caixa_livre.setText("<div style='font-size:44px;font-weight:800;color:#1a7f37'>CAIXA LIVRE</div>"
+                                     "<div style='font-size:15px;color:#555'>Escolha os produtos para começar o pedido</div>"
+                                     + ultimo)
+            self.caixa_livre.setStyleSheet("background:#eaf7ee;border:2px dashed #7cc795;border-radius:12px;")
+        else:
+            self.caixa_livre.setText("<div style='font-size:40px;font-weight:800;color:#b42318'>CAIXA FECHADO</div>"
+                                     "<div style='font-size:15px;color:#555'>Abra o caixa (menu Caixa) para receber pagamentos</div>")
+            self.caixa_livre.setStyleSheet("background:#fdecec;border:2px dashed #f3a4a4;border-radius:12px;")
+        self.pilha_carrinho.setCurrentWidget(self.caixa_livre)
 
     def subtotal(self) -> int:
         return sum(c["total"] for c in self.carrinho)
@@ -346,6 +388,15 @@ class PaginaVenda(QWidget):
         else:
             self.titulo.setText("Novo pedido — " + self.MODOS[self.modo])
         self.usar_cashback.setVisible(self.saldo_cashback() > 0 and self.modo != "MESA")
+        # promoções podem valer só em alguns canais: recalcula os itens e os preços dos botões
+        for linha in self.carrinho:
+            linha["total"] = self.ctx.pdv.precificar_item(linha["item"], self.modo)
+        if self.carrinho:
+            self._atualizar_carrinho()
+        else:
+            self.mostrar_caixa_livre()
+        if hasattr(self, "grade"):
+            self._mostrar_produtos()
         self._atualizar_total()
 
     def para_comanda(self, comanda: dict):
@@ -476,7 +527,7 @@ class PaginaVenda(QWidget):
         return {
             "numero": resp.get("numero"), "codigo_local": resp.get("codigo_local", ""),
             "tipo_atendimento": dados.get("tipo_atendimento"), "mesa": dados.get("mesa", ""),
-            "senha": dados.get("senha", ""), "nome_cliente": dados.get("nome_cliente", ""),
+            "senha": resp.get("senha") or dados.get("senha", ""), "nome_cliente": dados.get("nome_cliente", ""),
             "telefone_cliente": dados.get("telefone_cliente", ""), "atendente": self.ctx.usuario.get("nome", ""),
             "itens": [{"quantidade": c["item"]["quantidade"], "nome": c["descricao"], "total_centavos": c["total"],
                        "observacao": c["item"].get("observacao", ""), "setor": c["setor"]} for c in self.carrinho],
@@ -522,7 +573,9 @@ class PaginaVenda(QWidget):
         avisos = self.ctx.finalizar_impressao(pedido_id, local, pago=pago,
                                               cozinha=self.ctx.cfg.imprimir_cozinha_automatico,
                                               cpf=dados.get("cpf_nota", ""))
-        numero = resp.get("numero") or resp.get("codigo_local")
+        numero = resp.get("senha") if dados.get("canal") == "BALCAO" and resp.get("senha") else \
+            (resp.get("numero") or resp.get("codigo_local"))
+        self.ultimo_numero = str(numero or "")
         offline = " (offline — será enviado ao voltar a internet)" if resp.get("offline") else ""
         troco = sum(max(0, (p.get("recebido_centavos") or 0) - p["valor_centavos"]) for p in pagos if p["forma"] == "DINHEIRO")
         self.ctx.status(f"Pedido {numero} lançado{offline}" + (f" — TROCO {reais(troco)}" if troco else "")

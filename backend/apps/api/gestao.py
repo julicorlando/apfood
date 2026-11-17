@@ -8,7 +8,7 @@ Mesmas regras do admin do Django (apfood_core.permissoes):
 """
 
 from apfood_core import permissoes
-from apfood_core.enums import PapelUsuario
+from apfood_core.enums import FormaPagamento, PapelUsuario
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -432,6 +432,130 @@ class FaturaViewSet(viewsets.ModelViewSet):
         u = self.request.user
         qs = Fatura.objects.select_related("empresa")
         return qs if u.eh_master else qs.filter(empresa_id=u.empresa_id)
+
+    @action(detail=True, methods=["post"])
+    def cobrar(self, request, pk=None):
+        """MASTER: cria (ou recria) o link de pagamento no Mercado Pago da plataforma."""
+        from apps.integracoes.provedores.base import ErroProvedor
+        from apps.plataforma import cobranca
+
+        f = self.get_object()
+        if f.status != "ABERTA":
+            raise ValidationError({"detail": "só fatura em aberto recebe cobrança"})
+        if not cobranca.token_mp():
+            raise ValidationError({"detail": "configure o Mercado Pago em Plataforma → Recebimentos"})
+        try:
+            cobranca.gerar_cobranca(f, forcar=True)
+        except ErroProvedor as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        f.refresh_from_db()
+        return Response(self.get_serializer(f).data)
+
+    @action(detail=True, methods=["post"], url_path="marcar-paga")
+    def marcar_paga(self, request, pk=None):
+        """MASTER: baixa manual (recebeu por fora: transferência, dinheiro). Libera a empresa."""
+        from apps.plataforma import cobranca
+
+        forma = request.data.get("forma") or "PIX"
+        if forma not in {c[0] for c in FormaPagamento.choices()}:
+            raise ValidationError({"forma": ["forma inválida"]})
+        f = cobranca.confirmar_fatura(self.get_object(), forma)
+        return Response(self.get_serializer(f).data)
+
+
+class RecebimentosView(APIView):
+    """MASTER: conta do Mercado Pago que recebe as assinaturas e o resumo do que entrou.
+
+    PUT {"token": "APP_USR-...", "metodo": "CHECKOUT"|"PIX"}: o token é conferido no
+    Mercado Pago antes de salvar (cifrado). {"token": ""} remove o token salvo."""
+
+    def get_permissions(self):
+        from apps.core.permissoes_api import UsuarioLiberado
+
+        return [UsuarioLiberado()]
+
+    def _master(self, request):
+        if not request.user.eh_master:
+            raise PermissionDenied("somente o MASTER")
+
+    def _dados(self):
+        from datetime import timedelta
+
+        from django.db.models import Count, Sum
+        from django.utils import timezone
+
+        from apps.plataforma import cobranca
+        from apps.plataforma.models import ConfiguracaoPlataforma
+
+        cfg = ConfiguracaoPlataforma.atual()
+        hoje = timezone.localdate()
+        inicio_mes = hoje.replace(day=1)
+
+        def soma(qs):
+            r = qs.aggregate(v=Sum("valor_centavos"), n=Count("id"))
+            return {"valor_centavos": r["v"] or 0, "quantidade": r["n"]}
+
+        abertas = Fatura.objects.filter(status="ABERTA")
+        return {
+            "configurado": bool(cobranca.token_mp()),
+            "origem": "painel" if cfg.mp_token_cifrado else ("ambiente" if cobranca.token_mp() else ""),
+            "conta": cfg.mp_conta,
+            "metodo": cfg.metodo,
+            "metodos": [{"valor": v, "rotulo": r} for v, r in cfg.METODOS],
+            "webhook_url": cobranca.url_webhook(),
+            "recebido_mes": soma(Fatura.objects.filter(status="PAGA", pago_em__date__gte=inicio_mes)),
+            "recebido_30d": soma(Fatura.objects.filter(status="PAGA", pago_em__date__gte=hoje - timedelta(days=30))),
+            "em_aberto": soma(abertas.filter(vencimento__gte=hoje)),
+            "vencido": soma(abertas.filter(vencimento__lt=hoje)),
+            "sem_link": abertas.filter(link_pagamento="").count(),
+        }
+
+    def get(self, request):
+        self._master(request)
+        return Response(self._dados())
+
+    def put(self, request):
+        from apps.integracoes.provedores.base import ErroProvedor
+        from apps.integracoes.provedores.mercadopago import MercadoPago
+        from apps.plataforma.models import ConfiguracaoPlataforma
+
+        self._master(request)
+        cfg = ConfiguracaoPlataforma.atual()
+        metodo = request.data.get("metodo")
+        if metodo:
+            if metodo not in dict(cfg.METODOS):
+                raise ValidationError({"metodo": ["opção inválida"]})
+            cfg.metodo = metodo
+        if "token" in request.data:
+            token = (request.data.get("token") or "").strip()
+            if token:
+                try:
+                    conta = MercadoPago(token).conta()
+                except ErroProvedor as exc:
+                    raise ValidationError({"token": [f"o Mercado Pago recusou o token: {exc}"]}) from exc
+                cfg.definir_token(token)
+                cfg.mp_conta = conta["apelido"] or conta["email"] or conta["id"]
+            else:
+                cfg.definir_token("")
+                cfg.mp_conta = ""
+        cfg.save()
+        return Response(self._dados())
+
+    def post(self, request):
+        """Gera o link das faturas em aberto que ainda não têm."""
+        from apps.plataforma import cobranca
+
+        self._master(request)
+        if not cobranca.token_mp():
+            raise ValidationError({"detail": "configure o token do Mercado Pago primeiro"})
+        gerados, falhas = 0, []
+        for f in Fatura.objects.filter(status="ABERTA", link_pagamento="").select_related("empresa", "plano"):
+            try:
+                cobranca.gerar_cobranca(f)
+                gerados += 1
+            except Exception as exc:  # noqa: BLE001
+                falhas.append(f"{f.empresa.nome}: {exc}")
+        return Response({**self._dados(), "gerados": gerados, "falhas": falhas})
 
 
 class AssinaturaView(APIView):

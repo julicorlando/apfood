@@ -245,3 +245,34 @@ def test_pdv_se_identifica_e_explica_bloqueio_do_cloudflare():
     api = ApiClient("https://x", transporte=transporte)
     with _pytest.raises(ErroApi, match="Cloudflare"):
         api.login("a", "b")
+
+
+def test_promocao_programada_no_preco_local(pdv):
+    from datetime import datetime
+
+    hoje = datetime.now().weekday()
+    pdv.banco.aplicar_pull("promocoes", [{"id": "pr1", "nome": "Lata em dobro", "tipo": "PERCENTUAL", "valor": 50,
+                                          "produtos": ["p1"], "dias": [hoje], "canais": ["BALCAO"], "ativa": True,
+                                          "atualizado_em": "2026-01-01T00:00:00Z"}])
+    item = {"produto_id": "p1", "quantidade": 2, "adicionais": [], "sabores": []}
+    assert pdv.precificar_item(item, "BALCAO") == 700  # 2 × 350
+    assert pdv.precificar_item(item, "DELIVERY") == 1400  # promoção só no balcão
+    desconto, promo = pdv.promocao({"id": "p1", "categoria": "c1"}, 700)
+    assert desconto == 350 and promo.nome == "Lata em dobro"
+
+
+def test_balcao_offline_ganha_numero_automatico(srv, pdv):
+    srv.online = False
+    dados = {"canal": "BALCAO", "tipo_atendimento": "RETIRADA", "itens": [{"produto_id": "p1", "quantidade": 1}]}
+    r1 = pdv.criar_pedido(dict(dados))
+    r2 = pdv.criar_pedido(dict(dados))
+    assert r1["offline"] and (r1["senha"], r2["senha"]) == ("0001", "0002")
+    assert pdv.criar_pedido({**dados, "senha": "77"})["senha"] == "77"  # informado à mão: respeita
+
+
+def test_balcao_online_numero_vem_do_servidor(srv, pdv):
+    srv.rotas[("POST", "/api/pedidos/")] = lambda d: (201, {**d, "numero": 124, "senha": "0124", "total_centavos": 700})
+    r = pdv.criar_pedido({"canal": "BALCAO", "tipo_atendimento": "RETIRADA",
+                          "itens": [{"produto_id": "p1", "quantidade": 1}]})
+    assert not r["offline"] and r["senha"] == "0124"
+    assert not srv.chamadas[-1][2].get("senha")  # o servidor é quem numera

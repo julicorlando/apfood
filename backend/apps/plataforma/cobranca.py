@@ -54,20 +54,54 @@ def gerar_faturas(hoje: date | None = None) -> list[Fatura]:
     return criadas
 
 
-def gerar_pix(fatura: Fatura) -> None:
+def token_mp() -> str:
+    """Token do Mercado Pago da plataforma: o salvo no painel (MASTER) ou a variável de ambiente."""
+    from .models import ConfiguracaoPlataforma
+
+    try:
+        return ConfiguracaoPlataforma.atual().token() or getattr(settings, "APFOOD_MP_TOKEN_PLATAFORMA", "")
+    except Exception:  # noqa: BLE001 — chave de criptografia trocada: cai para a variável
+        log.exception("token do Mercado Pago da plataforma ilegível")
+        return getattr(settings, "APFOOD_MP_TOKEN_PLATAFORMA", "")
+
+
+def url_webhook() -> str:
+    return settings.APFOOD["URL_PUBLICA"].rstrip("/") + "/api/webhooks/mercadopago/plataforma/"
+
+
+def gerar_cobranca(fatura: Fatura, forcar: bool = False) -> None:
+    """Cria o link de pagamento da fatura no Mercado Pago da plataforma: página do
+    Mercado Pago (Pix, cartão e boleto) ou só Pix, conforme a configuração."""
     from apps.integracoes.provedores.mercadopago import MercadoPago
 
-    token = getattr(settings, "APFOOD_MP_TOKEN_PLATAFORMA", "")
-    if not token or fatura.link_pagamento or fatura.valor_centavos <= 0:
+    from .models import ConfiguracaoPlataforma
+
+    token = token_mp()
+    if not token or fatura.valor_centavos <= 0 or fatura.status != StatusFatura.ABERTA:
         return
-    url = settings.APFOOD["URL_PUBLICA"].rstrip("/") + "/api/webhooks/mercadopago/plataforma/"
-    pix = MercadoPago(token).criar_pix(
-        valor_centavos=fatura.valor_centavos, descricao=f"ApFood {fatura.plano or ''} {fatura.competencia:%m/%Y}",
-        email=fatura.empresa.email, referencia=f"fatura-{fatura.id}",
-        notification_url=url if url.startswith("https://") else "",
-    )
-    fatura.referencia_externa, fatura.link_pagamento = pix["id"], pix["ticket_url"]
+    if fatura.link_pagamento and not forcar:
+        return
+    url = url_webhook()
+    url = url if url.startswith("https://") else ""
+    mp = MercadoPago(token)
+    descricao = f"ApFood {fatura.plano or ''} {fatura.competencia:%m/%Y} — {fatura.empresa.nome}"
+    referencia = f"fatura-{fatura.id}"
+    if ConfiguracaoPlataforma.atual().metodo == "CHECKOUT":
+        voltar = settings.APFOOD["URL_PUBLICA"].rstrip("/") + "/painel/#/empresa"
+        pref = mp.criar_preferencia(titulo=descricao, valor_centavos=fatura.valor_centavos, referencia=referencia,
+                                    email=fatura.empresa.email, notification_url=url,
+                                    voltar_para=voltar if voltar.startswith("https://") else "")
+        fatura.referencia_externa, fatura.link_pagamento = pref["id"], pref["init_point"]
+    else:
+        # chave de idempotência nova a cada "gerar de novo" (o Pix anterior pode ter expirado)
+        ref_pix = referencia if not forcar else f"{referencia}-{timezone.now():%Y%m%d%H%M%S}"
+        pix = mp.criar_pix(valor_centavos=fatura.valor_centavos, descricao=descricao, email=fatura.empresa.email,
+                           referencia=ref_pix, notification_url=url)
+        fatura.referencia_externa, fatura.link_pagamento = pix["id"], pix["ticket_url"]
     fatura.save(update_fields=["referencia_externa", "link_pagamento", "atualizado_em"])
+
+
+gerar_pix = gerar_cobranca  # nome antigo
 
 
 def atualizar_inadimplencia(hoje: date | None = None) -> dict:
@@ -115,9 +149,9 @@ def rotina_diaria(hoje: date | None = None) -> dict:
     criadas = gerar_faturas(hoje)
     for f in Fatura.objects.filter(status=StatusFatura.ABERTA, link_pagamento=""):
         try:
-            gerar_pix(f)
+            gerar_cobranca(f)
         except Exception:  # noqa: BLE001
-            log.exception("falha ao gerar Pix da fatura %s", f.id)
+            log.exception("falha ao gerar a cobrança da fatura %s", f.id)
     for f in criadas:
         f.refresh_from_db()  # pega o link do Pix
         avisos.nova_fatura(f)

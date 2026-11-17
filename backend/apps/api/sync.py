@@ -25,6 +25,7 @@ from apps.clientes.models import Cliente, EnderecoCliente, Entregador, ZonaEntre
 from apps.core.api import UsuarioLiberado, loja_da_requisicao
 from apps.core.excecoes import ErroNegocio
 from apps.lojas.models import OperacaoSincronizada
+from apps.marketing.models import Promocao
 from apps.pedidos import services as pedidos_srv
 from apps.pedidos.models import Pedido
 from apps.salao import services as salao_srv
@@ -45,6 +46,7 @@ ENTIDADES = {
     "zonas_entrega": (ZonaEntrega, "loja", s.ZonaEntregaSerializer),
     "entregadores": (Entregador, "loja", s.EntregadorSerializer),
     "mesas": (Mesa, "loja", s.MesaSerializer),
+    "promocoes": (Promocao, "loja", s.PromocaoSerializer),
 }
 LIMITE = 2000
 
@@ -140,7 +142,8 @@ def _pagamento(loja, u, p, **alvo):
     pg = pedidos_srv.registrar_pagamento(
         usuario=u, forma=FormaPagamento(d["forma"]), valor_centavos=d["valor_centavos"],
         valor_recebido_centavos=d.get("valor_recebido_centavos"), bandeira=d["bandeira"],
-        referencia_externa=d["referencia_externa"], pago_online=d["pago_online"], id=d.get("id"), **alvo,
+        referencia_externa=d["referencia_externa"], pago_online=d["pago_online"], id=d.get("id"),
+        pagador=d.get("pagador", ""), **alvo,
     )
     return {"id": str(pg.id), "troco_centavos": pg.troco_centavos}
 

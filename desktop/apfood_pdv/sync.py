@@ -19,7 +19,7 @@ from .local_db import BancoLocal
 log = logging.getLogger(__name__)
 
 ENTIDADES_PULL = ["setores", "categorias", "produtos", "variacoes", "grupos_adicionais", "adicionais",
-                  "clientes", "enderecos", "zonas_entrega", "entregadores", "mesas"]
+                  "clientes", "enderecos", "zonas_entrega", "entregadores", "mesas", "promocoes"]
 
 
 class Sincronizador:

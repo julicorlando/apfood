@@ -603,3 +603,75 @@ async function revisarCampanha(c, recarregar) {
     }, "botao botao-primario")] : null,
   });
 }
+
+// ---------------------------------------------------------------- promoções programadas
+const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const TIPOS_PROMO = [
+  { valor: "PERCENTUAL", rotulo: "% de desconto" },
+  { valor: "VALOR", rotulo: "R$ de desconto (por item)" },
+  { valor: "PRECO_FIXO", rotulo: "Preço fixo (ex.: R$ 19,90)" },
+];
+const CANAIS_PROMO = [
+  { valor: "ONLINE", rotulo: "Cardápio online" }, { valor: "BALCAO", rotulo: "Balcão" },
+  { valor: "DELIVERY", rotulo: "Delivery (telefone)" }, { valor: "MESA", rotulo: "Mesas" },
+];
+
+function descreverPromo(p) {
+  const oferta = p.tipo === "PERCENTUAL" ? `${p.valor}% off` : p.tipo === "VALOR" ? `${dinheiro(p.valor)} off` : `por ${dinheiro(p.valor)}`;
+  const dias = (p.dias || []).length ? [...p.dias].sort().map((d) => DIAS_SEMANA[d]).join(", ") : "Todos os dias";
+  const horas = p.hora_inicio || p.hora_fim ? ` · ${(p.hora_inicio || "00:00").slice(0, 5)}–${(p.hora_fim || "24:00").slice(0, 5)}` : "";
+  return { oferta, quando: dias + horas };
+}
+
+export function promocoes() {
+  return paginaCadastro({
+    titulo: "Promoções", singular: "Promoção", url: "/api/promocoes/", busca: ["nome"],
+    intro: "Desconto automático em dias e horários programados (ex.: \"Terça do hambúrguer: 20% off das 18h às 23h\"). "
+      + "Vale no cardápio online, no PDV web e no PDV do computador. Sem produtos nem categorias marcados, vale para o cardápio todo. "
+      + "Se duas promoções valerem para o mesmo item, fica a de maior desconto.",
+    novo: { tipo: "PERCENTUAL", ativa: true, dias: [], canais: [], produtos: [], categorias: [] },
+    colunas: [
+      { rotulo: "Promoção", valor: (p) => h("strong", null, p.nome) },
+      { rotulo: "Oferta", valor: (p) => descreverPromo(p).oferta },
+      { rotulo: "Quando", valor: (p) => descreverPromo(p).quando },
+      { rotulo: "Vale para", valor: (p) => ((p.produtos || []).length || (p.categorias || []).length
+        ? `${(p.produtos || []).length} produto(s), ${(p.categorias || []).length} categoria(s)` : "Cardápio todo") },
+      { rotulo: "Período", valor: (p) => (p.data_inicio || p.data_fim ? `${p.data_inicio ? data(p.data_inicio) : "…"} a ${p.data_fim ? data(p.data_fim) : "…"}` : "Sempre") },
+      ativoCol("ativa"),
+    ],
+    paraFormulario: (p) => ({
+      ...p,
+      dias: (p.dias || []).map(String),
+      percentual: p.tipo === "PERCENTUAL" ? p.valor : null,
+      valor_reais: p.tipo !== "PERCENTUAL" ? p.valor : null,
+    }),
+    campos: [
+      { nome: "nome", rotulo: "Nome", obrigatorio: true, exemplo: "Terça do hambúrguer" },
+      { nome: "descricao", rotulo: "Texto para o cliente (opcional)", exemplo: "Todo burger com 20% off" },
+      { nome: "tipo", rotulo: "Tipo", tipo: "select", opcoes: TIPOS_PROMO, obrigatorio: true },
+      { nome: "percentual", rotulo: "Desconto (%)", tipo: "numero", mostrarSe: (v) => v.tipo === "PERCENTUAL" },
+      { nome: "valor_reais", rotulo: "Valor (R$)", tipo: "dinheiro", mostrarSe: (v) => v.tipo !== "PERCENTUAL" },
+      { nome: "dias", rotulo: "Dias da semana (nenhum marcado = todos)", tipo: "multi",
+        opcoes: DIAS_SEMANA.map((d, i) => ({ valor: String(i), rotulo: d })) },
+      { nome: "hora_inicio", rotulo: "Das (vazio = o dia todo)", tipo: "hora" },
+      { nome: "hora_fim", rotulo: "Até (pode passar da meia-noite)", tipo: "hora" },
+      { nome: "categorias", rotulo: "Categorias", tipo: "multi", url: "/api/categorias/" },
+      { nome: "produtos", rotulo: "Produtos", tipo: "multi", url: "/api/produtos/", params: { tipo: "VENDA" } },
+      { nome: "canais", rotulo: "Onde vale (nenhum marcado = todos)", tipo: "multi", opcoes: CANAIS_PROMO },
+      { nome: "data_inicio", rotulo: "Começa em (opcional)", tipo: "data" },
+      { nome: "data_fim", rotulo: "Termina em (opcional)", tipo: "data" },
+      { nome: "ativa", rotulo: "Ativa", tipo: "bool" },
+    ],
+    antesDeSalvar: (d) => {
+      const { percentual, valor_reais: reaisV, ...resto } = d;
+      return {
+        ...resto,
+        valor: d.tipo === "PERCENTUAL" ? Number(percentual) || 0 : Number(reaisV) || 0,
+        dias: (d.dias || []).map(Number),
+        hora_inicio: d.hora_inicio || null, hora_fim: d.hora_fim || null,
+        data_inicio: d.data_inicio || null, data_fim: d.data_fim || null,
+      };
+    },
+    podeExcluir: excluirGerente,
+  });
+}

@@ -43,7 +43,30 @@ Em **Clientes**, o botão **Anonimizar** (gerente+) apaga nome, telefone, e-mail
 - **Rotina diária** (serviço `cobranca`): gera a fatura do mês, cria o Pix no Mercado Pago da plataforma (`APFOOD_MP_TOKEN_PLATAFORMA`) e marca inadimplência. Depois de `APFOOD_DIAS_TOLERANCIA` dias de atraso, bloqueia a empresa. O pagamento confirmado pelo webhook libera o acesso sozinho.
 - **E-mails** para o e-mail da empresa e dos administradores: fatura nova (com o link do Pix), lembrete 3 dias antes do vencimento, fatura vencida, acesso suspenso, pagamento confirmado e fim do teste grátis em 3 dias. Precisa do `EMAIL_URL`.
 - **Login bloqueado por falta de pagamento** mostra a fatura e o botão **Pagar com Pix**.
+- **Recebimentos (MASTER):** em **Plataforma → Recebimentos**, cole o access token de produção do Mercado Pago (conferido e guardado cifrado) e escolha como o cliente paga: **página do Mercado Pago** (Pix, cartão em até 12x e boleto) ou **só Pix**. A tela mostra o recebido no mês, o que está a vencer e o vencido, e o endereço do webhook para cadastrar no Mercado Pago. Em **Faturas**: gerar o link, copiar e **marcar paga** (baixa manual, libera a empresa bloqueada).
 - **Painel:** uma faixa no topo avisa o ADMIN sobre fatura em aberto, fatura vencida ou fim do teste (7 dias antes). Em **Minha empresa**, o ADMIN vê as faturas e **troca de plano**. A troca vale a partir da próxima fatura e respeita o limite de lojas e usuários do plano. Na API: `GET/POST /api/assinatura/`.
+
+## Promoções programadas
+
+Em **Clientes e entrega → Promoções** (gerente+): desconto automático por dia da semana e horário, por exemplo "Terça do hambúrguer: 20% off das 18h às 23h".
+- **Tipos:** % de desconto, R$ de desconto por item ou preço fixo (ex.: lata por R$ 5,00).
+- **Para quais produtos:** produtos e/ou categorias escolhidos. Sem nenhum marcado, vale o cardápio todo.
+- **Onde vale:** cardápio online, balcão, delivery ou mesas. Nenhum marcado = todos. Pedidos do iFood nunca entram.
+- **Quando:** dias da semana, horário (pode passar da meia-noite: 18:00–02:00 vale pela noite em que começou) e período opcional (começa/termina em).
+- Se duas promoções valerem para o mesmo item, fica a de maior desconto. O desconto é no preço do produto, não nos adicionais.
+- **Onde aparece:** o cardápio online mostra o preço riscado, um selo e a faixa "Promoções de hoje". O PDV web e o PDV do computador mostram 🔥 no botão do produto. O servidor sempre recalcula, e o item do pedido guarda qual promoção foi aplicada.
+
+## Mesas: pagamento parcial
+
+Na comanda, **Receber (total ou parte)** aceita só uma parte da conta: o cliente 1 paga a parte dele e vai embora, e a mesa continua aberta para quem ficou pedir mais e pagar depois.
+- Tem botões para dividir o que falta por 2, 3, 4 ou 5 e um campo **Quem está pagando** ("Cliente 1", "João"), que aparece na conta.
+- Mesmo depois de pedir a conta, dá para reabrir a mesa e lançar mais itens: os pagamentos já feitos continuam abatidos.
+- A mesa só é liberada em **Fechar comanda**, quando não falta nada.
+- No PDV do computador funciona igual: Mesas → Receber (total ou parte).
+
+## Número do pedido no balcão
+
+Pedido de balcão sem senha informada ganha o número do pedido do dia com 4 dígitos (ex.: **0124**), impresso no cupom e mostrado no PDV para chamar o cliente. Sem internet, o PDV do computador numera sozinho (sequência do dia naquele caixa). No PDV do computador, sem itens no pedido aparece **CAIXA LIVRE** (ou **CAIXA FECHADO**, se o caixa não foi aberto) com o último número chamado.
 
 ## Campanhas de WhatsApp
 

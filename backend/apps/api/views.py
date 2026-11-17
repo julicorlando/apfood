@@ -29,7 +29,7 @@ from apps.core.excecoes import ErroNegocio
 from apps.estoque import services as estoque_srv
 from apps.estoque.models import MovimentacaoEstoque
 from apps.financeiro.models import CategoriaDespesa, Despesa, TaxaFormaPagamento
-from apps.marketing.models import Cupom
+from apps.marketing.models import Cupom, Promocao
 from apps.pedidos import services as pedidos_srv
 from apps.pedidos.models import ItemPedido, Pedido
 from apps.realtime import eventos
@@ -169,6 +169,38 @@ class EntregadorViewSet(_EntregadorBase):
 MesaViewSet = cadastro_viewset(Mesa, s.MesaSerializer, filtros=["area", "ativa"])
 FornecedorViewSet = cadastro_viewset(Fornecedor, s.FornecedorSerializer)
 CupomViewSet = cadastro_viewset(Cupom, s.CupomSerializer, filtros=["ativo"])
+_PromocaoBase = cadastro_viewset(Promocao, s.PromocaoSerializer, filtros=["ativa"], entidade="promocao")
+
+
+def promocoes_agora(loja, canais=("ONLINE", "BALCAO", "DELIVERY", "MESA")) -> dict:
+    """{canal: {produto_id: {nome, tipo, valor, descricao}}} das promoções valendo agora."""
+    from apfood_core import promocoes as regra
+
+    from apps.marketing.models import promocoes_da_loja
+
+    regras = promocoes_da_loja(loja)
+    saida = {c: {} for c in canais}
+    if not regras:
+        return saida
+    agora = timezone.localtime().replace(tzinfo=None)
+    produtos = Produto.objects.ativos().filter(loja=loja, ativo=True, tipo="VENDA").prefetch_related("variacoes")
+    for p in produtos:
+        precos = [v.preco_centavos for v in p.variacoes.all() if v.ativo and v.excluido_em is None]
+        base = min(precos) if precos else p.preco_centavos
+        for c in canais:
+            d, promo = regra.melhor(regras, str(p.id), str(p.categoria_id) if p.categoria_id else None, base, agora, c)
+            if promo:
+                saida[c][str(p.id)] = {"nome": promo.nome, "tipo": promo.tipo, "valor": promo.valor,
+                                       "descricao": promo.descricao(), "ate": promo.hora_fim.strftime("%H:%M")
+                                       if promo.hora_fim else None}
+    return saida
+
+
+class PromocaoViewSet(_PromocaoBase):
+    @action(detail=False, methods=["get"])
+    def agora(self, request):
+        """Promoções valendo neste momento, por canal e produto (PDV web aplica no preço)."""
+        return Response(promocoes_agora(self.get_loja()))
 CategoriaDespesaViewSet = cadastro_viewset(CategoriaDespesa, s.CategoriaDespesaSerializer)
 TaxaFormaPagamentoViewSet = cadastro_viewset(TaxaFormaPagamento, s.TaxaFormaPagamentoSerializer)
 
@@ -543,6 +575,7 @@ class ComandaViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveMode
             usuario=request.user, comanda=self.get_object(), forma=FormaPagamento(d["forma"]),
             valor_centavos=d["valor_centavos"], valor_recebido_centavos=d.get("valor_recebido_centavos"),
             bandeira=d["bandeira"], referencia_externa=d["referencia_externa"], id=d.get("id"),
+            pagador=d.get("pagador", ""),
         )
         return Response(s.PagamentoOut(pg).data, status=status.HTTP_201_CREATED)
 

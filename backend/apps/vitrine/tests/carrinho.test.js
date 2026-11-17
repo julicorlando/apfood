@@ -25,7 +25,7 @@ const idx = C.indexar(CARDAPIO);
 
 test("preço com adicionais e quantidade (igual ao servidor)", () => {
   const item = { produto_id: "x", quantidade: 2, adicionais: [{ adicional_id: "ao", quantidade: 1 }, { adicional_id: "bacon", quantidade: 2 }] };
-  assert.deepEqual(C.precificar(idx, item), { unitario: 3000, adicionais_por_unidade: 1000, total: 8000 });
+  assert.deepEqual(C.precificar(idx, item), { unitario: 3000, adicionais_por_unidade: 1000, total: 8000, desconto_promocao: 0 });
   assert.deepEqual(C.validar(idx, item), []);
 });
 
@@ -73,4 +73,17 @@ test("carrinho persistido e saneado", () => {
   assert.equal(c.contagem(), 3);
   c.quantidade(0, -3);
   assert.equal(c.itens.length, 0);
+});
+
+test("promoção programada: mesma regra do servidor", () => {
+  assert.equal(C.descontoPromocao({ tipo: "PERCENTUAL", valor: 20 }, 3000), 600);
+  assert.equal(C.descontoPromocao({ tipo: "VALOR", valor: 5000 }, 3000), 3000);
+  assert.equal(C.descontoPromocao({ tipo: "PRECO_FIXO", valor: 1990 }, 2990), 1000);
+  assert.equal(C.descontoPromocao(null, 3000), 0);
+  const p = idx.produtos.x;
+  const antes = C.precificar(idx, { produto_id: "x", quantidade: 2 }).total;
+  p.promocao = { tipo: "PERCENTUAL", valor: 50, nome: "Metade" };
+  const r = C.precificar(idx, { produto_id: "x", quantidade: 2 });
+  delete p.promocao;
+  assert.ok(r.desconto_promocao > 0 && r.total < antes);
 });
