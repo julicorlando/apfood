@@ -31,7 +31,8 @@ def _entregador(token: str) -> Entregador:
 def _cartao(p: Pedido) -> dict:
     endereco = ", ".join(x for x in [f"{p.entrega_logradouro} {p.entrega_numero}".strip(), p.entrega_complemento,
                                        p.entrega_bairro, p.entrega_cidade] if x)
-    pago = sum(pg.valor_centavos for pg in p.pagamentos.all() if pg.status == "CONFIRMADO")
+    pago = sum(pg.valor_centavos for pg in p.pagamentos.all()
+               if pg.status == "CONFIRMADO" or (pg.status == "PENDENTE" and pg.cobrado_em is not None))
     if p.entrega_latitude and p.entrega_longitude:
         mapa = f"https://www.google.com/maps/dir/?api=1&destination={p.entrega_latitude},{p.entrega_longitude}"
     else:
@@ -61,7 +62,7 @@ def marcar_entregue(request, token, pedido):
     e = _entregador(token)
     p = get_object_or_404(Pedido, pk=pedido, entregador=e)
     try:
-        chamadas.entregar(p.id, e, request.POST.get("codigo", ""))
+        chamadas.entregar(p.id, e, request.POST.get("codigo", ""), exigir_pagamento=False)
     except ErroNegocio as exc:
         if "incorreto" in exc.mensagem:
             return redirect(f"/entrega/{token}/?erro=codigo")

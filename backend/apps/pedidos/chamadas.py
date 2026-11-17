@@ -280,8 +280,9 @@ def retirar(pedido_id, e: Entregador, codigo: str) -> Pedido:
         return services.transicionar(p, S.SAIU_PARA_ENTREGA, None, motivo=f"retirado por {e.nome}", entregador_id=e.id)
 
 
-def entregar(pedido_id, e: Entregador, codigo: str) -> Pedido:
-    """Entregue ao cliente (código de recebimento) → concluído."""
+def entregar(pedido_id, e: Entregador, codigo: str, *, exigir_pagamento: bool = True) -> Pedido:
+    """Entregue ao cliente (código de recebimento) → concluído. No app, o pagamento precisa estar
+    registrado antes; no link antigo (sem app) a loja recebe como sempre."""
     from . import services
 
     p = Pedido.objects.filter(pk=pedido_id, entregador=e).select_related("loja").first()
@@ -295,7 +296,7 @@ def entregar(pedido_id, e: Entregador, codigo: str) -> Pedido:
 
     from .cobranca_entrega import falta
 
-    if (resta := falta(p)) > 0:
+    if exigir_pagamento and (resta := falta(p)) > 0:
         raise ErroNegocio(f"registre o pagamento de {formatar(resta)} antes de concluir a entrega")
     _conferir(p, codigo, "codigo_entrega", "recebimento")
     with transaction.atomic():
