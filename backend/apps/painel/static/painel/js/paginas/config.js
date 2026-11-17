@@ -73,6 +73,8 @@ const CAMPOS_LOJA = [
     ajuda: "Vira saldo (como o cashback) e é usado como desconto no próximo pedido." },
   { nome: "fidelidade_premio_descricao", rotulo: "Descrição do prêmio", exemplo: "Um X-Burger por nossa conta" },
   { secao: "Mesas e WhatsApp" },
+  { nome: "aparecer_no_app", rotulo: "Aparecer no app ApFood (lista de restaurantes da região)", tipo: "bool",
+    ajuda: "Preencha cidade e coordenadas da loja para aparecer em “Perto de mim”." },
   { nome: "pedido_na_mesa", rotulo: "Cliente pode pedir pelo QR Code da mesa", tipo: "bool",
     ajuda: "Imprima os QR em Clientes e entrega → Cadastro de mesas." },
   { nome: "whatsapp_atendente", rotulo: "Atendente automático no WhatsApp", tipo: "bool",

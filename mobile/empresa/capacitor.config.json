@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.axionweb.apfood.empresa",
+  "appName": "ApFood Empresa",
+  "webDir": "www",
+  "server": {
+    "url": "https://apfood.axionwebdigital.com.br/painel/",
+    "allowNavigation": ["apfood.axionwebdigital.com.br"],
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

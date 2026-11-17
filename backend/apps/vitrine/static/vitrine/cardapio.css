@@ -134,3 +134,22 @@ textarea { min-height: 64px; resize: vertical; }
 .selos-fid { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 4px; font-size: 24px; color: #cbd5e1; }
 .selo-fid.cheio { color: var(--cor, #e4572e); }
 .fid-topo { margin-top: 10px; font-size: 14px; }
+
+/* ---- app do cliente (lista de restaurantes) ---- */
+.app-topo .logo { width: 44px; height: 44px; object-fit: contain; }
+.app-busca { display: flex; gap: 8px; margin-top: 12px; }
+.app-busca input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; }
+.app-busca .btn { width: auto; margin: 0; white-space: nowrap; padding: 10px 12px; }
+.app-abas { display: flex; gap: 6px; margin-top: 12px; }
+.app-abas .aba { flex: 1; padding: 9px; border: 1px solid #ddd; border-radius: 99px; background: #fff; font-weight: 600; cursor: pointer; }
+.app-abas .aba.ativa { background: var(--cor, #e4572e); border-color: var(--cor, #e4572e); color: #fff; }
+.app-lista { max-width: 720px; margin: 0 auto; padding: 12px 14px 80px; display: grid; gap: 10px; }
+.app-cidade select { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; }
+.app-loja { display: flex; align-items: center; gap: 12px; padding: 12px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); color: inherit; text-decoration: none; }
+.app-loja.fechada { opacity: .6; }
+.app-logo { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; flex: none; }
+.app-logo.vazio { display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 24px; }
+.app-loja-txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.app-loja-txt small { color: #666; }
+.app-promo { color: #c2410c !important; }
+.voltar-app { display: inline-block; margin-bottom: 8px; color: inherit; font-size: 14px; text-decoration: none; }

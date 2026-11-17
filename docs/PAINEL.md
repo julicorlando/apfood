@@ -129,6 +129,21 @@ A mensagem aceita `{nome}`, `{loja}`, `{cashback}` e `{link}` (o cardápio da lo
 - **Impressão direta:** com o **ApFood PDV (0.3.5+)** aberto no mesmo computador, o cupom sai direto na térmica configurada no PDV, sem a janela de impressão. A via da cozinha vai para a impressora de cada setor. O PDV abre uma "ponte" em `http://127.0.0.1:17777`, que só aceita chamadas vindas do endereço do servidor configurado nele. No Chrome, permita o acesso a "apps e serviços deste dispositivo" quando ele pedir. Para ver o estado, testar ou desligar: **Configurações → Impressão**. A porta muda em `porta_ponte` no `config.json` do PDV (0 desliga).
 - **Sem o PDV:** sai pela janela de impressão do navegador, em papel de 80 mm. O QR Code (NFC-e e Pix) é gerado pelo servidor em `/painel/qrcode.svg`.
 
+## Apps Android
+
+Dois APKs, gerados pelo CI (job **apps**, pasta `mobile/`, Capacitor) e publicados no release `apps-v<versão>` a cada merge na `main` quando `mobile/VERSAO` muda:
+
+- **ApFood** (cliente) — abre `/app/`: restaurantes da região (localização “Perto de mim”, até 25 km, ou escolha da cidade), busca, promoções do dia, e “Meus pedidos” com o status de cada pedido. Toca no restaurante → cardápio da loja, com “← Restaurantes” para voltar. A loja aparece se “Aparecer no app ApFood” estiver ligado (Configurações da loja) e tiver coordenadas — ou estiver na mesma cidade de outra loja próxima.
+- **ApFood Empresa** — abre `/painel/` com o login de cada usuário. O que aparece depende do papel: **operador** lança pedidos, recebe e fecha o caixa; **gerente/admin** vê tudo, inclusive relatórios.
+
+Downloads fixos: `/app/baixar/cliente/` e `/app/baixar/empresa/` (também na página inicial). Para publicar outra versão: suba `mobile/VERSAO` e ajuste `APFOOD_APPS_VERSAO` no servidor.
+
+Assinatura: secrets `ANDROID_KEYSTORE_B64` e `ANDROID_KEYSTORE_SENHA` (alias `apfood`); sem eles o CI usa `mobile/apfood.keystore` do repositório — serve para instalar direto, mas troque por uma chave privada antes de ir para a Play Store (que também pede AAB).
+
+## Faturamento por operador
+
+Relatórios → **Por operador** (gerente/admin): para cada usuário no período, pedidos lançados e concluídos (valor), cancelados, ticket médio e quanto **recebeu** (pagamentos confirmados por ele, por forma de pagamento). Base em `GET /api/relatorios/operadores/?inicio=&fim=`.
+
 ## Tempo real
 
 O painel abre o mesmo WebSocket do PDV (`/ws/pdv/<loja>/`, autenticado pela sessão):

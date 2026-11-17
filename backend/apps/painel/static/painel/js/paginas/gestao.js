@@ -124,6 +124,29 @@ export function cmv() {
   });
 }
 
+export function operadores() {
+  return paginaRelatorio("Faturamento por operador", async (area, q) => {
+    const r = await get(`/api/relatorios/operadores/?${q}`);
+    const formas = (o) => Object.entries(o.por_forma || {}).map(([f, v]) => `${rotulo("FormaPagamento", f)} ${dinheiro(v)}`).join(" · ") || "—";
+    trocar(area,
+      h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+        kpi("Recebido pelos operadores", dinheiro(r.total_recebido_centavos), "pagamentos confirmados no caixa"),
+        kpi("Pedidos efetivados", dinheiro(r.total_pedidos_centavos), "lançados por eles e concluídos"),
+        kpi("Operadores", String(r.operadores.length), "com movimento no período")),
+      h("p", { class: "muted" }, "Pedidos efetivados: lançados pelo operador (PDV, mesa ou telefone) e concluídos. "
+        + "Recebido: pagamentos que o operador registrou no caixa (pedidos pagos online pelo cliente não entram)."),
+      tabela([
+        { rotulo: "Operador", valor: (o) => h("strong", null, o.operador) },
+        { rotulo: "Pedidos", classe: "num", campo: "pedidos" },
+        { rotulo: "Valor dos pedidos", classe: "num", valor: (o) => dinheiro(o.pedidos_centavos) },
+        { rotulo: "Ticket médio", classe: "num", valor: (o) => dinheiro(o.ticket_medio_centavos) },
+        { rotulo: "Cancelados", classe: "num", campo: "cancelados" },
+        { rotulo: "Recebido", classe: "num", valor: (o) => h("strong", null, dinheiro(o.recebido_centavos)) },
+        { rotulo: "Por forma", valor: formas },
+      ], r.operadores, { vazio: "Nenhum operador com movimento no período." }));
+  });
+}
+
 export function fechamentos() {
   return paginaRelatorio("Fechamentos de caixa", async (area, q) => {
     const r = await get(`/api/relatorios/fechamentos/?${q}`);

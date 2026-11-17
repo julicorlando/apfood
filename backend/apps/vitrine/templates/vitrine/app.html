@@ -1,0 +1,23 @@
+{% extends "vitrine/base.html" %}{% load static %}
+{% block titulo %}ApFood — peça nos restaurantes perto de você{% endblock %}
+{% block meta %}<meta name="description" content="Restaurantes da sua região com cardápio online, Pix e acompanhamento do pedido.">
+<link rel="manifest" href="{% url 'vitrine:app_manifest' %}">
+<link rel="icon" href="{% static 'marca/favicon-32.png' %}">{% endblock %}
+{% block conteudo %}
+  <header class="topo app-topo">
+    <div class="topo-linha">
+      <img class="logo" src="{% static 'marca/logo-pequena.png' %}" alt="ApFood">
+      <div><h1>Peça perto de você</h1><div class="info" id="onde">Restaurantes com entrega e retirada</div></div>
+    </div>
+    <div class="app-busca">
+      <input id="busca" type="search" placeholder="Buscar restaurante ou bairro" autocomplete="off">
+      <button id="local" class="btn secundario" type="button">📍 Perto de mim</button>
+    </div>
+    <div class="app-abas" role="tablist">
+      <button class="aba ativa" data-aba="lojas" role="tab">Restaurantes</button>
+      <button class="aba" data-aba="pedidos" role="tab">Meus pedidos</button>
+    </div>
+  </header>
+  <main id="lista" class="app-lista" aria-live="polite"><div class="cartao">Carregando…</div></main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'vitrine/app.js' %}"></script>{% endblock %}

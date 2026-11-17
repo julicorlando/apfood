@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.axionweb.apfood.cliente",
+  "appName": "ApFood",
+  "webDir": "www",
+  "server": {
+    "url": "https://apfood.axionwebdigital.com.br/app/",
+    "allowNavigation": ["apfood.axionwebdigital.com.br"],
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

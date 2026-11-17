@@ -287,3 +287,79 @@ class PedidoMesaView(Publica):
         return Response({"token": pedido.token_rastreio, "numero": pedido.numero, "status": pedido.status,
                          "total_centavos": pedido.total_centavos, "mesa": mesa.nome,
                          "acompanhar": f"/pedido/{pedido.token_rastreio}/"}, status=status.HTTP_201_CREATED)
+
+
+# =============================================================================
+# App do cliente: restaurantes da região
+# =============================================================================
+class LojasPublicasView(Publica):
+    """GET /api/publico/lojas/?lat=&lng=&raio=&cidade=&busca=
+
+    Com lat/lng: lojas até `raio` km (padrão 25), da mais perto para a mais longe.
+    Sem localização: filtra pela cidade (se informada). Abertas primeiro."""
+
+    def get(self, request):
+        from apfood_core.entrega import distancia_km
+        from django.db.models import Q
+
+        from apps.clientes.models import ZonaEntrega
+        from apps.marketing.models import Promocao
+
+        q = request.query_params
+        try:
+            lat, lng = float(q.get("lat")), float(q.get("lng"))
+        except (TypeError, ValueError):
+            lat = lng = None
+        try:
+            raio = min(float(q.get("raio") or 25), 100)
+        except ValueError:
+            raio = 25
+        lojas = (Loja.objects.select_related("empresa")
+                 .filter(ativa=True, aparecer_no_app=True, empresa__ativa=True))
+        if busca := (q.get("busca") or "").strip():
+            lojas = lojas.filter(Q(nome__icontains=busca) | Q(bairro__icontains=busca) | Q(cidade__icontains=busca))
+        if (cidade := (q.get("cidade") or "").strip()) and lat is None:
+            lojas = lojas.filter(cidade__iexact=cidade)
+        agora = timezone.localtime()
+        hoje = agora.date()
+        com_entrega = set(ZonaEntrega.objects.ativos().filter(ativa=True).values_list("loja_id", flat=True).distinct())
+        promos = {}
+        for p in Promocao.objects.ativos().filter(ativa=True, loja__in=lojas):
+            r = p.regra()
+            if (not r.dias or hoje.weekday() in r.dias) and (not r.canais or "ONLINE" in r.canais):
+                promos.setdefault(p.loja_id, []).append(p.nome)
+        saida, sem_coordenadas, cidades_perto = [], [], set()
+        for lj in lojas[:300]:
+            if not lj.empresa.liberada:
+                continue
+            dist = None
+            if lat is not None and lj.latitude is not None and lj.longitude is not None:
+                dist = round(distancia_km(lat, lng, float(lj.latitude), float(lj.longitude)), 1)
+                if dist > raio:
+                    continue
+                cidades_perto.add((lj.cidade or "").strip().lower())
+            elif lat is not None:
+                sem_coordenadas.append(lj)  # entra só se for da mesma cidade das lojas próximas
+                continue
+            saida.append(self._item(request, lj, dist, agora, com_entrega, promos))
+        for lj in sem_coordenadas:
+            if lj.cidade and lj.cidade.strip().lower() in cidades_perto:
+                saida.append(self._item(request, lj, None, agora, com_entrega, promos))
+        saida.sort(key=lambda x: (not x["aberta"], x["distancia_km"] if x["distancia_km"] is not None else 9e9,
+                                  x["nome"]))
+        cidades = sorted({c for c in Loja.objects.filter(ativa=True, aparecer_no_app=True)
+                         .exclude(cidade="").values_list("cidade", flat=True)})
+        return Response({"lojas": saida[:100], "cidades": cidades})
+
+    @staticmethod
+    def _item(request, lj, dist, agora, com_entrega, promos):
+        from apfood_core.horarios import aberta_em
+
+        return {
+            "nome": lj.nome, "slug": lj.slug, "logo": _url(request, lj.logo), "cor_primaria": lj.cor_primaria,
+            "bairro": lj.bairro, "cidade": lj.cidade,
+            "aberta": bool(lj.aberta_para_pedidos and aberta_em(lj.horarios, agora)),
+            "distancia_km": dist, "tempo_preparo_min": lj.tempo_preparo_min,
+            "entrega": lj.id in com_entrega, "pedido_minimo_centavos": lj.pedido_minimo_centavos,
+            "promocoes": promos.get(lj.id, [])[:2],
+        }
