@@ -22,6 +22,13 @@ def gerar_token_rastreio() -> str:
     return secrets.token_urlsafe(12)
 
 
+def gerar_codigo() -> str:
+    """Código de 4 dígitos (retirada na loja / recebimento pelo cliente)."""
+    import secrets
+
+    return f"{secrets.randbelow(10000):04d}"
+
+
 def hoje():
     return timezone.localdate()
 
@@ -84,6 +91,10 @@ class Pedido(DaLoja, ModeloBase):
     entregador = models.ForeignKey(
         "clientes.Entregador", on_delete=models.SET_NULL, null=True, blank=True, related_name="pedidos"
     )
+    # O entregador do app digita: o de retirada (a loja informa) ao pegar o pedido,
+    # o de recebimento (o cliente informa) ao entregar.
+    codigo_retirada = models.CharField(max_length=4, default=gerar_codigo, editable=False)
+    codigo_entrega = models.CharField(max_length=4, default=gerar_codigo, editable=False)
 
     # Valores (centavos) — calculados por apfood_core.totais
     subtotal_centavos = models.PositiveIntegerField(default=0)
@@ -296,3 +307,43 @@ class HistoricoStatusPedido(ModeloBase):
         db_table = "historico_status_pedido"
         ordering = ["criado_em"]
         indexes = [models.Index(fields=["pedido", "criado_em"])]
+
+
+class Avaliacao(DaLoja, ModeloBase):
+    """Avaliação opcional do cliente depois de receber o pedido (1 a 5 estrelas)."""
+
+    pedido = models.OneToOneField(Pedido, on_delete=models.CASCADE, related_name="avaliacao")
+    nota = models.PositiveSmallIntegerField()
+    comentario = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = "avaliacoes"
+        ordering = ["-criado_em"]
+        indexes = [models.Index(fields=["loja", "criado_em"], name="avaliacoes_loja_id_6c1b0e_idx")]
+
+
+class ChamadaEntrega(DaLoja, ModeloBase):
+    """"Chamar entregador": oferece o pedido a um entregador disponível por vez
+    (o mais perto da loja primeiro), 30 s para cada, até 2 min no total."""
+
+    PROCURANDO, ACEITA, SEM_RESPOSTA, CANCELADA = "PROCURANDO", "ACEITA", "SEM_RESPOSTA", "CANCELADA"
+    STATUS = [(PROCURANDO, "Procurando"), (ACEITA, "Aceita"), (SEM_RESPOSTA, "Ninguém aceitou"), (CANCELADA, "Cancelada")]
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="chamadas")
+    status = models.CharField(max_length=20, choices=STATUS, default=PROCURANDO)
+    expira_em = models.DateTimeField()
+    entregador_atual = models.ForeignKey("clientes.Entregador", on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name="+")
+    oferta_ate = models.DateTimeField(null=True, blank=True)
+    ofertados = models.JSONField(default=list, blank=True, help_text="ids na ordem em que receberam a oferta")
+    recusados = models.JSONField(default=list, blank=True)
+    aceita_por = models.ForeignKey("clientes.Entregador", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+    aceita_em = models.DateTimeField(null=True, blank=True)
+    criado_por = models.ForeignKey("contas.Usuario", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="+")
+
+    class Meta:
+        db_table = "chamadas_entrega"
+        ordering = ["-criado_em"]
+        indexes = [models.Index(fields=["status", "loja"], name="chamadas_en_status_9f3a21_idx")]

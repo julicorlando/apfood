@@ -13,5 +13,5 @@
     "allowMixedContent": false,
     "adjustMarginsForEdgeToEdge": "auto"
   },
-  "appendUserAgent": "ApFoodCliente/1.0.1"
+  "appendUserAgent": "ApFoodCliente/1.0.2"
 }

@@ -41,6 +41,7 @@ const ROTAS = [
   ["/curva-abc", "Curva ABC", "🔤", "Relatórios", () => temLoja() && ehGerente(), "gestao", "curvaAbc"],
   ["/cmv", "CMV e margem", "📉", "Relatórios", () => temLoja() && ehGerente(), "gestao", "cmv"],
   ["/operadores", "Por operador", "🧑‍💼", "Relatórios", () => temLoja() && ehGerente(), "gestao", "operadores"],
+  ["/avaliacoes", "Avaliações", "⭐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "avaliacoes"],
   ["/fechamentos", "Fechamentos de caixa", "🔐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "fechamentos"],
   ["/notas", "Notas fiscais", "🧾", "Relatórios", temLoja, "gestao", "notas"],
 
@@ -231,6 +232,12 @@ async function iniciar() {
       aviso(`Novo pedido #${ev.pedido?.numero ?? ""}${ev.pedido?.nome_cliente ? ` — ${ev.pedido.nome_cliente}` : ""}`, "ok");
     }
     if (ev.tipo === "estoque.alerta") aviso(`Estoque baixo: ${ev.produto?.nome ?? ""}`);
+    if (ev.tipo === "entrega.chamada" && ev.status === "ACEITA") aviso(`🛵 ${ev.entregador} aceitou o pedido #${ev.numero}.`, "ok");
+    if (ev.tipo === "entrega.chamada" && ev.status === "SEM_RESPOSTA") {
+      bipe();
+      aviso(`Ninguém aceitou a entrega do pedido #${ev.numero}: abra o pedido para chamar de novo ou escolher outra forma.`, "erro");
+    }
+    if (ev.tipo === "pedido.avaliado") aviso(`⭐ Pedido #${ev.numero} avaliado com ${ev.nota} estrela${ev.nota > 1 ? "s" : ""}.`, "ok");
   });
   window.addEventListener("hashchange", navegar);
   navegar();

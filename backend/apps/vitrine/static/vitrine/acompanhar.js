@@ -78,6 +78,56 @@
       el("small", { text: f.selos + " de " + f.meta + " selos" + (f.saldo_centavos ? " · crédito disponível: " + C.reais(f.saldo_centavos) : "") })]);
   }
 
+  function blocoCodigo(p) {
+    if (!p.codigo_entrega) return null;
+    return el("div", { class: "cartao codigo-entrega" }, [
+      el("small", { text: "Código de recebimento" }),
+      el("div", { class: "codigo", text: p.codigo_entrega }),
+      el("small", { text: (p.entregador ? p.entregador + " vai pedir" : "O entregador vai pedir") + " este código na entrega. Só informe quando receber o pedido." }),
+    ]);
+  }
+
+  let avaliacaoDispensada = false;
+  try { avaliacaoDispensada = localStorage.getItem("apfood_avaliar_" + TOKEN) === "nao"; } catch (e) { /* ok */ }
+
+  function blocoAvaliacao(p) {
+    if (p.avaliacao) {
+      return el("div", { class: "cartao avaliacao" }, [el("b", { text: "Obrigado pela avaliação!" }),
+        el("div", { class: "estrelas-lidas", text: "★".repeat(p.avaliacao.nota) + "☆".repeat(5 - p.avaliacao.nota) })]);
+    }
+    if (!p.pode_avaliar || avaliacaoDispensada) return null;
+    let nota = 0;
+    const botoes = [1, 2, 3, 4, 5].map(function (n) {
+      return el("button", { type: "button", class: "estrela", "aria-label": n + " estrela" + (n > 1 ? "s" : ""), text: "☆", onclick: function () {
+        nota = n;
+        botoes.forEach(function (b, i) { b.textContent = i < n ? "★" : "☆"; b.classList.toggle("marcada", i < n); });
+        enviar.disabled = false;
+      } });
+    });
+    const comentario = el("textarea", { rows: 2, maxlength: 500, placeholder: "Quer contar algo? (opcional)" });
+    const erro = el("p", { class: "erros" });
+    const enviar = el("button", { class: "btn", type: "button", text: "Enviar avaliação", disabled: true, onclick: async function () {
+      enviar.disabled = true; erro.textContent = "";
+      try {
+        const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ nota: nota, comentario: comentario.value }) });
+        const d = await r.json().catch(function () { return {}; });
+        if (!r.ok) { erro.textContent = d.detail || "Não foi possível enviar agora."; enviar.disabled = false; return; }
+        carregar();
+      } catch (e) { erro.textContent = "Sem conexão. Tente de novo."; enviar.disabled = false; }
+    } });
+    const depois = el("button", { class: "btn secundario", type: "button", text: "Agora não", onclick: function () {
+      avaliacaoDispensada = true;
+      try { localStorage.setItem("apfood_avaliar_" + TOKEN, "nao"); } catch (e) { /* ok */ }
+      cartao.remove();
+    } });
+    const cartao = el("div", { class: "cartao avaliacao" }, [
+      el("b", { text: "Como foi seu pedido?" }), el("small", { text: "Opcional — ajuda a " + p.loja + " a melhorar." }),
+      el("div", { class: "estrelas" }, botoes), comentario, erro,
+      el("div", { class: "acoes-avaliacao" }, [depois, enviar])]);
+    return cartao;
+  }
+
   function render(p) {
     document.documentElement.style.setProperty("--cor", p.cor_primaria || "#e4572e");
     document.title = "Pedido #" + (p.numero || "") + " — " + p.loja;
@@ -100,6 +150,8 @@
         el("div", { text: "Pedido #" + (p.numero || "") }),
         cancelado && p.motivo_cancelamento ? el("p", { class: "erros", text: "Motivo: " + p.motivo_cancelamento }) : null,
         cancelado ? null : etapas(p)]),
+      blocoAvaliacao(p),
+      blocoCodigo(p),
       blocoPix(p),
       blocoRastreio(p),
       el("div", { class: "cartao" }, [el("b", { text: "Itens" })].concat(itens).concat([el("div", { class: "resumo" },

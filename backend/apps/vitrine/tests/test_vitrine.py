@@ -146,3 +146,10 @@ def test_paginas_do_app(loja):
     assert c.get("/app/baixar/outro/").status_code == 404
     assert "ApFood-Empresa" not in c.get("/empresas/").content.decode()  # só os links /app/baixar/
     assert "/app/baixar/empresa/" in c.get("/empresas/").content.decode()
+
+
+def test_pagina_do_app_entregador(client):
+    r = client.get("/entregador/")
+    assert r.status_code == 200 and "vitrine/entregador.js" in r.content.decode()
+    assert client.get("/entregador/manifest.webmanifest").json()["start_url"] == "/entregador/"
+    assert client.get("/app/baixar/entregador/")["Location"].endswith("/ApFood-Entregador.apk")

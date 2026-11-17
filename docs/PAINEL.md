@@ -131,7 +131,7 @@ A mensagem aceita `{nome}`, `{loja}`, `{cashback}` e `{link}` (o cardápio da lo
 
 ## Apps Android
 
-Dois APKs, gerados pelo CI (job **apps**, pasta `mobile/`, Capacitor) e publicados no release `apps-v<versão>` a cada merge na `main` quando `mobile/VERSAO` muda:
+Três APKs (cliente, empresa e entregador), gerados pelo CI (job **apps**, pasta `mobile/`, Capacitor) e publicados no release `apps-v<versão>` a cada merge na `main` quando `mobile/VERSAO` muda:
 
 - **ApFood** (cliente) — abre `/app/`: restaurantes da região (localização “Perto de mim”, até 25 km, ou escolha da cidade), busca, promoções do dia, e “Meus pedidos” com o status de cada pedido. Toca no restaurante → cardápio da loja, com “← Restaurantes” para voltar. A loja aparece se “Aparecer no app ApFood” estiver ligado (Configurações da loja) e tiver coordenadas — ou estiver na mesma cidade de outra loja próxima.
 - **ApFood Empresa** — abre o painel em **modo app** (`/painel/?app=1`; no navegador, `?app=0` desliga): só a operação, com abas embaixo que se ajustam a celular, tablet e PC — **Vender** (PDV: comer aqui, **mesa**, viagem e delivery), **Mesas** (contas, pagamento parcial, fechar), **Pedidos** (andamento, cozinha → entrega com entregador → concluir, receber) e **Caixa** (abrir, sangria, fechar). Gerente/admin também vê **Resultados** (faturamento por operador).
@@ -139,6 +139,22 @@ Dois APKs, gerados pelo CI (job **apps**, pasta `mobile/`, Capacitor) e publicad
 Downloads fixos: `/app/baixar/cliente/` e `/app/baixar/empresa/` (também na página inicial). Para publicar outra versão: suba `mobile/VERSAO` e ajuste `APFOOD_APPS_VERSAO` no servidor.
 
 Assinatura: secrets `ANDROID_KEYSTORE_B64` e `ANDROID_KEYSTORE_SENHA` (alias `apfood`); sem eles o CI usa `mobile/apfood.keystore` do repositório — serve para instalar direto, mas troque por uma chave privada antes de ir para a Play Store (que também pede AAB).
+
+## App ApFood Entregador e chamada de entregador
+
+**Cadastro (Clientes e entrega → Entregadores):** celular com DDD (é o login), **PIN** inicial de 4 a 6 números (o entregador troca no app; a loja redefine se ele esquecer) e a regra da **projeção de ganhos** (recebe a taxa de entrega, valor fixo por entrega ou não mostrar). O pagamento é combinado entre loja e entregador; o app só mostra a estimativa.
+
+**No app** (`/entregador/` ou APK *ApFood Entregador*): o entregador entra com celular + PIN e fica **Disponível** (manda a posição a cada 15 s e mantém a tela acesa). Abas: **Entregas**, **Ganhos** (hoje, semana, mês, projeção do mês, total e histórico) e **Conta** (trocar PIN, sair).
+
+**Chamar entregador (painel → pedido de entrega):** o pedido é oferecido a um entregador disponível por vez — o mais perto da loja primeiro, quem está livre antes de quem já está entregando — com **30 s** para aceitar (alerta com som, vibração, notificação e WhatsApp se a loja tiver o número conectado). Recusou ou não respondeu → próximo. Em **2 min** sem aceite, volta para a loja como **“Ninguém aceitou”**, com **Chamar novamente** ou **Outra forma de entrega** (escolher um entregador na mão ou entrega própria).
+
+**Códigos:** cada pedido tem um **código de retirada** (aparece no painel; a loja informa e o entregador digita ao pegar → *saiu para entrega*) e um **código de recebimento** (aparece para o cliente no acompanhamento e no WhatsApp; o entregador digita na porta → *concluído*). Código errado não avança; muitas tentativas bloqueiam por 30 min. O link antigo do celular (`/entrega/<token>/`) também pede o código de recebimento.
+
+Limite atual: o alerta toca com o app aberto (tela acesa enquanto disponível). Notificação com o app fechado exige push (Firebase) — próximo passo.
+
+## Avaliação do pedido
+
+Depois de concluído, o cliente vê **“Como foi seu pedido?”** (1 a 5 estrelas + comentário, opcional, uma vez) na tela de acompanhamento; a mensagem de WhatsApp de pedido entregue traz o link. O painel avisa a cada avaliação e **Relatórios → Avaliações** mostra média, distribuição, % de clientes que avaliaram e os comentários.
 
 ## Faturamento por operador
 

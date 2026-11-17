@@ -71,11 +71,29 @@ def app_manifest(request):
     }, content_type="application/manifest+json")
 
 
+@cache_control(no_cache=True)
+def app_entregador(request):
+    """App ApFood Entregador (também é o que o APK abre)."""
+    return render(request, "vitrine/entregador.html")
+
+
+def app_entregador_manifest(request):
+    from django.http import JsonResponse
+    from django.templatetags.static import static
+
+    return JsonResponse({
+        "name": "ApFood Entregador", "short_name": "Entregador", "start_url": "/entregador/", "scope": "/entregador/",
+        "display": "standalone", "background_color": "#1d1d1f", "theme_color": "#1d1d1f", "lang": "pt-BR",
+        "icons": [{"src": static("marca/icone-192.png"), "sizes": "192x192", "type": "image/png"},
+                  {"src": static("marca/icone-512.png"), "sizes": "512x512", "type": "image/png"}],
+    }, content_type="application/manifest+json")
+
+
 def baixar_app(request, qual):
     """Link fixo para o APK da versão publicada (GitHub Releases)."""
     from django.http import Http404
 
-    arquivos = {"cliente": "ApFood-Cliente.apk", "empresa": "ApFood-Empresa.apk"}
+    arquivos = {"cliente": "ApFood-Cliente.apk", "empresa": "ApFood-Empresa.apk", "entregador": "ApFood-Entregador.apk"}
     if qual not in arquivos:
         raise Http404
     versao = settings.APFOOD.get("APPS_VERSAO") or "1.0.0"

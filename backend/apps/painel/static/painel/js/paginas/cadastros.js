@@ -346,16 +346,27 @@ async function anonimizarCliente(c, recarregar) {
 
 export function entregadores() {
   return paginaCadastro({
-    titulo: "Entregadores", singular: "Entregador", url: "/api/entregadores/", busca: ["nome"], novo: { ativo: true },
-    colunas: [{ rotulo: "Nome", campo: "nome" }, { rotulo: "Telefone", campo: "telefone" }, ativoCol()],
+    titulo: "Entregadores", singular: "Entregador", url: "/api/entregadores/", busca: ["nome"],
+    colunas: [{ rotulo: "Nome", campo: "nome" }, { rotulo: "Telefone", campo: "telefone" },
+      { rotulo: "App", valor: (e) => (!e.tem_pin ? h("span", { class: "muted" }, "sem PIN") : e.online_agora ? h("span", { class: "etiqueta e-ok" }, "online") : h("span", { class: "muted" }, "offline")) },
+      ativoCol()],
     campos: [
       { nome: "nome", rotulo: "Nome", obrigatorio: true },
-      { nome: "telefone", rotulo: "Telefone", tipo: "tel" },
+      { nome: "telefone", rotulo: "Celular com DDD (login do app)", tipo: "tel" },
+      { nome: "pin", rotulo: "PIN do app (4 a 6 números)", tipo: "senha",
+        ajuda: "Defina o PIN inicial (ou um novo, se ele esquecer). Ele troca no próprio app. Deixe em branco para manter." },
+      { nome: "remuneracao", rotulo: "Projeção de ganhos no app", tipo: "select", obrigatorio: true,
+        opcoes: [{ valor: "TAXA", rotulo: "Recebe a taxa de entrega" }, { valor: "FIXO", rotulo: "Valor fixo por entrega" }, { valor: "NENHUM", rotulo: "Não mostrar valores" }],
+        ajuda: "Só para o entregador acompanhar quanto tem a receber: o pagamento é combinado entre vocês." },
+      { nome: "valor_por_entrega_centavos", rotulo: "Valor por entrega (R$, se fixo)", tipo: "dinheiro" },
       { nome: "ativo", rotulo: "Ativo", tipo: "bool" },
     ],
-    antesDeSalvar: (d) => ({ ...d, telefone: String(d.telefone || "").replace(/\D/g, "") }),
+    novo: { ativo: true, remuneracao: "TAXA" },
+    antesDeSalvar: (d) => ({ ...d, telefone: String(d.telefone || "").replace(/\D/g, ""), pin: String(d.pin || "").replace(/\D/g, "") || undefined }),
     podeExcluir: excluirGerente,
-    intro: "Cada entregador recebe um link para abrir no celular: vê as entregas dele, o mapa, quanto cobrar e marca como entregue.",
+    intro: "Entregadores usam o app ApFood Entregador: entram com o celular e o PIN, ficam disponíveis e recebem as chamadas da loja "
+      + "(30 s para aceitar; ao pegar o pedido digitam o código de retirada e, ao entregar, o código que o cliente recebeu). "
+      + "Quem não usa o app pode receber o link do celular.",
     acoes: (e) => ehGerente() && e.ativo ? botaoAcao("Link do celular", () => linkEntregador(e), "botao botao-pequeno") : null,
   });
 }

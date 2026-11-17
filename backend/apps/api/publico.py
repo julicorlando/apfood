@@ -216,7 +216,46 @@ class AcompanharPedidoView(Publica):
             "rastreio": rastreio_entrega(p),
             "pix": next(({"valor_centavos": x.valor_centavos, **x.dados_externos}
                          for x in p.pagamentos.filter(status="PENDENTE", forma="PIX") if x.dados_externos), None),
+            # o cliente informa ao entregador na porta (o app do entregador pede para concluir)
+            "codigo_entrega": p.codigo_entrega if p.tipo_atendimento == "ENTREGA" and p.entregador_id
+            and p.status in ("RECEBIDO", "EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA") else None,
+            "entregador": p.entregador.nome.split()[0] if p.entregador_id and p.entregador.nome else None,
+            "avaliacao": _avaliacao(p),
+            "pode_avaliar": p.status == "CONCLUIDO" and _avaliacao(p) is None,
         })
+
+    def post(self, request, token):
+        """Avaliação opcional depois de receber: {"nota": 1-5, "comentario": ""}."""
+        from apps.pedidos.models import Avaliacao
+
+        p = get_object_or_404(Pedido.objects.select_related("loja"), token_rastreio=token)
+        if p.status != "CONCLUIDO":
+            return Response({"detail": "Dá para avaliar depois de receber o pedido."}, status=400)
+        try:
+            nota = int(request.data.get("nota"))
+        except (TypeError, ValueError):
+            nota = 0
+        if not 1 <= nota <= 5:
+            return Response({"detail": "Escolha de 1 a 5 estrelas."}, status=400)
+        comentario = str(request.data.get("comentario") or "").strip()[:500]
+        a, criada = Avaliacao.objects.get_or_create(pedido=p, defaults={"loja": p.loja, "nota": nota,
+                                                                         "comentario": comentario})
+        if not criada:
+            return Response({"detail": "Este pedido já foi avaliado. Obrigado!"}, status=400)
+        from apps.realtime.eventos import grupo_pdv, publicar
+
+        publicar(grupo_pdv(p.loja_id), "pedido.avaliado", {"numero": p.numero, "nota": nota})
+        return Response({"nota": a.nota, "comentario": a.comentario}, status=201)
+
+
+def _avaliacao(p):
+    from apps.pedidos.models import Avaliacao
+
+    try:
+        a = p.avaliacao
+    except Avaliacao.DoesNotExist:
+        return None
+    return {"nota": a.nota, "comentario": a.comentario}
 
 
 # =============================================================================

@@ -28,6 +28,7 @@
     </header>
     <h1 style="font-size:20px;margin:0 0 12px">Olá, {{ entregador.nome }}!</h1>
     {% if aviso %}<div class="alerta alerta-ok" role="status" style="margin-bottom:12px">Pedido #{{ aviso }} marcado como entregue.</div>{% endif %}
+    {% if erro %}<div class="alerta alerta-erro" role="alert" style="margin-bottom:12px">{{ erro }}</div>{% endif %}
 
     {% if cartoes %}<div class="muted" id="gps" style="margin-bottom:10px">📡 Compartilhando sua localização com os clientes desta entrega…</div>{% endif %}
     {% for c in cartoes %}
@@ -47,6 +48,9 @@
         {% if c.p.telefone_cliente %}<a class="botao" href="tel:{{ c.p.telefone_cliente }}">📞 Ligar</a>{% else %}<span></span>{% endif %}
         <form method="post" action="{% url 'entregue' token=entregador.token_acesso pedido=c.p.id %}">
           {% csrf_token %}
+          <label class="campo" style="margin-bottom:8px"><span>Código de recebimento (o cliente informa)</span>
+            <input name="codigo" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required placeholder="0000"
+                   style="font-size:22px;letter-spacing:6px;text-align:center"></label>
           <button type="submit" class="botao botao-ok botao-grande botao-bloco">✓ Entregue</button>
         </form>
       </div>

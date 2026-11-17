@@ -164,7 +164,7 @@ jobs:
           gh release create $tag dist/ApFoodPDV.exe --title "ApFood PDV $versao" --notes $notas
 
   apps:
-    name: Apps Android (cliente e empresa)
+    name: Apps Android (cliente, empresa e entregador)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -187,6 +187,7 @@ jobs:
           chmod +x mobile/construir.sh
           mobile/construir.sh cliente
           mobile/construir.sh empresa
+          mobile/construir.sh entregador
       - uses: actions/upload-artifact@v4
         with:
           name: apps-android
@@ -200,7 +201,7 @@ jobs:
           versao=$(tr -d '[:space:]' < mobile/VERSAO)
           tag="apps-v$versao"
           if gh release view "$tag" >/dev/null 2>&1; then echo "Release $tag já existe — suba mobile/VERSAO para publicar outra"; exit 0; fi
-          gh release create "$tag" mobile/dist/ApFood-Cliente.apk mobile/dist/ApFood-Empresa.apk \
+          gh release create "$tag" mobile/dist/ApFood-Cliente.apk mobile/dist/ApFood-Empresa.apk mobile/dist/ApFood-Entregador.apk \
             --title "ApFood Apps $versao" \
             --notes "Apps Android $versao. No servidor: APFOOD_APPS_VERSAO=$versao"
 

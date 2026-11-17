@@ -16,7 +16,6 @@ from django.views.decorators.http import require_POST
 
 from apps.clientes.models import Entregador
 from apps.core.excecoes import ErroNegocio
-from apps.pedidos import services as pedidos_srv
 from apps.pedidos.models import Pedido
 
 
@@ -49,18 +48,26 @@ def painel_entregador(request, token):
     e = _entregador(token)
     pedidos = (Pedido.objects.filter(entregador=e, status=StatusPedido.SAIU_PARA_ENTREGA)
                .prefetch_related("pagamentos", "itens").order_by("saiu_entrega_em"))
+    erro = {"codigo": "Código de recebimento incorreto: confira com o cliente.",
+            "tentativas": "Muitas tentativas com código errado: peça para a loja conferir."}.get(request.GET.get("erro", ""))
     return render(request, "painel/entregador.html", {"entregador": e, "cartoes": [_cartao(p) for p in pedidos],
-                                                      "aviso": request.GET.get("ok")})
+                                                      "aviso": request.GET.get("ok"), "erro": erro})
 
 
 @require_POST
 def marcar_entregue(request, token, pedido):
+    from apps.pedidos import chamadas
+
     e = _entregador(token)
     p = get_object_or_404(Pedido, pk=pedido, entregador=e)
     try:
-        pedidos_srv.transicionar(p, StatusPedido.CONCLUIDO, None, motivo=f"entregue por {e.nome}")
-    except ErroNegocio:
-        pass  # já concluído/cancelado: só volta para a lista
+        chamadas.entregar(p.id, e, request.POST.get("codigo", ""))
+    except ErroNegocio as exc:
+        if "incorreto" in exc.mensagem:
+            return redirect(f"/entrega/{token}/?erro=codigo")
+        if "tentativas" in exc.mensagem:
+            return redirect(f"/entrega/{token}/?erro=tentativas")
+        # já concluído/cancelado: só volta para a lista
     return redirect(f"/entrega/{token}/?ok={p.numero}")
 
 

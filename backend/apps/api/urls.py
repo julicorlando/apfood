@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import gestao, publico, relatorios, sync, views, webhooks
+from . import entregador, gestao, publico, relatorios, sync, views, webhooks
 
 r = DefaultRouter()
 for prefixo, vs in [
@@ -39,6 +39,15 @@ urlpatterns = [
     path("relatorios/curva-abc/", relatorios.CurvaABCView.as_view()),
     path("relatorios/cmv/", relatorios.CMVView.as_view()),
     path("relatorios/operadores/", relatorios.OperadoresView.as_view()),
+    path("relatorios/avaliacoes/", relatorios.AvaliacoesView.as_view()),
+    # app ApFood Entregador
+    path("entregador/entrar/", entregador.EntrarView.as_view()),
+    path("entregador/pin/", entregador.PinView.as_view()),
+    path("entregador/online/", entregador.OnlineView.as_view()),
+    path("entregador/estado/", entregador.EstadoView.as_view()),
+    path("entregador/historico/", entregador.HistoricoView.as_view()),
+    path("entregador/ofertas/<uuid:chamada>/<str:acao>/", entregador.OfertaView.as_view()),
+    path("entregador/entregas/<uuid:pedido>/<str:acao>/", entregador.EntregaView.as_view()),
     path("relatorios/fechamentos/", relatorios.FechamentosView.as_view()),
     path("relatorios/fluxo-caixa/", relatorios.FluxoCaixaView.as_view()),
     path("plataforma/resumo/", relatorios.PlataformaResumoView.as_view()),

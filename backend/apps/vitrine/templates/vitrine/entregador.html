@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d1d1f">
+  <title>ApFood Entregador</title>
+  <meta name="robots" content="noindex">
+  {% include "marca/cabeca.html" %}
+  <link rel="manifest" href="{% url 'vitrine:app_entregador_manifest' %}">
+  <link rel="stylesheet" href="{% static 'vitrine/entregador.css' %}">
+</head>
+<body>
+  <div id="app" class="app" aria-live="polite">
+    <div class="carregando">Carregando…</div>
+  </div>
+  <noscript><p style="padding:16px">Ative o JavaScript para usar o app.</p></noscript>
+  <script src="{% static 'vitrine/entregador.js' %}"></script>
+</body>
+</html>

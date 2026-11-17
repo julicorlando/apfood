@@ -157,3 +157,15 @@ textarea { min-height: 64px; resize: vertical; }
 .app-loja-txt small { color: #666; }
 .app-promo { color: #c2410c !important; }
 .voltar-app { display: inline-block; margin-bottom: 8px; color: inherit; font-size: 14px; text-decoration: none; }
+
+/* acompanhamento: código de recebimento e avaliação */
+.codigo-entrega { text-align: center; display: grid; gap: 4px; border: 2px dashed var(--cor); }
+.codigo-entrega .codigo { font-size: 40px; font-weight: 800; letter-spacing: 10px; font-variant-numeric: tabular-nums; padding-left: 10px; }
+.avaliacao { display: grid; gap: 8px; }
+.avaliacao .estrelas { display: flex; gap: 6px; justify-content: center; }
+.avaliacao .estrela { font-size: 36px; line-height: 1; background: none; border: 0; color: #c9c2bb; cursor: pointer; padding: 4px; }
+.avaliacao .estrela.marcada { color: #e8a317; }
+.avaliacao textarea { width: 100%; border: 1px solid var(--borda); border-radius: 10px; padding: 10px; font: inherit; resize: vertical; }
+.avaliacao .acoes-avaliacao { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.avaliacao .acoes-avaliacao .btn { justify-content: center; }
+.estrelas-lidas { color: #e8a317; font-size: 26px; letter-spacing: 3px; }
