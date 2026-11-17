@@ -189,3 +189,30 @@ def test_planos_admin_le_master_altera(admin, master):
     r = cliente(master).post("/api/planos/", {"nome": "Pro", "preco_mensal_centavos": 9900}, format="json")
     assert r.status_code == 201
     assert cliente(admin).get("/api/planos/").status_code == 200
+
+
+def test_falha_ao_gravar_logo_responde_json(loja, monkeypatch):
+    """Sem permissão na pasta de fotos: 503 com mensagem, não página HTML de erro 500."""
+    import io
+
+    from django.core.files.storage import FileSystemStorage
+    from PIL import Image
+    from rest_framework.test import APIClient
+
+    from apps.contas.models import Usuario
+
+    dono = Usuario.objects.create_user("dono", password="x", papel="ADMIN", empresa=loja.empresa)
+    dono.lojas.set([loja])
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), "orange").save(buf, "PNG")
+    buf.seek(0)
+    buf.name = "logo.png"
+
+    def sem_permissao(*a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(FileSystemStorage, "_save", sem_permissao)
+    api = APIClient()
+    api.force_authenticate(dono)
+    r = api.patch(f"/api/lojas/{loja.id}/?loja={loja.id}", {"logo": buf}, format="multipart")
+    assert r.status_code == 503 and "salvar o arquivo" in r.json()["detail"]

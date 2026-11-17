@@ -115,6 +115,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # --- API (DRF + JWT) --------------------------------------------------------
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "apps.api.excecoes.tratar",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",

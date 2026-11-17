@@ -183,6 +183,9 @@ services:
             echo "BACKUP FALHOU em $$d" >&2
           fi
         }
+        # o volume "media" é do app (uid 1000): se foi criado primeiro por este container
+        # (a imagem alpine já tem /media do root), o app não consegue salvar fotos/logos
+        chown -R 1000:1000 /media && chmod 755 /media && echo "media: permissões ok"
         copiar  # uma cópia ao subir (deploy)
         while true; do
           agora=$$(date +%H%M); alvo=$${BACKUP_HORA}00
