@@ -130,7 +130,8 @@ async function navegar() {
   const inicial = ehMaster() ? ROTAS.find((r) => r[0] === "/plataforma")
     : MODO_APP ? ROTAS.find((r) => r[0] === "/pdv") : ROTAS[0];
   const def = ROTAS.find((r) => r[0] === caminho && rotaPermitida(r)) || inicial;
-  const [, titulo, , , , mod, fn] = def;
+  const [, tituloRota, , , , mod, fn] = def;
+  const titulo = (MODO_APP && ABAS_APP.find((a) => a[0] === def[0])?.[1]) || tituloRota;
   if (limpeza) { try { limpeza(); } catch (e) { console.error(e); } limpeza = null; }
   $("app").classList.remove("menu-aberto");
   marcarMenu(def[0]);
@@ -142,7 +143,7 @@ async function navegar() {
     const m = await modulos[mod]();
     if (minha !== navegacao) return;
     const pagina = m[fn]();
-    if (pagina.titulo && pagina.titulo !== titulo) $("titulo").textContent = pagina.titulo;
+    if (pagina.titulo && pagina.titulo !== titulo && !MODO_APP) $("titulo").textContent = pagina.titulo;
     const r = await pagina.render(raiz, params);
     if (minha !== navegacao) { if (typeof r === "function") r(); return; }
     if (typeof r === "function") limpeza = r;
@@ -203,6 +204,9 @@ export async function mostrarAssinatura() {
 }
 
 async function iniciar() {
+  const medirTopo = () => document.documentElement.style.setProperty("--topo", `${document.querySelector(".topo")?.offsetHeight || 0}px`);
+  medirTopo();
+  window.addEventListener("resize", medirTopo);
   if (MODO_APP) {
     document.body.classList.add("modo-app");
     $("usuario").after(h("button", { type: "button", class: "botao botao-pequeno", onclick: () => document.querySelector(".menu-sair").requestSubmit() }, "Sair"));
