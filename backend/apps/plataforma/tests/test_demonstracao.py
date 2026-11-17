@@ -13,8 +13,8 @@ from apps.plataforma import demonstracao
 
 def test_preenche_sem_duplicar(loja, gerente):
     Usuario.objects.create_user("dono", password="x", papel="ADMIN", empresa=loja.empresa)
-    r = demonstracao.preencher(loja, dias=3)
-    assert r["produtos"] == len(demonstracao.CARDAPIO) and r["pedidos_historico"] >= 24
+    r = demonstracao.preencher(loja, dias=6)  # histórico acima do mínimo: rodar de novo não gera mais
+    assert r["produtos"] == len(demonstracao.CARDAPIO) and r["pedidos_historico"] >= 50
     loja.refresh_from_db()
     assert loja.fidelidade_selos == 8 and loja.horarios and loja.aberta_para_pedidos
     concluidos = Pedido.objects.filter(loja=loja, status="CONCLUIDO")
@@ -27,7 +27,8 @@ def test_preenche_sem_duplicar(loja, gerente):
     # rodar de novo não duplica cardápio nem histórico
     total = Pedido.objects.filter(loja=loja).count()
     produtos = Produto.objects.filter(loja=loja).count()
-    assert demonstracao.preencher(loja, dias=3)["pedidos_historico"] in (0, r["pedidos_historico"])
+    assert demonstracao.preencher(loja, dias=6)["pedidos_historico"] == 0
+    assert Pedido.objects.filter(loja=loja).count() == total
     assert Produto.objects.filter(loja=loja).count() == produtos
     # CMV tem números
     api = APIClient()
