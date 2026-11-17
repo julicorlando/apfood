@@ -20,7 +20,7 @@ def test_preenche_sem_duplicar(loja, gerente):
     assert Pedido.objects.filter(loja=loja, status="EM_PREPARO").exists()  # movimento de hoje
     assert Pedido.objects.filter(loja=loja, comanda__isnull=False).exists()  # mesa aberta
     ovo = Produto.objects.get(loja=loja, nome="Ovo", tipo="INSUMO")
-    assert ovo.abaixo_do_minimo()
+    assert ovo.abaixo_do_minimo
     # rodar de novo não duplica cardápio nem histórico
     total = Pedido.objects.filter(loja=loja).count()
     produtos = Produto.objects.filter(loja=loja).count()
