@@ -6,7 +6,10 @@ const CHAVE_LOJA = "apfood.loja";
 
 export class ErroApi extends Error {
   constructor(status, dados) {
-    super(mensagemDeErro(dados) || `Erro ${status}`);
+    const html = typeof dados === "string" && /^\s*</.test(dados);
+    super((!html && mensagemDeErro(dados)) || (status >= 500
+      ? `Erro no servidor (${status}). Tente de novo em instantes; se continuar, avise o suporte.`
+      : `Erro ${status}`));
     this.status = status;
     this.dados = dados;
     this.mensagem = this.message;

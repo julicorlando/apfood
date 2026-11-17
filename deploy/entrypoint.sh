@@ -24,6 +24,9 @@ PY
 esperar_banco
 case "$PAPEL" in
   web)
+    if ! ( mkdir -p /app/backend/media/lojas && touch /app/backend/media/.teste-escrita && rm -f /app/backend/media/.teste-escrita ) 2>/dev/null; then
+      echo "AVISO: sem permissão de escrita em /app/backend/media — fotos e logos não vão salvar (dono deve ser uid 1000)" >&2
+    fi
     python manage.py migrate --noinput
     if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
       python manage.py createsuperuser --noinput --username "$DJANGO_SUPERUSER_USERNAME" \
