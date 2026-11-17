@@ -94,7 +94,7 @@
     ])]));
     let modoApp = false;
     try { modoApp = localStorage.getItem("apfood_modo_app") === "1"; } catch (e) { modoApp = false; }
-    if (modoApp && !MESA) $("#topo").prepend(el("a", { class: "voltar-app", href: window.Capacitor ? "/app/" : "/", text: "← Restaurantes" }));
+    if (modoApp && !MESA) $("#topo").prepend(el("a", { class: "voltar-app", href: window.Capacitor || /ApFoodCliente/.test(navigator.userAgent) ? "/app/" : "/", text: "← Restaurantes" }));
     if (!LOJA.aberta && !MESA) {
       let quando = "";
       if (LOJA.proxima_abertura) {

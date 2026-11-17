@@ -60,6 +60,35 @@ const ROTAS = [
   ["/recebimentos", "Recebimentos", "🏦", "Plataforma", ehMaster, "plataforma", "recebimentos"],
 ];
 
+// App "ApFood Empresa" (APK, ou ?app=1 no navegador): só a operação — vender, mesas,
+// pedidos/entregas e caixa. Gerente/admin também vê os resultados.
+const MODO_APP = (() => {
+  const q = new URLSearchParams(location.search).get("app");
+  try {
+    if (q === "1") localStorage.setItem("apfood_app_empresa", "1");
+    if (q === "0") localStorage.removeItem("apfood_app_empresa");
+    return /ApFoodEmpresa/.test(navigator.userAgent) || localStorage.getItem("apfood_app_empresa") === "1";
+  } catch (e) { return /ApFoodEmpresa/.test(navigator.userAgent) || q === "1"; }
+})();
+const ABAS_APP = [
+  ["/pdv", "Vender", "🧾", temLoja],
+  ["/mesas", "Mesas", "🍽️", temLoja],
+  ["/pedidos", "Pedidos", "🛎️", temLoja],
+  ["/caixa", "Caixa", "💵", temLoja],
+  ["/operadores", "Resultados", "📊", () => temLoja() && ehGerente()],
+];
+const ROTAS_APP = new Set([...ABAS_APP.map((a) => a[0]), "/relatorios"]);
+const rotaPermitida = (r) => r[4]() && (!MODO_APP || ROTAS_APP.has(r[0]));
+
+function montarAbasApp() {
+  if (!MODO_APP) return;
+  let barra = $("abas-app");
+  if (!barra) { barra = h("nav", { class: "abas-app", id: "abas-app", "aria-label": "Navegação" }); document.body.append(barra); }
+  trocar(barra, ABAS_APP.filter((a) => a[3]()).map(([rota, titulo, icone]) => h("a", { href: `#${rota}`, dataset: { rota } },
+    h("span", { class: "icone", "aria-hidden": "true" }, icone), h("span", null, titulo))));
+  barra.style.setProperty("--n", barra.children.length);
+}
+
 const modulos = {
   operacao: () => import("./paginas/operacao.js"),
   pdv: () => import("./paginas/pdv.js"),
@@ -82,23 +111,25 @@ function rotaAtual() {
 function montarMenu() {
   const nav = limpar($("nav"));
   let grupo = null;
-  for (const [rota, titulo, icone, g, pode] of ROTAS) {
-    if (!pode()) continue;
+  for (const r of ROTAS) {
+    const [rota, titulo, icone, g] = r;
+    if (!rotaPermitida(r)) continue;
     if (g !== grupo) { nav.append(h("div", { class: "menu-grupo" }, g)); grupo = g; }
     nav.append(h("a", { href: `#${rota}`, class: "item", dataset: { rota } }, h("span", { class: "icone", "aria-hidden": "true" }, icone), titulo));
   }
 }
 
 function marcarMenu(caminho) {
-  document.querySelectorAll(".menu a.item").forEach((a) => a.classList.toggle("ativo", a.dataset.rota === caminho));
+  document.querySelectorAll(".menu a.item, .abas-app a").forEach((a) => a.classList.toggle("ativo", a.dataset.rota === caminho));
 }
 
 async function navegar() {
   const { caminho, params } = rotaAtual();
   const minha = ++navegacao;
   // MASTER administra a plataforma (não opera lojas): a tela inicial dele é a Visão geral
-  const inicial = ehMaster() ? ROTAS.find((r) => r[0] === "/plataforma") : ROTAS[0];
-  const def = ROTAS.find((r) => r[0] === caminho && r[4]()) || inicial;
+  const inicial = ehMaster() ? ROTAS.find((r) => r[0] === "/plataforma")
+    : MODO_APP ? ROTAS.find((r) => r[0] === "/pdv") : ROTAS[0];
+  const def = ROTAS.find((r) => r[0] === caminho && rotaPermitida(r)) || inicial;
   const [, titulo, , , , mod, fn] = def;
   if (limpeza) { try { limpeza(); } catch (e) { console.error(e); } limpeza = null; }
   $("app").classList.remove("menu-aberto");
@@ -130,6 +161,7 @@ function montarSeletorLoja() {
     definirLoja(sel.value);
     conectar();
     montarMenu();
+    montarAbasApp();
     navegar();
   };
 }
@@ -141,6 +173,7 @@ export async function recarregarSessao() {
   definirLoja(sessao.loja?.id || lojaSalva());
   montarSeletorLoja();
   montarMenu();
+  montarAbasApp();
   return eu;
 }
 
@@ -170,6 +203,10 @@ export async function mostrarAssinatura() {
 }
 
 async function iniciar() {
+  if (MODO_APP) {
+    document.body.classList.add("modo-app");
+    $("usuario").after(h("button", { type: "button", class: "botao botao-pequeno", onclick: () => document.querySelector(".menu-sair").requestSubmit() }, "Sair"));
+  }
   $("abrir-menu").addEventListener("click", () => $("app").classList.add("menu-aberto"));
   $("fechar-menu").addEventListener("click", () => $("app").classList.remove("menu-aberto"));
   $("fundo-menu").addEventListener("click", () => $("app").classList.remove("menu-aberto"));

@@ -134,7 +134,7 @@ A mensagem aceita `{nome}`, `{loja}`, `{cashback}` e `{link}` (o cardápio da lo
 Dois APKs, gerados pelo CI (job **apps**, pasta `mobile/`, Capacitor) e publicados no release `apps-v<versão>` a cada merge na `main` quando `mobile/VERSAO` muda:
 
 - **ApFood** (cliente) — abre `/app/`: restaurantes da região (localização “Perto de mim”, até 25 km, ou escolha da cidade), busca, promoções do dia, e “Meus pedidos” com o status de cada pedido. Toca no restaurante → cardápio da loja, com “← Restaurantes” para voltar. A loja aparece se “Aparecer no app ApFood” estiver ligado (Configurações da loja) e tiver coordenadas — ou estiver na mesma cidade de outra loja próxima.
-- **ApFood Empresa** — abre `/painel/` com o login de cada usuário. O que aparece depende do papel: **operador** lança pedidos, recebe e fecha o caixa; **gerente/admin** vê tudo, inclusive relatórios.
+- **ApFood Empresa** — abre o painel em **modo app** (`/painel/?app=1`; no navegador, `?app=0` desliga): só a operação, com abas embaixo que se ajustam a celular, tablet e PC — **Vender** (PDV: comer aqui, **mesa**, viagem e delivery), **Mesas** (contas, pagamento parcial, fechar), **Pedidos** (andamento, cozinha → entrega com entregador → concluir, receber) e **Caixa** (abrir, sangria, fechar). Gerente/admin também vê **Resultados** (faturamento por operador).
 
 Downloads fixos: `/app/baixar/cliente/` e `/app/baixar/empresa/` (também na página inicial). Para publicar outra versão: suba `mobile/VERSAO` e ajuste `APFOOD_APPS_VERSAO` no servidor.
 

@@ -183,8 +183,9 @@ export function pdv() {
         itens: [], modo: "LOCAL", categoria: cardapio.categorias[0]?.id, busca: "",
         cliente: { nome: "", telefone: "" }, endereco: null, taxa: 0, desconto: 0, cupom: "", observacao: "", cpf: "",
         senha: "", origem: "TELEFONE", previsto: "DINHEIRO", trocoPara: "",
-        saldoCashback: 0, usarCashback: false,
+        saldoCashback: 0, usarCashback: false, mesa: null,
       };
+      let mesasPdv = null;  // { mesas, comandas } — carregado ao escolher o modo Mesa
 
       const avisoCaixa = h("div");
       const desenharAvisoCaixa = () => {
@@ -239,7 +240,9 @@ export function pdv() {
 
       // ---------- carrinho
       const carrinho = h("div", { class: "cartao pdv-carrinho" });
-      const modos = [["LOCAL", "Comer aqui"], ["RETIRADA", "Para viagem"], ["DELIVERY", "Delivery"]];
+      const modos = [["LOCAL", "Comer aqui"], ["MESA", "Mesa"], ["RETIRADA", "Para viagem"], ["DELIVERY", "Delivery"]];
+      const irCarrinho = h("button", { type: "button", class: "pdv-ir-carrinho", onclick: () => carrinho.scrollIntoView({ behavior: "smooth", block: "start" }) });
+      const canalPromo = (m) => (m === "DELIVERY" ? "DELIVERY" : m === "MESA" ? "MESA" : "BALCAO");
 
       function totais() {
         const taxa = estado.modo === "DELIVERY" ? estado.taxa : 0;
@@ -271,7 +274,8 @@ export function pdv() {
         const blocoModo = h("div", { class: "abas", style: { marginBottom: "8px" } }, modos.map(([v, r]) => h("button", {
           type: "button", class: estado.modo === v ? "ativa" : "", onclick: () => {
             estado.modo = v;
-            aplicarPromocoes(idx, v === "DELIVERY" ? "DELIVERY" : "BALCAO");
+            aplicarPromocoes(idx, canalPromo(v));
+            if (v === "MESA" && !mesasPdv) carregarMesas().catch(erro);
             desenharCarrinho();
             desenharCatalogo();
           },
@@ -301,11 +305,87 @@ export function pdv() {
           h("div", { class: "acoes" },
             h("button", { type: "button", class: "botao botao-pequeno", onclick: ajustes }, "Desconto, cupom, obs."),
             estado.itens.length ? h("button", { type: "button", class: "botao botao-pequeno botao-perigo", onclick: () => { estado.itens = []; desenharCarrinho(); } }, "Limpar") : null),
-          h("div", { style: { marginTop: "10px" } }, botaoAcao("Finalizar venda", finalizar, "botao botao-primario botao-grande botao-bloco")),
+          h("div", { style: { marginTop: "10px" } }, botaoAcao(estado.modo === "MESA" ? "Enviar para a mesa" : "Finalizar venda", finalizar, "botao botao-primario botao-grande botao-bloco")),
         );
+        const qtd = estado.itens.reduce((n, i) => n + i.quantidade, 0);
+        if (qtd) irCarrinho.removeAttribute("data-vazio"); else irCarrinho.setAttribute("data-vazio", "");
+        trocar(irCarrinho, h("span", null, `Ver pedido · ${qtd} ${qtd === 1 ? "item" : "itens"}`), h("span", null, dinheiro(t.total)));
+      }
+
+      // ---------- mesa: o pedido entra na conta (comanda) da mesa
+      async function carregarMesas() {
+        const [ms, cs] = await Promise.all([lista("/api/mesas/", { ativa: "true" }), lista("/api/comandas/", { abertas: 1 })]);
+        mesasPdv = { mesas: ms.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome)), comandas: cs };
+        if (estado.mesa?.comandaId && !cs.find((c) => c.id === estado.mesa.comandaId)) estado.mesa = null;
+        desenharCarrinho();
+      }
+
+      function blocoMesa() {
+        if (!mesasPdv) return h("div", { class: "muted", style: { margin: "6px 0 10px" } }, "Carregando mesas…");
+        const porMesa = new Map(mesasPdv.comandas.filter((c) => c.mesa).map((c) => [c.mesa, c]));
+        const atual = estado.mesa ? (estado.mesa.comandaId && !estado.mesa.mesaId ? `c:${estado.mesa.comandaId}` : `m:${estado.mesa.mesaId}`) : "";
+        const sel = h("select", { "aria-label": "Mesa ou comanda" },
+          h("option", { value: "" }, "Escolha a mesa…"),
+          mesasPdv.mesas.map((m) => {
+            const c = porMesa.get(m.id);
+            return h("option", { value: `m:${m.id}`, selected: atual === `m:${m.id}` },
+              `${m.nome}${c ? ` — ocupada · ${dinheiro(c.total_centavos)}${c.status === "FECHANDO" ? " · conta pedida" : ""}` : " — livre"}`);
+          }),
+          mesasPdv.comandas.filter((c) => !c.mesa).map((c) => h("option", { value: `c:${c.id}`, selected: atual === `c:${c.id}` },
+            `Comanda ${c.numero || c.nome_cliente} · ${dinheiro(c.total_centavos)}`)));
+        sel.addEventListener("change", () => {
+          const [tipo, id] = sel.value.split(":");
+          if (!id) { estado.mesa = null; return; }
+          if (tipo === "c") { const c = mesasPdv.comandas.find((x) => x.id === id); estado.mesa = { comandaId: id, mesaId: null, nome: `Comanda ${c?.numero || ""}`.trim() }; return; }
+          const m = mesasPdv.mesas.find((x) => x.id === id);
+          estado.mesa = { mesaId: id, comandaId: porMesa.get(id)?.id || null, nome: m?.nome || "" };
+        });
+        const nome = h("input", { type: "text", placeholder: "Nome do cliente (opcional)", value: estado.cliente.nome });
+        nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
+        return h("div", { class: "grade", style: { gap: "6px", marginBottom: "8px" } },
+          h("div", { class: "acoes" }, h("div", { style: { flex: 1, minWidth: "0" } }, sel),
+            h("button", { type: "button", class: "botao botao-pequeno", title: "Atualizar mesas", onclick: () => carregarMesas().catch(erro) }, "↻")),
+          nome,
+          mesasPdv.mesas.length ? null : h("div", { class: "muted" }, "Nenhuma mesa cadastrada — peça ao gerente para cadastrar."));
+      }
+
+      async function lancarNaMesa() {
+        if (!estado.mesa) { aviso("Escolha a mesa.", "erro"); return; }
+        const cozinha = await new Promise((resolve) => {
+          let r = null;
+          const marca = h("input", { type: "checkbox", checked: true });
+          const m = modal({
+            titulo: `Enviar para ${estado.mesa.nome}`, tamanho: "modal-pequeno",
+            corpo: h("div", { class: "grade" },
+              h("p", { style: { margin: 0 } }, "Os itens entram na conta da mesa. O pagamento é feito ao fechar (ou em partes) em Mesas."),
+              h("label", { class: "check" }, marca, h("span", null, "Imprimir via da cozinha"))),
+            rodape: [h("button", { type: "button", class: "botao botao-primario botao-grande", onclick: () => { r = { cozinha: marca.checked }; m.fechar(); } }, "Enviar")],
+            aoFechar: () => resolve(r),
+          });
+        });
+        if (!cozinha) return;
+        let comanda = estado.mesa.comandaId;
+        try {
+          if (!comanda) {
+            const pessoas = 1;
+            comanda = (await post("/api/comandas/", { id: uuid(), mesa: estado.mesa.mesaId, pessoas, nome_cliente: estado.cliente.nome.trim() })).id;
+          }
+          const p = await post("/api/pedidos/", {
+            id: uuid(), canal: "MESA", tipo_atendimento: "CONSUMO_LOCAL", comanda,
+            mesa: estado.mesa.nome.replace(/^Mesa\s*/i, "").slice(0, 10), nome_cliente: estado.cliente.nome.trim(),
+            observacao: estado.observacao,
+            itens: estado.itens.map((i) => ({ produto_id: i.produto_id, quantidade: i.quantidade, variacao_id: i.variacao_id || null,
+              sabores: i.sabores || [], adicionais: i.adicionais || [], observacao: i.observacao || "" })),
+          });
+          if (cozinha.cozinha) imprimirPedido(p.id, "cozinha").catch(erro);
+          aviso(`Pedido #${p.numero} enviado para ${estado.mesa.nome}.`, "ok");
+        } catch (e) { erro(e); return; }
+        estado.itens = []; estado.observacao = ""; estado.cliente = { nome: "", telefone: "" }; estado.mesa = null;
+        await carregarMesas().catch(erro);
       }
 
       function blocoCliente() {
+        if (estado.modo === "MESA") return blocoMesa();
         if (estado.modo !== "DELIVERY") {
           const nome = h("input", { type: "text", placeholder: "Nome do cliente (opcional)", value: estado.cliente.nome });
           nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
@@ -420,6 +500,7 @@ export function pdv() {
 
       async function finalizar() {
         if (!estado.itens.length) { aviso("Adicione produtos à venda.", "erro"); return; }
+        if (estado.modo === "MESA") { await lancarNaMesa(); return; }
         const delivery = estado.modo === "DELIVERY";
         if (delivery && (!estado.endereco || !estado.cliente.telefone)) { aviso("Delivery: informe telefone e endereço.", "erro"); return; }
         const escolha = await escolherFinalizacao(delivery);
@@ -480,11 +561,11 @@ export function pdv() {
       }
 
       trocar(raiz, avisoCaixa, h("div", { class: "pdv" },
-        h("div", null, h("div", { class: "barra-ferramentas" }, busca), cats, grade),
+        h("div", null, h("div", { class: "barra-ferramentas" }, busca), cats, grade, irCarrinho),
         carrinho));
       desenharCatalogo();
       desenharCarrinho();
-      busca.focus();
+      if (!matchMedia("(pointer: coarse)").matches) busca.focus();  // no celular não abre o teclado sozinho
     },
   };
 }

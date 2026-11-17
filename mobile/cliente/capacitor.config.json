@@ -4,10 +4,14 @@
   "webDir": "www",
   "server": {
     "url": "https://apfood.axionwebdigital.com.br/app/",
-    "allowNavigation": ["apfood.axionwebdigital.com.br"],
+    "allowNavigation": [
+      "apfood.axionwebdigital.com.br"
+    ],
     "cleartext": false
   },
   "android": {
-    "allowMixedContent": false
-  }
+    "allowMixedContent": false,
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "appendUserAgent": "ApFoodCliente/1.0.1"
 }
