@@ -22,6 +22,11 @@ class Cliente(DaLoja, ModeloSincronizavel):
     aceita_marketing = models.BooleanField(default=False)
     saldo_cashback_centavos = models.PositiveIntegerField(default=0, editable=False)
     selos = models.PositiveSmallIntegerField(default=0, editable=False, help_text="cartão fidelidade")
+    codigo_indicacao = models.CharField(max_length=20, blank=True, editable=False)
+    indicado_por = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="indicados",
+                                     editable=False)
+    reconquista_enviada_em = models.DateField(null=True, blank=True, editable=False)
+    aniversario_enviado_em = models.DateField(null=True, blank=True, editable=False)
     consentimento_em = models.DateTimeField(null=True, blank=True)
     anonimizado_em = models.DateTimeField(null=True, blank=True)
 

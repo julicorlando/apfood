@@ -8,10 +8,12 @@
   const API = "/api/publico/lojas/" + encodeURIComponent(LOJA.slug) + "/";
   const idx = C.indexar(DADOS);
   const MESA = DADOS.mesa || null;  // autoatendimento pelo QR Code da mesa
-  const carrinho = new C.Carrinho(MESA ? LOJA.slug + ":mesa:" + MESA.token : LOJA.slug);
+  const TOTEM = DADOS.totem || null;  // totem de autoatendimento no balcão
+  const carrinho = new C.Carrinho(MESA ? LOJA.slug + ":mesa:" + MESA.token : TOTEM ? LOJA.slug + ":totem" : LOJA.slug);
   const estado = {
     tipo: LOJA.entrega ? "ENTREGA" : "RETIRADA", taxa: null, taxaErro: "", coords: null, cupom: null,
     pagamento: LOJA.pix_online ? "PIX" : "DINHEIRO", enviando: false,
+    agendar: !LOJA.aberta && !!LOJA.agendamento, dia: "", hora: "",
   };
 
   // ------------------------------------------------------------- utilidades
@@ -94,15 +96,20 @@
     ])]));
     let modoApp = false;
     try { modoApp = localStorage.getItem("apfood_modo_app") === "1"; } catch (e) { modoApp = false; }
-    if (modoApp && !MESA) $("#topo").prepend(el("a", { class: "voltar-app", href: window.Capacitor || /ApFoodCliente/.test(navigator.userAgent) ? "/app/" : "/", text: "← Restaurantes" }));
-    if (!LOJA.aberta && !MESA) {
+    if (modoApp && !MESA && !TOTEM) $("#topo").prepend(el("a", { class: "voltar-app", href: window.Capacitor || /ApFoodCliente/.test(navigator.userAgent) ? "/app/" : "/", text: "← Restaurantes" }));
+    if (LOJA.reservas && !MESA && !TOTEM) {
+      $("#topo").appendChild(el("a", { class: "aviso", style: "display:block;text-decoration:none", href: "/" + LOJA.slug + "/reservar/", text: "📅 Reservar mesa" }));
+    }
+    if (!LOJA.aberta && !MESA && !TOTEM) {
       let quando = "";
       if (LOJA.proxima_abertura) {
         const d = new Date(LOJA.proxima_abertura);
         quando = " Abrimos " + d.toLocaleDateString("pt-BR", { weekday: "long" }) + " às " +
           d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) + ".";
       }
-      $("#topo").appendChild(el("div", { class: "aviso", text: "No momento não estamos recebendo pedidos." + quando + " Você pode olhar o cardápio à vontade." }));
+      $("#topo").appendChild(el("div", { class: "aviso", text: LOJA.agendamento
+        ? "Estamos fechados agora, mas você já pode agendar seu pedido." + quando
+        : "No momento não estamos recebendo pedidos." + quando + " Você pode olhar o cardápio à vontade." }));
     }
   }
 
@@ -330,7 +337,8 @@
     }
     render();
     const continuar = el("button", { class: "btn", onclick: abrirCheckout }, [el("span", { text: "Continuar" }), el("span", { text: "→" })]);
-    if (!LOJA.aberta && !MESA) { continuar.disabled = true; continuar.replaceChildren(el("span", { text: "Loja fechada no momento" })); }
+    if (!LOJA.aberta && !MESA && !TOTEM && !LOJA.agendamento) { continuar.disabled = true; continuar.replaceChildren(el("span", { text: "Loja fechada no momento" })); }
+    else if (!LOJA.aberta && !MESA && !TOTEM) continuar.replaceChildren(el("span", { text: "Agendar pedido" }), el("span", { text: "→" }));
     abrirFolha("Seu pedido", corpo, continuar);
   }
 
@@ -410,8 +418,11 @@
     abrirFolha("Enviar pedido", corpo, [enviar, erros]);
   }
 
+  function fusoLoja() { return "-03:00"; }  // horários da loja: America/Sao_Paulo (sem horário de verão)
+
   function abrirCheckout() {
     if (MESA) return abrirCheckoutMesa();
+    if (TOTEM) return abrirCheckoutTotem();
     const salvo = perfil();
     const f = {};
     function campo(nome, rotulo, attrs) {
@@ -487,10 +498,35 @@
       atualizar();
     }
 
+    // quando: agora ou agendado (encomenda)
+    if (LOJA.agendamento) {
+      const dias = LOJA.agendamento.dias;
+      if (!estado.dia || !dias.find(function (d) { return d.data === estado.dia; })) { estado.dia = dias[0].data; estado.hora = dias[0].horarios[0]; }
+      const selDia = el("select", { "aria-label": "Dia" }, dias.map(function (d) { return el("option", { value: d.data, selected: d.data === estado.dia, text: d.rotulo }); }));
+      const selHora = el("select", { "aria-label": "Horário" });
+      const encherHoras = function () {
+        const d = dias.find(function (x) { return x.data === estado.dia; }) || dias[0];
+        if (d.horarios.indexOf(estado.hora) < 0) estado.hora = d.horarios[0];
+        selHora.replaceChildren.apply(selHora, d.horarios.map(function (h) { return el("option", { value: h, selected: h === estado.hora, text: h }); }));
+      };
+      selDia.addEventListener("change", function () { estado.dia = selDia.value; encherHoras(); });
+      selHora.addEventListener("change", function () { estado.hora = selHora.value; });
+      encherHoras();
+      const escolha = el("div", { class: "agendar-quando" + (estado.agendar ? "" : " oculto") }, [selDia, selHora]);
+      const opcoesQuando = (LOJA.aberta ? [["agora", "O quanto antes"]] : []).concat([["agendar", "Agendar dia e horário"]]);
+      corpo.appendChild(el("div", { class: "campo" }, [el("span", { text: "Quando?" }), el("div", { class: "formas" }, opcoesQuando.map(function ([v, r]) {
+        return el("label", {}, [el("input", { type: "radio", name: "quando", value: v, checked: (v === "agendar") === estado.agendar,
+          onchange: function () { estado.agendar = v === "agendar"; escolha.classList.toggle("oculto", !estado.agendar); } }), r]);
+      })), escolha]));
+    }
+
     // pagamento
-    const formas = [["PIX", LOJA.pix_online ? "Pix agora (QR Code na próxima tela)" : "Pix na entrega/retirada"],
-      ["DINHEIRO", "Dinheiro"], ["CARTAO_CREDITO", "Cartão de crédito na entrega"], ["CARTAO_DEBITO", "Cartão de débito na entrega"],
-      ["VOUCHER", "Vale-refeição na entrega"]];
+    const formas = [["PIX", LOJA.pix_online ? "Pix agora (QR Code na próxima tela)" : "Pix na entrega/retirada"]]
+      .concat(LOJA.pix_online ? [["CARTAO_ONLINE", "Cartão agora (crédito ou débito, pelo Mercado Pago)"]] : [])
+      .concat([["DINHEIRO", "Dinheiro"], ["CARTAO_CREDITO", "Cartão de crédito na entrega"], ["CARTAO_DEBITO", "Cartão de débito na entrega"],
+        ["VOUCHER", "Vale-refeição na entrega"]]);
+
+    if (LOJA.pix_online) formas.splice(1, 0, ["CARTAO_ONLINE", "Cartão agora (crédito ou débito, pelo Mercado Pago)"]);
     const troco = campo("troco", "Troco para quanto? (deixe vazio se não precisar)", { inputmode: "decimal", placeholder: "R$ 50,00" });
     troco.classList.toggle("oculto", estado.pagamento !== "DINHEIRO");
     corpo.appendChild(el("div", { class: "campo" }, [el("span", { text: "Pagamento" }), el("div", { class: "formas" }, formas.map(function ([v, r]) {
@@ -556,7 +592,10 @@
       atualizar();
       const corpoPedido = {
         tipo_atendimento: estado.tipo, nome_cliente: f.nome.value.trim(), telefone_cliente: f.telefone.value,
-        forma_pagamento_prevista: estado.pagamento, pagar_pix_agora: estado.pagamento === "PIX" && LOJA.pix_online,
+        forma_pagamento_prevista: estado.pagamento === "CARTAO_ONLINE" ? "CARTAO_CREDITO" : estado.pagamento,
+        pagar_pix_agora: estado.pagamento === "PIX" && LOJA.pix_online,
+        pagar_cartao_agora: estado.pagamento === "CARTAO_ONLINE",
+        agendado_para: LOJA.agendamento && estado.agendar ? estado.dia + "T" + estado.hora + ":00" + fusoLoja() : null,
         cupom_codigo: estado.cupom ? estado.cupom.codigo : "", observacao: obs.value.trim(), cpf_nota: f.cpf.value,
         troco_para_centavos: estado.pagamento === "DINHEIRO" && trocoC > 0 ? trocoC : null,
         itens: carrinho.itens.map(function (i) {
@@ -578,7 +617,7 @@
           localStorage.setItem("apfood_pedidos", JSON.stringify(meus.slice(0, 20)));
           if (r.pix) sessionStorage.setItem("apfood_pix_" + r.token, JSON.stringify(r.pix));
         } catch (e) { /* ok */ }
-        window.location.href = "/pedido/" + encodeURIComponent(r.token) + "/";
+        window.location.href = r.cartao_url || "/pedido/" + encodeURIComponent(r.token) + "/";
       } catch (e) {
         estado.enviando = false;
         erros.textContent = e.message;
@@ -602,9 +641,92 @@
     }
   }
 
+  // ------------------------------------------------------------- totem (balcão)
+  function iniciarTotem() {
+    document.body.classList.add("modo-totem");
+    const telaInicial = function () {
+      const capa = el("div", { class: "totem-capa", role: "button", tabindex: "0", onclick: function () { capa.remove(); } }, [
+        LOJA.logo ? el("img", { src: LOJA.logo, alt: "" }) : null,
+        el("h1", { text: LOJA.nome }), el("p", { text: "Toque para fazer seu pedido" }), el("span", { class: "totem-dedo", text: "👆" })]);
+      document.body.appendChild(capa);
+    };
+    telaInicial();
+    // sem mexer por 2 minutos: limpa e volta para a tela inicial
+    let ocioso = null;
+    const reiniciarOcio = function () {
+      clearTimeout(ocioso);
+      ocioso = setTimeout(function () { carrinho.limpar(); location.reload(); }, 120000);
+    };
+    ["pointerdown", "keydown", "scroll"].forEach(function (ev) { document.addEventListener(ev, reiniciarOcio, { passive: true }); });
+    reiniciarOcio();
+  }
+
+  function abrirCheckoutTotem() {
+    const corpo = el("div", { class: "corpo totem-checkout" });
+    const erros = el("p", { class: "erros", role: "alert" });
+    const enviar = el("button", { class: "btn" });
+    const t = C.totais(idx, carrinho.itens, 0, 0);
+    let tipo = "", pagamento = LOJA.pix_online ? "" : "CAIXA";
+    const nome = el("input", { maxlength: "60", placeholder: "Para chamarmos você (opcional)", autocomplete: "off" });
+    function botoes(rotulo, ops, atual, aoEscolher) {
+      return el("div", { class: "campo" }, [el("span", { text: rotulo }), el("div", { class: "totem-opcoes" }, ops.map(function ([v, r, ico]) {
+        return el("button", { type: "button", class: "totem-opcao" + (atual() === v ? " marcada" : ""), onclick: function () { aoEscolher(v); desenhar(); } },
+          [el("span", { class: "ico", text: ico }), el("span", { text: r })]);
+      }))]);
+    }
+    function desenhar() {
+      corpo.replaceChildren(
+        botoes("Onde você vai comer?", [["CONSUMO_LOCAL", "Comer aqui", "🍽️"], ["RETIRADA", "Para levar", "🛍️"]], function () { return tipo; }, function (v) { tipo = v; }),
+        LOJA.pix_online ? botoes("Como vai pagar?", [["CAIXA", "No caixa", "💵"], ["PIX", "Pix agora", "📱"]], function () { return pagamento; }, function (v) { pagamento = v; }) : null,
+        el("label", { class: "campo" }, [el("span", { text: "Seu nome" }), nome]),
+        el("div", { class: "resumo" }, [el("div", { class: "total" }, [el("span", { text: "Total" }), el("span", { text: C.reais(t.total) })])]));
+      enviar.disabled = !tipo || !pagamento;
+      enviar.replaceChildren(el("span", { text: "Confirmar pedido" }), el("span", { text: C.reais(t.total) }));
+    }
+    desenhar();
+    let enviando = false;
+    enviar.addEventListener("click", async function () {
+      if (enviando || !tipo || !pagamento) return;
+      enviando = true; enviar.disabled = true; erros.textContent = "";
+      try {
+        const r = await post("totem/" + encodeURIComponent(TOTEM.token) + "/pedidos/", {
+          tipo_atendimento: tipo, nome_cliente: nome.value.trim(), pagar_pix: pagamento === "PIX",
+          itens: carrinho.itens.map(function (i) {
+            return { produto_id: i.produto_id, quantidade: i.quantidade, variacao_id: i.variacao_id || null,
+              sabores: i.sabores || [], adicionais: i.adicionais || [], observacao: i.observacao || "" };
+          }),
+        });
+        carrinho.limpar();
+        fecharFolha();
+        renderBarra();
+        telaSenha(r, pagamento);
+      } catch (e) { enviando = false; enviar.disabled = false; erros.textContent = e.message; }
+    });
+    abrirFolha("Finalizar pedido", corpo, [enviar, erros]);
+  }
+
+  function telaSenha(r, pagamento) {
+    let s = r.pix ? 90 : 25;
+    const cont = el("small");
+    const tela = el("div", { class: "totem-senha", role: "dialog", "aria-label": "Pedido confirmado" }, [
+      el("div", { class: "ok", text: "✅ Pedido confirmado!" }),
+      el("small", { text: "Sua senha" }),
+      el("div", { class: "numero", text: r.senha }),
+      r.pix ? el("div", { class: "totem-pix" }, [
+        el("b", { text: "Pague " + C.reais(r.pix.valor_centavos) + " no Pix" }),
+        r.pix.qr_code_base64 ? el("img", { src: "data:image/png;base64," + r.pix.qr_code_base64, alt: "QR Code Pix" }) : null,
+        el("small", { text: "Aponte a câmera do celular para o QR Code. Seu pedido já está na cozinha." })])
+        : el("p", { text: pagamento === "CAIXA" ? "Vá ao caixa e informe a senha para pagar." : "Aguarde ser chamado pela senha." }),
+      el("button", { class: "btn", type: "button", text: "Fazer outro pedido", onclick: function () { location.reload(); } }),
+      cont]);
+    document.body.appendChild(tela);
+    const passo = function () { cont.textContent = "Voltando ao início em " + s + " s"; if (s-- <= 0) location.reload(); else setTimeout(passo, 1000); };
+    passo();
+  }
+
   // ------------------------------------------------------------------- início
   renderTopo();
-  if (MESA) $("#topo").appendChild(faixaMesa()); else renderMeusPedidos();
+  if (MESA) $("#topo").appendChild(faixaMesa()); else if (TOTEM) iniciarTotem(); else renderMeusPedidos();
   renderCardapio("");
   const removidos = carrinho.sanear(idx);
   renderBarra();

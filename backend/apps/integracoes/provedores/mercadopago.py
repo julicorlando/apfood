@@ -61,4 +61,5 @@ class MercadoPago:
     def consultar(self, pagamento_id: str) -> dict:
         r = checar(self.http.get(f"/v1/payments/{pagamento_id}"), "Mercado Pago consulta")
         return {"id": str(r["id"]), "status": r.get("status"), "external_reference": r.get("external_reference"),
-                "valor_centavos": int(round(Decimal(str(r.get("transaction_amount", 0))) * 100))}
+                "valor_centavos": int(round(Decimal(str(r.get("transaction_amount", 0))) * 100)),
+                "tipo": r.get("payment_type_id", ""), "bandeira": r.get("payment_method_id", "")}

@@ -28,7 +28,7 @@ from rest_framework.views import APIView
 
 from apps.clientes.models import Entregador
 from apps.core.excecoes import ErroNegocio
-from apps.pedidos import chamadas
+from apps.pedidos import acertos, chamadas
 from apps.pedidos.models import Pedido
 
 SAL = "apfood.entregador"
@@ -110,6 +110,15 @@ class PinView(Base):
             e.definir_pin(novo, trocado=True)
             e.save(update_fields=["pin_hash", "pin_trocado", "atualizado_em"])
         return Response({"token": token_para(es)})
+
+
+class PushView(Base):
+    def post(self, request):
+        from apps.integracoes import push
+
+        es = entregadores_da(request)
+        push.registrar(str(request.data.get("token", "")), "entregador", entregador=es[0])
+        return Response({"ok": True, "ativo": push.ativo()})
 
 
 class OnlineView(Base):
@@ -230,7 +239,7 @@ class EstadoView(Base):
             "trocar_pin": not all(e.pin_trocado for e in es),
             "oferta": _oferta(ch, es) if ch else None,
             "entregas": [_entrega(p, por_id[p.entregador_id]) for p in entregas],
-            "ganhos": resumo_ganhos(es),
+            "ganhos": {**resumo_ganhos(es), **acertos.para_app(es)},
         })
 
 

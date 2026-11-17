@@ -109,3 +109,17 @@ class WebhookRecebido(ModeloBase):
         constraints = [
             models.UniqueConstraint(fields=["provedor", "id_evento"], name="webhook_evento_unico")
         ]
+
+
+class DispositivoPush(ModeloBase):
+    """Celular com o app ApFood Empresa ou ApFood Entregador (token do Firebase)."""
+
+    token = models.CharField(max_length=255, unique=True)
+    app = models.CharField(max_length=12)  # "empresa" | "entregador"
+    usuario = models.ForeignKey("contas.Usuario", on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    entregador = models.ForeignKey("clientes.Entregador", on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name="+")
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "dispositivos_push"

@@ -16,8 +16,34 @@ NOME_APK="ApFood-$(echo "${APP:0:1}" | tr a-z A-Z)${APP:1}.apk"
 
 cd "$DIR"
 npm install --no-audit --no-fund
+# Push (Firebase): só com o google-services.json (secret ANDROID_GOOGLE_SERVICES_B64) e só nos apps da equipe
+PUSH=""
+if [ -n "${ANDROID_GOOGLE_SERVICES_B64:-}" ] && [ "$APP" != "cliente" ]; then
+  # empresa: plugin padrão; entregador: serviço nativo próprio (chamada com Aceitar/Recusar na tela bloqueada)
+  if [ "$APP" = "empresa" ]; then npm install --no-audit --no-fund @capacitor/push-notifications@^7; fi
+  PUSH=1
+fi
 rm -rf android
 npx cap add android
+if [ -n "$PUSH" ]; then
+  echo "$ANDROID_GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+  echo "push: Firebase ligado neste APK"
+fi
+if [ "$APP" = "entregador" ]; then
+  # código nativo: chamada por cima da tela bloqueada, Aceitar/Recusar na notificação
+  PKG=android/app/src/main/java/br/com/axionweb/apfood/entregador
+  mkdir -p "$PKG"
+  cp "$DIR/nativo/MainActivity.java" "$DIR/nativo/Ofertas.java" "$DIR/nativo/OfertaReceiver.java" "$PKG/"
+  M=android/app/src/main/AndroidManifest.xml
+  sed -i 's#<application#<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n\n    <application#' "$M"
+  sed -i 's#</application>#    <receiver android:name=".OfertaReceiver" android:exported="false" />\n    </application>#' "$M"
+  if [ -n "$PUSH" ]; then
+    cp "$DIR/nativo/EntregaMessagingService.java" "$PKG/"
+    sed -i 's#</application>#    <service android:name=".EntregaMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter></service>\n    </application>#' "$M"
+    sed -i '0,/^dependencies {/s//dependencies {\n    implementation "com.google.firebase:firebase-messaging:24.1.0"/' android/app/build.gradle
+    sed -i 's#        // PUSH_TOKEN#        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnSuccessListener(t -> getSharedPreferences(Ofertas.PREFS, MODE_PRIVATE).edit().putString("apfood_push_token", t).apply());#' "$PKG/MainActivity.java"
+  fi
+fi
 npx cap sync android
 
 MANIFESTO=android/app/src/main/AndroidManifest.xml

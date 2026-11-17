@@ -341,3 +341,5 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .barra-nota { display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; gap: 8px; }
 .barra-nota .trilho { background: var(--fundo); border-radius: 99px; height: 10px; overflow: hidden; }
 .barra-nota .cheio { background: #e8a317; height: 100%; border-radius: 99px; }
+.barra-rede { display: grid; grid-template-columns: 80px auto; align-items: center; gap: 6px; justify-content: end; }
+.barra-rede .cheio { height: 8px; border-radius: 99px; background: var(--cor); max-width: 80px; }

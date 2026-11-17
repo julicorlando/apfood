@@ -1,5 +1,5 @@
 // Configurações: loja, horários, fiscal, integrações, usuários, lojas e empresa.
-import { ehAdmin, ehMaster, ErroApi, get, lista, patch, post, put, sessao } from "../api.js";
+import { del, ehAdmin, ehGerente, ehMaster, ErroApi, get, lista, patch, post, put, sessao } from "../api.js";
 import { mostrarAssinatura, recarregarSessao } from "../app.js";
 import { paginaCadastro } from "../crud.js";
 import { imprimirLinhas, infoPonte, ponteDisponivel } from "./comum.js";
@@ -72,6 +72,24 @@ const CAMPOS_LOJA = [
   { nome: "fidelidade_premio_centavos", rotulo: "Prêmio: crédito para o cliente (R$)", tipo: "dinheiro",
     ajuda: "Vira saldo (como o cashback) e é usado como desconto no próximo pedido." },
   { nome: "fidelidade_premio_descricao", rotulo: "Descrição do prêmio", exemplo: "Um X-Burger por nossa conta" },
+  { secao: "Agendamento e reservas" },
+  { nome: "aceita_agendamento", rotulo: "Aceitar pedidos agendados (encomendas) no cardápio", tipo: "bool",
+    ajuda: "O cliente escolhe dia e horário dentro do seu funcionamento — inclusive com a loja fechada agora." },
+  { nome: "agendamento_dias_max", rotulo: "Agendar até quantos dias à frente", tipo: "numero" },
+  { nome: "agendamento_antecedencia_min", rotulo: "Antecedência mínima (minutos)", tipo: "numero" },
+  { nome: "aceita_reservas", rotulo: "Aceitar reservas de mesa pelo link da loja", tipo: "bool",
+    ajuda: "Aparece “Reservar mesa” no cardápio. As reservas ficam em Operação → Reservas." },
+  { secao: "Reconquista de clientes (WhatsApp automático)" },
+  { nome: "reconquista_ativa", rotulo: "Mandar mensagem para quem sumiu", tipo: "bool",
+    ajuda: "Só para clientes que aceitaram receber ofertas. Precisa do WhatsApp conectado." },
+  { nome: "reconquista_dias", rotulo: "Dias sem pedir", tipo: "numero" },
+  { nome: "reconquista_cupom", rotulo: "Cupom a oferecer (código, opcional)", exemplo: "VOLTA10" },
+  { nome: "aniversario_ativo", rotulo: "Mensagem de aniversário", tipo: "bool", ajuda: "Para clientes com data de nascimento no cadastro." },
+  { nome: "aniversario_cupom", rotulo: "Cupom de aniversário (código, opcional)", exemplo: "NIVER15" },
+  { nome: "indicacao_ativa", rotulo: "Programa de indicação", tipo: "bool",
+    ajuda: "Cada cliente ganha um código: o amigo tem desconto no 1º pedido e quem indicou ganha cashback quando o amigo recebe." },
+  { nome: "indicacao_desconto_centavos", rotulo: "Desconto do amigo (R$)", tipo: "dinheiro" },
+  { nome: "indicacao_premio_centavos", rotulo: "Cashback de quem indicou (R$)", tipo: "dinheiro" },
   { secao: "Mesas e WhatsApp" },
   { nome: "aparecer_no_app", rotulo: "Aparecer no app ApFood (lista de restaurantes da região)", tipo: "bool",
     ajuda: "Preencha cidade e coordenadas da loja para aparecer em “Perto de mim”." },
@@ -107,6 +125,7 @@ export function loja() {
       trocar(raiz, 
         h("div", { class: "cartao" }, f.el),
         h("div", { class: "cartao" }, h("h2", null, "Horário de funcionamento"), horarios.el),
+        cartaoTotem(l),
         h("div", { class: "acoes acoes-fim", style: { marginTop: "16px" } },
           h("a", { class: "botao", href: `/${l.slug}/`, target: "_blank", rel: "noopener" }, "Ver cardápio online"), salvar));
     },
@@ -426,4 +445,30 @@ export function whatsapp() {
       desenhar(await get("/api/whatsapp/"));
     },
   };
+}
+
+
+// Totem de autoatendimento: link secreto para abrir no tablet do balcão
+function cartaoTotem(l) {
+  const area = h("div");
+  async function desenhar(r) {
+    const url = r?.url;
+    trocar(area,
+      url ? h("div", { class: "grade", style: { gap: "8px" } },
+        h("input", { type: "text", readonly: true, value: url, onclick: (ev) => ev.target.select() }),
+        h("div", { class: "acoes" },
+          h("a", { class: "botao botao-primario", href: url, target: "_blank", rel: "noopener" }, "Abrir o totem"),
+          botaoAcao("Copiar link", async () => { await navigator.clipboard?.writeText(url); aviso("Link copiado.", "ok"); }),
+          ehGerente() ? botaoAcao("Gerar outro link", async () => {
+            if (!(await confirmar("O link atual para de funcionar. Gerar outro?"))) return;
+            desenhar(await post(`/api/lojas/${l.id}/totem/`));
+          }) : null,
+          ehGerente() ? botaoAcao("Desligar totem", async () => { desenhar(await del(`/api/lojas/${l.id}/totem/`)); }, "botao botao-perigo") : null))
+        : h("div", { class: "acoes" }, h("span", { class: "muted" }, "Totem desligado."),
+          ehGerente() ? botaoAcao("Ativar totem", async () => desenhar(await post(`/api/lojas/${l.id}/totem/`)), "botao botao-primario") : null));
+  }
+  get(`/api/lojas/${l.id}/totem/`).then(desenhar).catch(() => desenhar(null));
+  return h("div", { class: "cartao" }, h("h2", null, "Totem de autoatendimento"),
+    h("p", { class: "muted" }, "Abra este link em tela cheia num tablet no balcão: o cliente monta o pedido, escolhe comer aqui ou para levar, "
+      + "paga no caixa (ou no Pix) e recebe a senha. O pedido cai direto na cozinha."), area);
 }

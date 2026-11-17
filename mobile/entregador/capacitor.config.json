@@ -13,7 +13,7 @@
     "allowMixedContent": false,
     "adjustMarginsForEdgeToEdge": "auto"
   },
-  "appendUserAgent": "ApFoodEntregador/1.0.2",
+  "appendUserAgent": "ApFoodEntregador/1.0.3",
   "plugins": {
     "LocalNotifications": {
       "iconColor": "#f26a0f"

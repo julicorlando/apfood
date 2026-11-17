@@ -103,9 +103,13 @@ def _evento(ch: ChamadaEntrega) -> None:
 
 
 def _avisar_entregador(ch: ChamadaEntrega, e: Entregador) -> None:
-    """Além do alerta no app, manda WhatsApp (se a loja tiver o WhatsApp conectado)."""
+    """Além do alerta no app: push (Firebase, se configurado) e WhatsApp (se a loja tiver o WhatsApp conectado)."""
+    from apps.integracoes import push
     from apps.integracoes.models import Integracao
 
+    push.para_entregador(e, "🛵 Nova entrega — aceite em 30 s", f"{ch.loja.nome} → {ch.pedido.entrega_bairro or 'cliente'}",
+                         {"tipo": "oferta", "chamada": str(ch.id), "segundos": OFERTA_S},
+                         chave=f"push-oferta-{ch.id}-{len(ch.ofertados)}")
     if len("".join(c for c in e.telefone if c.isdigit())) < 10:
         return
     integ = Integracao.ativa(ch.loja, "WHATSAPP", "whatsapp")
@@ -167,6 +171,10 @@ def avancar(ch: ChamadaEntrega) -> ChamadaEntrega:
         ch.status, ch.entregador_atual, ch.oferta_ate = ChamadaEntrega.SEM_RESPOSTA, None, None
         ch.save()
         _evento(ch)
+        from apps.integracoes import push
+
+        push.para_loja(ch.loja, f"Ninguém aceitou o pedido #{p.numero}", "Chame de novo ou escolha outra forma de entrega.",
+                       {"tipo": "entrega.sem_resposta", "pedido": str(p.id)}, chave=f"push-sem-{ch.id}")
         return ch
     if ch.entregador_atual_id and ch.oferta_ate and agora < ch.oferta_ate:
         return ch  # oferta em andamento

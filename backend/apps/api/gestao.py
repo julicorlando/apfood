@@ -84,7 +84,7 @@ class LojaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     parser_classes = [JSONParser, MultiPartParser, FormParser]  # logo
 
     def get_permissions(self):
-        if self.request.method in LEITURA or self.action == "pedidos_online":
+        if self.request.method in LEITURA or self.action in ("pedidos_online", "totem"):
             return [UsuarioLiberado()]
         return [EhAdmin()]
 
@@ -108,6 +108,25 @@ class LojaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         if not self.request.user.eh_master:
             serializer.validated_data.pop("empresa", None)  # ninguém muda a loja de empresa
         serializer.save()
+
+    @action(detail=True, methods=["get", "post", "delete"], url_path="totem")
+    def totem(self, request, pk=None):
+        """Totem de autoatendimento: GET mostra o link; POST gera outro (o anterior para); DELETE desliga. Gerente+."""
+        import secrets
+
+        if request.method != "GET" and not request.user.eh_gerente:
+            raise PermissionDenied("requer gerente")
+        loja = self.get_object()
+        if not request.user.pode_acessar_loja(loja):
+            raise PermissionDenied("loja fora do seu acesso")
+        if request.method == "POST":
+            loja.token_totem = secrets.token_urlsafe(18)
+            loja.save(update_fields=["token_totem", "atualizado_em"])
+        elif request.method == "DELETE":
+            loja.token_totem = ""
+            loja.save(update_fields=["token_totem", "atualizado_em"])
+        url = request.build_absolute_uri(f"/{loja.slug}/totem/{loja.token_totem}/") if loja.token_totem else None
+        return Response({"url": url})
 
     @action(detail=True, methods=["post"], url_path="pedidos-online")
     def pedidos_online(self, request, pk=None):
@@ -725,3 +744,51 @@ class CampanhaViewSet(EscopoLojaMixin, viewsets.ModelViewSet):
 
         c = campanhas.iniciar(self.get_object(), request.user)
         return Response(CampanhaSerializer(c).data)
+
+
+class PushView(APIView):
+    """App ApFood Empresa registra o celular para receber push (pedido novo, ninguém aceitou...)."""
+
+    permission_classes = [UsuarioLiberado]
+
+    def post(self, request):
+        from apps.integracoes import push
+
+        push.registrar(str(request.data.get("token", "")), "empresa", usuario=request.user)
+        return Response({"ok": True, "ativo": push.ativo()})
+
+
+class RedeView(APIView):
+    """Visão da rede (todas as lojas da empresa): GET ?inicio=&fim= — só ADMIN."""
+
+    permission_classes = [EhAdmin]
+
+    def get(self, request):
+        from apps.api.relatorios import periodo
+        from apps.lojas import rede
+
+        inicio, fim = periodo(request)
+        lojas = request.user.lojas_permitidas().order_by("nome")
+        return Response({"inicio": inicio, "fim": fim, **rede.resumo(lojas, inicio, fim)})
+
+
+class RedeReplicarView(APIView):
+    """POST {"origem": loja_id, "destinos": [loja_id...], "somente_precos": bool} — copia cardápio/preços."""
+
+    permission_classes = [EhAdmin]
+
+    def post(self, request):
+        from apps.lojas import rede
+
+        lojas = {str(l.id): l for l in request.user.lojas_permitidas()}
+        origem = lojas.get(str(request.data.get("origem")))
+        destinos = [lojas[d] for d in request.data.get("destinos") or [] if d in lojas and d != str(getattr(origem, "id", ""))]
+        if origem is None or not destinos:
+            raise ValidationError({"detail": "Escolha a loja de origem e pelo menos uma loja de destino."})
+        somente = bool(request.data.get("somente_precos"))
+        resultado = {d.nome: rede.replicar(origem, d, somente_precos=somente) for d in destinos}
+        from apps.realtime.eventos import catalogo_alterado
+
+        for d in destinos:
+            catalogo_alterado(d.id, "produtos")
+        return Response({"resultado": resultado})

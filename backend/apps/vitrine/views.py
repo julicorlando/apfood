@@ -39,6 +39,33 @@ def acompanhar_pedido(request, token):
     return render(request, "vitrine/acompanhar.html", {"pedido": pedido, "cor": pedido.loja.cor_primaria})
 
 
+@cache_control(max_age=60, public=True)
+def reservar(request, slug):
+    try:
+        loja = loja_publica(slug)
+    except Http404:
+        return render(request, "vitrine/indisponivel.html", status=404)
+    if not loja.aceita_reservas:
+        return redirect(f"/{loja.slug}/")
+    return render(request, "vitrine/reserva.html", {"loja": loja, "cor": loja.cor_primaria})
+
+
+@cache_control(no_store=True)
+def totem(request, slug, token):
+    """Totem de autoatendimento (tablet no balcão): link secreto gerado no painel."""
+    import secrets
+
+    try:
+        loja = loja_publica(slug)
+    except Http404:
+        return render(request, "vitrine/indisponivel.html", status=404)
+    if not loja.token_totem or not secrets.compare_digest(loja.token_totem, token):
+        return render(request, "vitrine/indisponivel.html", status=404)
+    dados = dados_cardapio(loja, request)
+    dados["totem"] = {"token": token}
+    return render(request, "vitrine/cardapio.html", {"loja": loja, "dados": dados, "cor": loja.cor_primaria})
+
+
 @cache_control(no_store=True)
 def cardapio_mesa(request, slug, token):
     """QR Code da mesa: o mesmo cardápio, mas o pedido vai para a comanda da mesa."""

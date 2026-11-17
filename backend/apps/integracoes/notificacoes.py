@@ -2,11 +2,12 @@
 integração WHATSAPP ativa e o pedido tiver telefone)."""
 
 from django.conf import settings
+from django.utils import timezone
 
 from apps.integracoes.tarefas import enfileirar, executor
 
 MENSAGENS = {
-    "RECEBIDO": "✅ *{loja}*: recebemos seu pedido *#{numero}*! Acompanhe: {link}",
+    "RECEBIDO": "✅ *{loja}*: recebemos seu pedido *#{numero}*!{agendado} Acompanhe: {link}",
     "EM_PREPARO": "👨‍🍳 Seu pedido *#{numero}* está sendo preparado.",
     "PRONTO": "🍔 Seu pedido *#{numero}* está pronto{retirada}.",
     "SAIU_PARA_ENTREGA": "🛵 Seu pedido *#{numero}* saiu para entrega! Acompanhe o entregador: {link}{codigo}",
@@ -25,6 +26,8 @@ def mensagem(pedido) -> str | None:
     return modelo.format(
         loja=pedido.loja.nome, numero=pedido.numero, link=link, motivo=pedido.motivo_cancelamento,
         retirada=" para retirada" if pedido.tipo_atendimento == "RETIRADA" else "",
+        agendado=f" 📅 Agendado para {timezone.localtime(pedido.agendado_para):%d/%m às %H:%M}."
+        if pedido.agendado_para else "",
         codigo=f"\n🔑 Código de recebimento: *{pedido.codigo_entrega}* — informe ao entregador ao receber."
         if pedido.entregador_id else "",
     ).strip()

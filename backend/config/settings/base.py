@@ -162,8 +162,10 @@ STORAGES = {
 APFOOD = {
     "URL_PUBLICA": env("APFOOD_URL_PUBLICA", default="http://localhost:8000"),
     # APKs (app do cliente e app da empresa) publicados pela CI como "apps-v<versão>"
-    "APPS_VERSAO": env("APFOOD_APPS_VERSAO", default="1.0.2"),
+    "APPS_VERSAO": env("APFOOD_APPS_VERSAO", default="1.0.3"),
     "DEMO_SLUG": env("APFOOD_DEMO_SLUG", default="testehh"),
+    # Push (Firebase): JSON da conta de serviço em base64. Vazio = sem push.
+    "FCM_CREDENCIAIS": env("APFOOD_FCM_CREDENCIAIS", default=""),
     # Atualização automática do PDV: versão publicada, link do .exe e SHA-256 (gerados pela CI)
     "PDV_VERSAO": env("APFOOD_PDV_VERSAO", default=""),
     "PDV_URL": env("APFOOD_PDV_URL", default=""),

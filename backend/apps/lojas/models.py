@@ -123,6 +123,23 @@ class Loja(ModeloBase):
     # Atendente automático do WhatsApp (número conectado pelo QR Code)
     whatsapp_atendente = models.BooleanField(default=False, help_text="responde sozinho no WhatsApp")
     whatsapp_boas_vindas = models.TextField(blank=True, help_text="mensagem de abertura; use {loja} e {link}")
+    # Pedido agendado / encomenda (cardápio online)
+    aceita_agendamento = models.BooleanField(default=False)
+    agendamento_dias_max = models.PositiveSmallIntegerField(default=7, help_text="até quantos dias à frente")
+    agendamento_antecedencia_min = models.PositiveSmallIntegerField(default=60, help_text="mínimo de minutos de antecedência")
+    # Reconquista de clientes (WhatsApp automático; só clientes que aceitaram receber ofertas)
+    reconquista_ativa = models.BooleanField(default=False)
+    reconquista_dias = models.PositiveSmallIntegerField(default=30, help_text="dias sem pedir para mandar a mensagem")
+    reconquista_cupom = models.CharField(max_length=30, blank=True, help_text="código de cupom a oferecer (opcional)")
+    aniversario_ativo = models.BooleanField(default=False)
+    aniversario_cupom = models.CharField(max_length=30, blank=True)
+    indicacao_ativa = models.BooleanField(default=False)
+    indicacao_desconto_centavos = models.PositiveIntegerField(default=1000, help_text="desconto do amigo no 1º pedido")
+    indicacao_premio_centavos = models.PositiveIntegerField(default=1000, help_text="cashback de quem indicou")
+    # Reservas de mesa pelo link da loja
+    aceita_reservas = models.BooleanField(default=False)
+    # Totem de autoatendimento (link secreto)
+    token_totem = models.CharField(max_length=40, blank=True, editable=False)
     momento_baixa_estoque = models.CharField(
         max_length=max_len(MomentoBaixaEstoque),
         choices=choices(MomentoBaixaEstoque),

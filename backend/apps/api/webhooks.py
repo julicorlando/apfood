@@ -20,6 +20,15 @@ from apps.plataforma.models import Fatura
 log = logging.getLogger(__name__)
 
 
+def _uuid(valor):
+    import uuid
+
+    try:
+        return uuid.UUID(str(valor))
+    except (ValueError, TypeError):
+        return None
+
+
 def _id_pagamento(request) -> str:
     dados = request.data if isinstance(request.data, dict) else {}
     return str((dados.get("data") or {}).get("id") or request.query_params.get("data.id")
@@ -54,6 +63,16 @@ class MercadoPagoLojaWebhook(Webhook):
         try:
             info = MercadoPago(integ.obter_credenciais()["access_token"]).consultar(pid)
             pg = Pagamento.objects.filter(referencia_externa=info["id"]).first()
+            if pg is None and info.get("external_reference"):
+                # Checkout (cartão): o pagamento nasce no MP; a referência é o id do nosso Pagamento
+                pg = Pagamento.objects.filter(pk=_uuid(info["external_reference"]), referencia_externa__startswith="pref:",
+                                              pedido__loja=loja).first() if _uuid(info["external_reference"]) else None
+                if pg is not None and info["status"] == STATUS_PAGO:
+                    forma = {"credit_card": "CARTAO_CREDITO", "debit_card": "CARTAO_DEBITO", "bank_transfer": "PIX",
+                             "account_money": "PIX"}.get(info.get("tipo"), pg.forma)
+                    Pagamento.objects.filter(pk=pg.pk).update(referencia_externa=info["id"], forma=forma,
+                                                             bandeira=(info.get("bandeira") or "")[:20])
+                    pg.refresh_from_db()
             if pg and info["status"] == STATUS_PAGO and str(pg.id) == str(info.get("external_reference")):
                 pedidos_srv.confirmar_pagamento_online(pg, valor_centavos=info["valor_centavos"])
             wh.processado_em = timezone.now()

@@ -10,6 +10,8 @@ from apfood_core.enums import FormaPagamento, StatusPedido, StatusProducao, Tipo
 from apfood_core.enums import TipoMovimentacaoCaixa as TMC
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from datetime import timedelta
+
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -353,6 +355,7 @@ def pedido_in(dados: dict, loja, request=None) -> pedidos_srv.PedidoIn:
         marketplace=dados.get("marketplace", ""), id_externo=dados.get("id_externo", ""),
         codigo_externo=dados.get("codigo_externo", ""), codigo_local=dados.get("codigo_local", ""),
         usar_cashback_centavos=dados.get("usar_cashback_centavos", 0),
+        agendado_para=dados.get("agendado_para"),
     )
 
 
@@ -521,7 +524,14 @@ class TurnoViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModelM
 
     def _resumo(self, t, request):
         # Conferência cega: operador não vê o esperado; gerente vê.
-        return caixa.resumo(t, mostrar_esperado=request.user.eh_gerente or t.status == "FECHADO")
+        r = caixa.resumo(t, mostrar_esperado=request.user.eh_gerente or t.status == "FECHADO")
+        if request.user.eh_gerente:  # gerente/administrador vê o delivery do período do caixa
+            from django.utils import timezone as tz
+
+            from apps.pedidos.acertos import delivery_no_periodo
+
+            r["delivery"] = delivery_no_periodo(t.loja, t.aberto_em, t.fechado_em or tz.now())
+        return r
 
     @action(detail=True, methods=["get"])
     def resumo(self, request, pk=None):
@@ -826,3 +836,57 @@ class NotaFiscalViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveM
         if nota.modelo == "NFE":
             return Response(NotaFiscalSerializer(fiscal_srv.emitir_nfe(nota.pedido, nota.destinatario)).data)
         return Response(NotaFiscalSerializer(fiscal_srv.emitir_nfce(nota.pedido, cpf=nota.cpf_cnpj_consumidor)).data)
+
+
+# =============================================================================
+# Reservas de mesa
+# =============================================================================
+class ReservaSerializer(s.serializers.ModelSerializer):
+    status_rotulo = s.serializers.CharField(source="get_status_display", read_only=True)
+    mesa_nome = s.serializers.CharField(source="mesa.nome", read_only=True, default=None)
+
+    class Meta:
+        from apps.salao.models import Reserva
+
+        model = Reserva
+        exclude = ["loja"]
+        read_only_fields = ["id", "criado_em", "atualizado_em", "status", "comanda", "origem"]
+
+
+class ReservaViewSet(EscopoLojaMixin, viewsets.ModelViewSet):
+    """Reservas: `?data=AAAA-MM-DD` (o dia) ou `?futuras=1`. Ações: status (confirmar, cancelar, chegou, não veio)."""
+
+    serializer_class = ReservaSerializer
+    permission_classes = [UsuarioLiberado]
+
+    def get_queryset(self):
+        from datetime import datetime, time
+
+        from apps.salao.models import Reserva
+
+        self.queryset = Reserva.objects.select_related("mesa")
+        qs = super().get_queryset()
+        q = self.request.query_params
+        if q.get("data"):
+            d = datetime.strptime(q["data"], "%Y-%m-%d").date()
+            tz = timezone.get_current_timezone()
+            qs = qs.filter(data_hora__gte=timezone.make_aware(datetime.combine(d, time.min), tz),
+                           data_hora__lt=timezone.make_aware(datetime.combine(d, time.max), tz))
+        elif q.get("futuras"):
+            qs = qs.filter(data_hora__gte=timezone.now() - timedelta(hours=3))
+        return qs.order_by("data_hora")
+
+    def perform_create(self, serializer):
+        from apps.salao import reservas
+
+        tel = "".join(c for c in serializer.validated_data.get("telefone", "") if c.isdigit())[-11:]
+        r = serializer.save(loja=self.get_loja(), origem="PAINEL", telefone=tel, status="CONFIRMADA")
+        reservas.avisar_cliente(r, f"✅ *{r.loja.nome}*: sua reserva para {r.pessoas} pessoa(s) em "
+                                   f"{timezone.localtime(r.data_hora):%d/%m às %H:%M} está confirmada.", f"reserva-{r.id}-confirmada")
+
+    @action(detail=True, methods=["post"])
+    def status(self, request, pk=None):
+        from apps.salao import reservas
+
+        r = reservas.mudar_status(self.get_object(), str(request.data.get("status", "")), request.user)
+        return Response(ReservaSerializer(r).data)
