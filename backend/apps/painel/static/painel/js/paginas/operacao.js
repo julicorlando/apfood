@@ -463,7 +463,7 @@ export function cozinha() {
                   i.sabores?.length ? h("div", null, i.sabores.map((s) => s.nome).join(" / ")) : null,
                   i.adicionais?.length ? h("div", { class: "kds-ad" }, i.adicionais.map((a) => `+ ${a.quantidade > 1 ? `${a.quantidade}× ` : ""}${a.nome}`).join(", ")) : null,
                   i.observacao ? h("div", { class: "kds-obs-item" }, i.observacao) : null),
-                h("span", { class: "kds-st" }, i.status_producao === "EM_PREPARO" ? "🔥" : "")))),
+                h("span", { class: "kds-st" }, i.status_producao === "EM_PREPARO" ? "🔥" : ""))))),
             h("div", { class: "kds-acoes" },
               emPreparo ? null : botaoAcao("Começar", async () => {
                 for (const i of itens.filter((x) => x.status_producao === "AGUARDANDO")) await post(`/api/cozinha/${i.id}/avancar/`);

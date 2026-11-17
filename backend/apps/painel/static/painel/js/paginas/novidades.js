@@ -110,7 +110,7 @@ export function importarCardapio() {
             ? "Mande uma foto nítida ou o PDF do cardápio: a IA lê categorias, produtos, descrições e preços. Você confere tudo antes de salvar."
             : "Mande o PDF do cardápio (com texto) ou cole o texto abaixo. Para ler fotos, peça para ligar a leitura por IA (APFOOD_ANTHROPIC_KEY no servidor)."),
           h("div", { class: "grade grade-2" },
-            h("label", { class: "campo" }, h("span", null, info.ia ? "Foto ou PDF" : "PDF"), arquivo,
+            h("div", { class: "campo", style: { alignContent: "start" } }, h("span", null, info.ia ? "Foto ou PDF" : "PDF"), arquivo,
               botaoAcao("Ler arquivo", async () => {
                 const f = arquivo.files[0];
                 if (!f) { erro("Escolha o arquivo."); return; }
@@ -118,7 +118,7 @@ export function importarCardapio() {
                 trocar(area, h("div", { class: "carregando" }, "Lendo o cardápio… (pode levar até 1 minuto)"));
                 try { previa(await post("/api/cardapio/importar/", fd)); } catch (e) { trocar(area); throw e; }
               }, "botao botao-primario")),
-            h("label", { class: "campo" }, h("span", null, "Ou cole o texto (um produto com preço por linha)"), texto,
+            h("div", { class: "campo", style: { alignContent: "start" } }, h("span", null, "Ou cole o texto (um produto com preço por linha)"), texto,
               botaoAcao("Ler texto", async () => previa(await post("/api/cardapio/importar/", { texto: texto.value })), "botao")))),
         area);
 
@@ -134,7 +134,7 @@ export function importarCardapio() {
             const marcaCat = h("input", { type: "checkbox", checked: true, onchange: () => { c.marcada = marcaCat.checked; atualizarContador(); } });
             const nomeCat = h("input", { type: "text", value: c.nome, oninput: () => { c.nome = nomeCat.value; } });
             return h("div", { style: { margin: "14px 0" } },
-              h("div", { class: "acoes" }, marcaCat, nomeCat),
+              h("div", { class: "acoes", style: { flexWrap: "nowrap" } }, marcaCat, nomeCat),
               tabela([
                 { rotulo: "", valor: (p) => h("input", { type: "checkbox", checked: p.marcado, onchange: (ev) => { p.marcado = ev.target.checked; atualizarContador(); } }) },
                 { rotulo: "Produto", valor: (p) => h("input", { type: "text", value: p.nome, oninput: (ev) => { p.nome = ev.target.value; } }) },
