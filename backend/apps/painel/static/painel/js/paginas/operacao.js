@@ -5,7 +5,7 @@ import {
   aviso, barras, botaoAcao, centavos, confirmar, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, hora, kpi, limpar, minutosDesde, modal, pedirTexto, reais, rotulo, tabela, trocar, uuid,
 } from "../ui.js";
 import { abrirPedido, imprimirLinhas, imprimirPedido, itensTexto, mostrarCupom, pago, receber } from "./comum.js";
-import { carregarCardapio, montarItem } from "./pdv.js";
+import { aplicarPromocoes, carregarCardapio, montarItem, precoProduto } from "./pdv.js";
 
 function atualizarAoVivo(fn, ms = 20000) {
   let fila = null;
@@ -286,8 +286,12 @@ async function abrirComanda(id, aoMudar) {
             c.couvert_centavos ? h("li", null, "Couvert", h("span", { class: "num" }, dinheiro(c.couvert_centavos))) : null,
             c.desconto_centavos ? h("li", null, "Desconto", h("span", { class: "num" }, `− ${dinheiro(c.desconto_centavos)}`)) : null,
             h("li", { class: "negrito" }, "Total", h("span", { class: "num" }, dinheiro(c.total_centavos))),
-            pagoTotal ? h("li", null, "Pago", h("span", { class: "num" }, dinheiro(pagoTotal))) : null,
-            h("li", { class: "negrito" }, "Falta", h("span", { class: "num" }, dinheiro(falta)))))));
+            ...(c.pagamentos || []).filter((x) => x.status === "CONFIRMADO").map((x) => h("li", { class: "muted" },
+              `Pago${x.pagador ? ` por ${x.pagador}` : ""} · ${rotulo("FormaPagamento", x.forma)}`,
+              h("span", { class: "num" }, `− ${dinheiro(x.valor_centavos)}`))),
+            h("li", { class: "negrito" }, "Falta", h("span", { class: "num" }, dinheiro(falta)))),
+          pagoTotal && falta > 0 ? h("p", { class: "muted", style: { marginTop: "8px" } },
+            "Pagamento parcial: a mesa continua aberta para quem ficou consumir e pagar depois.") : null)));
 
     const aberta = ["ABERTA", "FECHANDO"].includes(c.status);
     trocar(rodape, 
@@ -304,9 +308,10 @@ async function abrirComanda(id, aoMudar) {
       }) : null,
       aberta && ehGerente() ? botaoAcao("Ajustes", ajustes) : null,
       aberta ? botaoAcao("Transferir", transferir) : null,
-      aberta && falta > 0 ? botaoAcao(`Receber ${dinheiro(falta)}`, async () => {
-        await receber({ tipo: "comanda", id, restante: falta });
+      aberta && falta > 0 ? botaoAcao("Receber (total ou parte)", async () => {
+        const quitou = await receber({ tipo: "comanda", id, restante: falta, parcial: true, pessoas: c.pessoas });
         await recarregar(); aoMudar();
+        if (!quitou && c.status !== "FECHADA") aviso("Parte recebida. A mesa continua aberta.", "ok");
       }, "botao botao-ok") : null,
       aberta && falta === 0 && c.total_centavos > 0 ? botaoAcao("Fechar comanda", async () => {
         await post(`/api/comandas/${id}/fechar/`);
@@ -316,7 +321,13 @@ async function abrirComanda(id, aoMudar) {
   }
 
   async function lancarItens() {
+    if (c.status === "FECHANDO") {  // conta pedida: reabre para quem ficou continuar pedindo
+      if (!(await confirmar("A conta já foi pedida. Reabrir a mesa para lançar mais itens? Os pagamentos feitos continuam abatidos."))) return;
+      await post(`/api/comandas/${id}/reabrir/`);
+      await recarregar(); aoMudar();
+    }
     cardapio = cardapio || await carregarCardapio();
+    aplicarPromocoes(cardapio.idx, "MESA");
     const itens = [];
     const listaEl = h("ul", { class: "lista-simples" });
     const grade = h("div", { class: "pdv-produtos", style: { maxHeight: "50vh", overflowY: "auto" } });
@@ -331,7 +342,7 @@ async function abrirComanda(id, aoMudar) {
         itens.push(it);
         trocar(listaEl, itens.map((x, n) => h("li", null, `${x.quantidade}× ${window.ApCarrinho.descrever(cardapio.idx, x).titulo}`,
           h("button", { type: "button", class: "botao botao-pequeno botao-perigo", onclick: (ev) => { itens.splice(n, 1); ev.target.closest("li").remove(); } }, "Tirar"))));
-      } }, h("span", { class: "nome" }, p.nome), h("span", { class: "preco" }, dinheiro(p.preco_centavos)))));
+      } }, h("span", { class: "nome" }, p.nome), h("span", { class: "preco" }, precoProduto(p)))));
     };
     busca.addEventListener("input", desenhar);
     desenhar();

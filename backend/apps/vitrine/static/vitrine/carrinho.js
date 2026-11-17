@@ -39,6 +39,16 @@
     return produto.preco_centavos;
   }
 
+  /** Desconto por unidade de uma promoção (mesma regra de apfood_core/promocoes.py). */
+  function descontoPromocao(promo, preco) {
+    if (!promo || preco <= 0) return 0;
+    let d = 0;
+    if (promo.tipo === "PERCENTUAL") d = Math.round(preco * Math.min(Math.max(promo.valor, 0), 100) / 100);
+    else if (promo.tipo === "VALOR") d = promo.valor;
+    else if (promo.tipo === "PRECO_FIXO") d = preco - promo.valor;
+    return Math.max(0, Math.min(d, preco));
+  }
+
   /**
    * item = {produto_id, variacao_id?, sabores?: [ids, inclui o principal], adicionais: [{adicional_id, quantidade}], quantidade}
    * Devolve {unitario, adicionais_por_unidade, total}.
@@ -57,6 +67,8 @@
         ? Math.round(precos.reduce(function (a, b) { return a + b; }, 0) / precos.length)
         : Math.max.apply(null, precos);
     }
+    const desconto = descontoPromocao(p.promocao, unitario);  // promoção programada (dia/horário)
+    unitario -= desconto;
     const opcoes = {};
     (p.grupos || []).forEach(function (g) { g.opcoes.forEach(function (o) { opcoes[o.id] = o; }); });
     const ad = (item.adicionais || []).reduce(function (s, a) {
@@ -64,7 +76,7 @@
       return s + (o ? o.preco_centavos * (a.quantidade || 1) : 0);
     }, 0);
     const qtd = Math.max(1, item.quantidade || 1);
-    return { unitario: unitario, adicionais_por_unidade: ad, total: (unitario + ad) * qtd };
+    return { unitario: unitario, adicionais_por_unidade: ad, total: (unitario + ad) * qtd, desconto_promocao: desconto };
   }
 
   /** Erros de montagem do item (mesmas regras do servidor). [] = válido. */
@@ -177,6 +189,7 @@
 
   return {
     reais: reais, paraCentavos: paraCentavos, indexar: indexar, precificar: precificar, validar: validar,
+    descontoPromocao: descontoPromocao,
     descrever: descrever, saboresCompativeis: saboresCompativeis, totais: totais, Carrinho: Carrinho,
     telefoneValido: telefoneValido, mascaraTelefone: mascaraTelefone,
   };

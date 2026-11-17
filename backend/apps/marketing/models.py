@@ -101,3 +101,48 @@ class EnvioCampanha(ModeloBase):
     class Meta:
         db_table = "campanhas_envios"
         constraints = [models.UniqueConstraint(fields=["campanha", "telefone"], name="envio_unico_por_telefone")]
+
+
+class Promocao(DaLoja, ModeloSincronizavel):
+    """Desconto programado por dia da semana/horário. Regra em apfood_core.promocoes
+    (a mesma no servidor, no PDV do PC e no cardápio online)."""
+
+    TIPOS = [("PERCENTUAL", "% de desconto"), ("VALOR", "R$ de desconto"), ("PRECO_FIXO", "Preço fixo")]
+
+    nome = models.CharField(max_length=80, help_text='"Terça do hambúrguer"')
+    descricao = models.CharField(max_length=160, blank=True, help_text="aparece no cardápio online")
+    tipo = models.CharField(max_length=10, choices=TIPOS, default="PERCENTUAL")
+    valor = models.PositiveIntegerField(help_text="% (PERCENTUAL) ou centavos (VALOR / PRECO_FIXO)")
+    produtos = models.JSONField(default=list, blank=True, help_text="ids; vazio + categorias vazio = cardápio todo")
+    categorias = models.JSONField(default=list, blank=True)
+    dias = models.JSONField(default=list, blank=True, help_text="0=segunda … 6=domingo; vazio = todos")
+    hora_inicio = models.TimeField(null=True, blank=True)
+    hora_fim = models.TimeField(null=True, blank=True)
+    data_inicio = models.DateField(null=True, blank=True)
+    data_fim = models.DateField(null=True, blank=True)
+    canais = models.JSONField(default=list, blank=True, help_text='vazio = todos; ou ["ONLINE", "BALCAO"]')
+    ativa = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "promocoes"
+        verbose_name = "promoção"
+        verbose_name_plural = "promoções"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+    def regra(self):
+        from apfood_core.promocoes import Promocao as Regra
+
+        return Regra.de_dict({
+            "id": str(self.id), "nome": self.nome, "tipo": self.tipo, "valor": self.valor,
+            "produtos": self.produtos, "categorias": self.categorias, "dias": self.dias,
+            "hora_inicio": self.hora_inicio, "hora_fim": self.hora_fim,
+            "data_inicio": self.data_inicio, "data_fim": self.data_fim, "canais": self.canais, "ativa": self.ativa,
+        })
+
+
+def promocoes_da_loja(loja) -> list:
+    """Regras (apfood_core) das promoções ativas cadastradas na loja."""
+    return [p.regra() for p in Promocao.objects.ativos().filter(loja=loja, ativa=True)]

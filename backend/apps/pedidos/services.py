@@ -104,6 +104,13 @@ def _montar_itens(loja, dados: PedidoIn):
         for p in Produto.objects.ativos().filter(loja=loja, id__in=ids, ativo=True).select_related("categoria")
     }
     agora = timezone.now()
+    canal = getattr(dados.canal, "value", dados.canal)
+    from apfood_core import promocoes as regra_promo
+
+    from apps.marketing.models import promocoes_da_loja
+
+    promos = promocoes_da_loja(loja) if canal != CanalVenda.MARKETPLACE else []
+    agora_local = timezone.localtime(agora).replace(tzinfo=None)
 
     def produto(pid):
         p = produtos.get(str(pid))
@@ -176,9 +183,15 @@ def _montar_itens(loja, dados: PedidoIn):
         if erros := totais.validar_adicionais(regras, escolhidos):
             raise ErroNegocio(f"{p.nome}: " + "; ".join(erros), "itens")
 
+        # --- promoção programada (dia/horário) ---
+        desconto_promo, promo = regra_promo.melhor(
+            promos, str(p.id), str(p.categoria_id) if p.categoria_id else None, preco_unit, agora_local, canal)
+        preco_unit -= desconto_promo
+
         item_core = totais.Item(preco_unit, it.quantidade, escolhidos)
         itens_core.append(item_core)
         linhas.append({
+            "promocao": promo.nome[:80] if promo else "", "desconto_promocao": desconto_promo,
             "produto": p, "variacao": variacao, "sabores": sabores, "adicionais": adicionais,
             "quantidade": it.quantidade, "preco_unit": preco_unit, "observacao": it.observacao[:255],
             "total_adicionais": item_core.adicionais_por_unidade_centavos, "total": item_core.total_centavos,
@@ -298,12 +311,16 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
     status = fluxo.status_inicial(online, loja.aceite_automatico)
     agora = timezone.now()
 
+    numero = SequenciaPedido.proximo(loja, timezone.localdate())
+    senha = dados.senha
+    if not senha and dados.canal == CanalVenda.BALCAO:
+        senha = f"{numero:04d}"  # balcão: número para chamar o cliente (ex.: 0124)
     pedido = Pedido.objects.create(
         **({"id": dados.id} if dados.id else {}),
-        loja=loja, numero=SequenciaPedido.proximo(loja, timezone.localdate()), codigo_local=dados.codigo_local,
+        loja=loja, numero=numero, codigo_local=dados.codigo_local,
         canal=dados.canal, origem_contato=dados.origem_contato, tipo_atendimento=dados.tipo_atendimento,
         status=status, cliente=cliente, nome_cliente=dados.nome_cliente[:120], telefone_cliente=tel,
-        mesa=dados.mesa, senha=dados.senha, comanda=dados.comanda,
+        mesa=dados.mesa, senha=senha[:10], comanda=dados.comanda,
         marketplace=dados.marketplace, id_externo=dados.id_externo, codigo_externo=dados.codigo_externo,
         entrega_logradouro=end.get("logradouro", "") or "", entrega_numero=end.get("numero", "") or "",
         entrega_complemento=end.get("complemento", "") or "", entrega_bairro=end.get("bairro", "") or "",
@@ -327,6 +344,7 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
             nome_variacao=l["variacao"].nome if l["variacao"] else "", quantidade=l["quantidade"],
             preco_unitario_centavos=l["preco_unit"], total_adicionais_centavos=l["total_adicionais"],
             total_centavos=l["total"], observacao=l["observacao"], setor=p.setor_efetivo,
+            promocao=l["promocao"], desconto_promocao_centavos=l["desconto_promocao"],
         )
         ItemPedidoSabor.objects.bulk_create(
             [ItemPedidoSabor(item=item, produto=sp, nome=sp.nome, preco_unitario_centavos=pr) for sp, pr in l["sabores"]]
@@ -514,7 +532,7 @@ def _taxa_e_previsao(loja, forma, bandeira, valor):
 def registrar_pagamento(
     *, usuario, forma: FormaPagamento, valor_centavos: int, pedido=None, comanda=None,
     valor_recebido_centavos: int | None = None, bandeira: str = "", referencia_externa: str = "",
-    pago_online: bool = False, id=None,
+    pago_online: bool = False, id=None, pagador: str = "",
 ) -> Pagamento:
     """Pagamento CONFIRMADO. Entra no caixa do operador (exceto pago online /
     marketplace). Em dinheiro, calcula o troco."""
@@ -565,6 +583,7 @@ def registrar_pagamento(
         valor_recebido_centavos=valor_recebido_centavos, troco_centavos=troco, pago_online=pago_online,
         referencia_externa=referencia_externa, bandeira=bandeira, taxa_centavos=taxa,
         previsao_recebimento=previsao, turno=turno, recebido_por=usuario, confirmado_em=timezone.now(),
+        dados_externos={"pagador": pagador.strip()[:60]} if pagador and pagador.strip() else {},
     )
     if turno is not None:
         caixa.registrar_venda(turno, pg, usuario)

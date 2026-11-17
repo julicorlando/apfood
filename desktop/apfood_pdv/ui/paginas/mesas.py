@@ -115,7 +115,7 @@ class PaginaMesas(QWidget):
     def opcoes(self, c: dict):
         nome = self._mesa_nome(c)
         acoes = [("Lançar itens", "rodada"), ("Ver / imprimir conta", "conta"), ("Pedir conta (congela valores)", "pedir"),
-                 ("Receber pagamento", "receber"), ("Fechar comanda", "fechar"), ("Transferir de mesa", "transferir"),
+                 ("Receber (total ou parte)", "receber"), ("Fechar comanda", "fechar"), ("Transferir de mesa", "transferir"),
                  ("Juntar com outra comanda", "juntar"), ("Tirar/pôr taxa de serviço", "taxa")]
         if c["status"] == "FECHANDO":
             acoes.insert(1, ("Reabrir (voltar a lançar)", "reabrir"))
@@ -126,8 +126,15 @@ class PaginaMesas(QWidget):
         self.atualizar()
 
     def _acao_rodada(self, c, nome):
-        if c["status"] != "ABERTA":
-            erro(self, "A conta já foi pedida. Reabra a comanda para lançar mais itens.")
+        if c["status"] == "FECHANDO":
+            if not confirmar(self, "A conta já foi pedida. Reabrir a mesa para lançar mais itens?\n"
+                                   "Os pagamentos já feitos continuam abatidos."):
+                return
+            if seguro(self, self.ctx.api.post, f"/api/comandas/{c['id']}/reabrir/") is None:
+                return
+            c = {**c, "status": "ABERTA"}
+        elif c["status"] != "ABERTA":
+            erro(self, "Esta comanda não está aberta.")
             return
         self.lancar_rodada.emit({**c, "mesa_nome": nome})
 
@@ -155,29 +162,26 @@ class PaginaMesas(QWidget):
         if not atual:
             return
         pago = sum(p["valor_centavos"] for p in atual.get("pagamentos", []) if p["status"] == "CONFIRMADO")
-        pessoas, ok = QInputDialog.getInt(self, "Dividir a conta", "Dividir entre quantas pessoas? (1 = não dividir)",
-                                          atual.get("pessoas", 1), 1, 50)
-        if not ok:
-            return
-        if pessoas > 1:
-            partes = (seguro(self, self.ctx.api.get, f"/api/comandas/{c['id']}/divisao/", pessoas=pessoas) or {}).get(
-                "partes_centavos", [])
-            self.ctx.status("Partes: " + " / ".join(reais(p) for p in partes))
-        d = DialogoPagamento(atual["total_centavos"], ja_pago=pago, parent=self,
+        d = DialogoPagamento(atual["total_centavos"], ja_pago=pago, parent=self, permitir_parcial=True,
                              pix_fn=lambda v: {"qr_code": "", **self.ctx.api.post(f"/api/comandas/{c['id']}/pix/",
                                                                                  {"valor_centavos": v})})
         if not d.exec() or d.pendente:
             return
         for pg in d.pagamentos:
             corpo = {"forma": pg["forma"], "valor_centavos": pg["valor_centavos"],
-                     "valor_recebido_centavos": pg.get("recebido_centavos"), "bandeira": pg.get("bandeira", "")}
+                     "valor_recebido_centavos": pg.get("recebido_centavos"), "bandeira": pg.get("bandeira", ""),
+                     "pagador": pg.get("pagador", "")}
             if seguro(self, self.ctx.api.post, f"/api/comandas/{c['id']}/pagamentos/", corpo) is None:
                 return
-        if d.troco_total():
-            self.ctx.status(f"TROCO: {reais(d.troco_total())}")
-        if pago + sum(p["valor_centavos"] for p in d.pagamentos) >= atual["total_centavos"] and \
-                confirmar(self, "Conta paga. Fechar a comanda e liberar a mesa?"):
-            self._acao_fechar(c, nome)
+        troco = f"TROCO: {reais(d.troco_total())}  |  " if d.troco_total() else ""
+        pago_agora = pago + sum(p["valor_centavos"] for p in d.pagamentos)
+        if pago_agora >= atual["total_centavos"]:
+            self.ctx.status(troco + f"{nome}: conta paga")
+            if confirmar(self, "Conta paga. Fechar a comanda e liberar a mesa?"):
+                self._acao_fechar(c, nome)
+        else:
+            falta = atual["total_centavos"] - pago_agora
+            self.ctx.status(troco + f"{nome}: parte recebida — falta {reais(falta)}. A mesa continua aberta.")
 
     def _acao_fechar(self, c, nome):
         if seguro(self, self.ctx.api.post, f"/api/comandas/{c['id']}/fechar/") is not None:

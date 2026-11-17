@@ -58,7 +58,11 @@ def dados_loja_publica(loja, request) -> dict:
 
 
 def dados_cardapio(loja, request) -> dict:
+    from apps.api.views import promocoes_agora
+    from apps.marketing.models import Promocao
+
     agora = timezone.now()
+    promo_online = promocoes_agora(loja, canais=("ONLINE",))["ONLINE"]
     categorias = []
     for c in Categoria.objects.ativos().filter(loja=loja, ativa=True).order_by("ordem", "nome"):
         produtos = []
@@ -81,12 +85,24 @@ def dados_cardapio(loja, request) -> dict:
                 "variacoes": [{"id": str(v.id), "nome": v.nome, "preco_centavos": v.preco_centavos}
                               for v in p.variacoes.ativos().filter(ativo=True)],
                 "grupos": grupos,
+                "promocao": promo_online.get(str(p.id)),
             })
         if produtos:
             categorias.append({"id": str(c.id), "nome": c.nome, "descricao": c.descricao,
                                "max_sabores": c.max_sabores, "regra_preco_sabores": c.regra_preco_sabores,
                                "produtos": produtos})
-    return {"loja": dados_loja_publica(loja, request), "categorias": categorias}
+    # promoções do dia (para a faixa no topo do cardápio), mesmo as que começam mais tarde
+    hoje = timezone.localdate()
+    do_dia = []
+    for promo in Promocao.objects.ativos().filter(loja=loja, ativa=True).order_by("hora_inicio", "nome"):
+        r = promo.regra()
+        if r.canais and "ONLINE" not in r.canais:
+            continue
+        if (r.dias and hoje.weekday() not in r.dias) or (r.data_inicio and hoje < r.data_inicio) \
+                or (r.data_fim and hoje > r.data_fim):
+            continue
+        do_dia.append({"nome": promo.nome, "descricao": promo.descricao, "resumo": r.descricao()})
+    return {"loja": dados_loja_publica(loja, request), "categorias": categorias, "promocoes": do_dia}
 
 
 class CardapioPublicoView(Publica):

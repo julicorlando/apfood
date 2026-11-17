@@ -24,6 +24,7 @@ const ROTAS = [
   ["/entregadores", "Entregadores", "🛵", "Clientes e entrega", temLoja, "cadastros", "entregadores"],
   ["/zonas", "Zonas de entrega", "📍", "Clientes e entrega", temLoja, "cadastros", "zonas"],
   ["/cupons", "Cupons", "🏷️", "Clientes e entrega", temLoja, "cadastros", "cupons"],
+  ["/promocoes", "Promoções", "🔥", "Clientes e entrega", () => temLoja() && ehGerente(), "cadastros", "promocoes"],
   ["/campanhas", "Campanhas WhatsApp", "📣", "Clientes e entrega", () => temLoja() && ehGerente(), "cadastros", "campanhas"],
   ["/mesas-cadastro", "Cadastro de mesas", "🪑", "Clientes e entrega", temLoja, "cadastros", "mesasCadastro"],
 
@@ -53,6 +54,7 @@ const ROTAS = [
   ["/empresas", "Empresas", "🏢", "Plataforma", ehMaster, "plataforma", "empresas"],
   ["/planos", "Planos", "📋", "Plataforma", ehMaster, "plataforma", "planos"],
   ["/faturas", "Faturas", "💰", "Plataforma", ehMaster, "plataforma", "faturas"],
+  ["/recebimentos", "Recebimentos", "🏦", "Plataforma", ehMaster, "plataforma", "recebimentos"],
 ];
 
 const modulos = {

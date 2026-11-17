@@ -8,10 +8,11 @@ const C = () => window.ApCarrinho;
 
 /** Monta o cardápio no mesmo formato do cardápio público (o ApCarrinho calcula os preços). */
 export async function carregarCardapio() {
-  const [cats, prods, grupos] = await Promise.all([
+  const [cats, prods, grupos, promocoes] = await Promise.all([
     lista("/api/categorias/", { ativa: "true" }),
     lista("/api/produtos/", { tipo: "VENDA", ativo: "true" }),
     lista("/api/grupos-adicionais/"),
+    get("/api/promocoes/agora/").catch(() => ({})),
   ]);
   const gruposPorId = Object.fromEntries(grupos.filter((g) => g.ativo).map((g) => [g.id, {
     id: g.id, nome: g.nome, min: g.min_selecao, max: g.max_selecao,
@@ -29,7 +30,25 @@ export async function carregarCardapio() {
   const soltos = prods.filter((p) => !p.categoria || !cats.find((c) => c.id === p.categoria)).sort(ordem).map(conv);
   if (soltos.length) categorias.push({ id: "_", nome: "Outros", max_sabores: 1, produtos: soltos });
   const cardapio = { categorias: categorias.filter((c) => c.produtos.length) };
-  return { cardapio, idx: C().indexar(cardapio) };
+  const idx = C().indexar(cardapio);
+  idx.promocoes = promocoes || {};
+  aplicarPromocoes(idx, "BALCAO");
+  return { cardapio, idx };
+}
+
+/** Promoções programadas valendo agora no canal (o servidor recalcula ao salvar). */
+export function aplicarPromocoes(idx, canal) {
+  const mapa = (idx.promocoes || {})[canal] || {};
+  for (const p of Object.values(idx.produtos)) p.promocao = mapa[p.id] || null;
+}
+
+/** Preço para mostrar no botão do produto, já com a promoção. */
+export function precoProduto(p) {
+  const varia = p.variacoes.length;
+  const base = varia ? Math.min(...p.variacoes.map((v) => v.preco_centavos)) : p.preco_centavos;
+  const d = C().descontoPromocao(p.promocao, base);
+  const texto = (varia ? "a partir de " : "") + dinheiro(base - d);
+  return d ? h("span", { title: p.promocao.nome }, `🔥 ${texto}`) : texto;
 }
 
 /** Modal de montagem do item (tamanho, sabores, adicionais, observação). Resolve o item ou null. */
@@ -198,7 +217,7 @@ export function pdv() {
           type: "button", class: "pdv-produto", disabled: p.esgotado, onclick: () => escolher(p),
         }, h("span", { class: "nome" }, p.nome),
         p.esgotado ? h("span", { class: "etiqueta e-alerta" }, "Esgotado") : null,
-        h("span", { class: "preco" }, p.variacoes.length ? `a partir de ${dinheiro(Math.min(...p.variacoes.map((v) => v.preco_centavos)))}` : dinheiro(p.preco_centavos))))
+        h("span", { class: "preco" }, precoProduto(p))))
           : h("div", { class: "vazio" }, cardapio.categorias.length ? "Nenhum produto." : "Cadastre produtos em Cardápio → Produtos."));
       };
       busca.addEventListener("input", () => { estado.busca = busca.value.trim(); desenharCatalogo(); });
@@ -250,7 +269,12 @@ export function pdv() {
       function desenharCarrinho() {
         const t = totais();
         const blocoModo = h("div", { class: "abas", style: { marginBottom: "8px" } }, modos.map(([v, r]) => h("button", {
-          type: "button", class: estado.modo === v ? "ativa" : "", onclick: () => { estado.modo = v; desenharCarrinho(); },
+          type: "button", class: estado.modo === v ? "ativa" : "", onclick: () => {
+            estado.modo = v;
+            aplicarPromocoes(idx, v === "DELIVERY" ? "DELIVERY" : "BALCAO");
+            desenharCarrinho();
+            desenharCatalogo();
+          },
         }, r)));
         const itens = h("div", { class: "pdv-itens" }, estado.itens.length ? estado.itens.map((i, n) => {
           const d = C().descrever(idx, i);
@@ -285,7 +309,7 @@ export function pdv() {
         if (estado.modo !== "DELIVERY") {
           const nome = h("input", { type: "text", placeholder: "Nome do cliente (opcional)", value: estado.cliente.nome });
           nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
-          const senha = h("input", { type: "text", placeholder: "Senha/ficha", value: estado.senha, style: { maxWidth: "110px" } });
+          const senha = h("input", { type: "text", placeholder: "Nº (automático)", value: estado.senha, style: { maxWidth: "110px" } });
           senha.addEventListener("input", () => { estado.senha = senha.value; });
           const tel = h("input", { type: "tel", placeholder: "Telefone (cashback)", value: estado.cliente.telefone });
           tel.addEventListener("input", () => { estado.cliente.telefone = tel.value; });

@@ -271,3 +271,41 @@ def test_login_tema_claro_lembra_usuario_e_mostra_erro(ctx):
     assert d.result() == 1 and ctx.cfg.ultimo_usuario == "caixa1"
     d2 = DialogoLogin(ctx)
     assert d2.usuario.text() == "caixa1"
+
+
+def test_caixa_livre_e_numero_do_balcao(ctx):
+    from apfood_pdv.ui.paginas.venda import PaginaVenda
+
+    v = PaginaVenda(ctx)
+    v.ao_mostrar()
+    assert v.pilha_carrinho.currentWidget() is v.caixa_livre and "CAIXA FECHADO" in v.caixa_livre.text()
+    ctx.banco.gravar("turno_atual", "T1")
+    v.mostrar_caixa_livre()
+    assert "CAIXA LIVRE" in v.caixa_livre.text()
+    v.adicionar_produto(CARDAPIO["produtos"][0])
+    assert v.pilha_carrinho.currentWidget() is v.tabela
+    ctx.servidor.online = False
+    resp = v.finalizar(pagamentos=[{"forma": "PIX", "valor_centavos": 700}])
+    assert resp["senha"] == "0001" and v.ultimo_numero == "0001"
+    assert v.pilha_carrinho.currentWidget() is v.caixa_livre and "0001" in v.caixa_livre.text()
+    texto = "".join(f.read_text(encoding="utf-8") for f in (ctx.pasta / "cupons").glob("*.txt"))
+    assert "0001" in texto
+
+
+def test_dialogo_pagamento_parcial_da_mesa(ctx):
+    from apfood_pdv.ui.dialogos import DialogoPagamento
+
+    d = DialogoPagamento(3000, permitir_parcial=True)
+    d._dividir(3)
+    assert d.valor.text() == "10,00"
+    d.pagador.setText("Cliente 1")
+    d.forma_btn.button(1).setChecked(True)  # Pix
+    d.accept()
+    assert d.result() == 1 and d.restante == 2000
+    assert d.pagamentos == [{"forma": "PIX", "valor_centavos": 1000, "recebido_centavos": None, "bandeira": "",
+                             "pagador": "Cliente 1"}]
+    # sem permitir parcial (balcão), continua exigindo o valor todo
+    d2 = DialogoPagamento(3000)
+    d2.valor.setText("10,00")
+    d2.accept()
+    assert d2.result() == 0

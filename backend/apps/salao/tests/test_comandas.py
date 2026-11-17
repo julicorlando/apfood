@@ -42,3 +42,35 @@ def test_juntar_comandas(loja, cardapio, operador):
     b.refresh_from_db()
     assert a.status == "CANCELADA" and a.unida_em == b
     assert b.pedidos.count() == 2 and b.subtotal_centavos == 2100
+
+
+def test_pagamento_parcial_mesa_continua_consumindo(loja, cardapio, operador):
+    """Cliente 1 paga a parte dele e vai embora; o resto da mesa continua e paga depois."""
+    from rest_framework.test import APIClient
+
+    caixa.abrir_turno(operador, loja, 0)
+    c = salao.abrir(loja, operador, mesa=Mesa.objects.create(loja=loja, nome="Mesa 1"), pessoas=3)
+    rodada(loja, c, cardapio, operador, 2)  # 1400 + 10%
+    c.refresh_from_db()
+    api = APIClient()
+    api.force_authenticate(operador)
+    r = api.post(f"/api/comandas/{c.id}/pagamentos/?loja={loja.id}",
+                 {"forma": "PIX", "valor_centavos": 500, "pagador": "Cliente 1"}, format="json")
+    assert r.status_code == 201 and r.data["pagador"] == "Cliente 1"
+    c.refresh_from_db()
+    assert c.status == "ABERTA"  # não fecha a conta
+    rodada(loja, c, cardapio, operador, 1)  # quem ficou pede mais
+    c.refresh_from_db()
+    assert c.total_centavos == 2310
+    # pediu a conta, pagou mais uma parte e resolveu pedir de novo: reabre com pagamento lançado
+    salao.pedir_conta(c, operador)
+    ps.registrar_pagamento(usuario=operador, comanda=c, forma=FormaPagamento.DINHEIRO, valor_centavos=810)
+    salao.reabrir(c, operador)
+    rodada(loja, c, cardapio, operador, 1)
+    c.refresh_from_db()
+    assert c.status == "ABERTA" and c.total_centavos == 3080
+    assert ps.total_pago(comanda=c) == 1310
+    pagos = api.get(f"/api/comandas/{c.id}/?loja={loja.id}").data["pagamentos"]
+    assert {p["pagador"] for p in pagos} == {"Cliente 1", ""}
+    ps.registrar_pagamento(usuario=operador, comanda=c, forma=FormaPagamento.PIX, valor_centavos=1770)
+    salao.fechar(c, operador)

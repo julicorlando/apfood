@@ -17,7 +17,7 @@ from apps.contas.models import Usuario
 from apps.estoque.models import MovimentacaoEstoque
 from apps.financeiro.models import CategoriaDespesa, Despesa, TaxaFormaPagamento
 from apps.lojas.models import Loja
-from apps.marketing.models import Cupom
+from apps.marketing.models import Cupom, Promocao
 from apps.pedidos.models import HistoricoStatusPedido, ItemPedido, ItemPedidoAdicional, ItemPedidoSabor, Pagamento, Pedido
 from apps.salao.models import Comanda, Mesa
 
@@ -148,6 +148,48 @@ EntregadorSerializer = cadastro(Entregador)
 MesaSerializer = cadastro(Mesa)
 FornecedorSerializer = cadastro(Fornecedor)
 CupomSerializer = cadastro(Cupom, read_only_fields=BaseLoja.Meta.read_only_fields + ["usos"])
+
+
+class PromocaoSerializer(BaseLoja):
+    resumo = serializers.SerializerMethodField()
+
+    class Meta(BaseLoja.Meta):
+        model = Promocao
+
+    def get_resumo(self, p):
+        return p.regra().descricao()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        tipo = attrs.get("tipo", getattr(self.instance, "tipo", "PERCENTUAL"))
+        valor = attrs.get("valor", getattr(self.instance, "valor", 0))
+        if tipo == "PERCENTUAL" and not 1 <= valor <= 100:
+            raise serializers.ValidationError({"valor": ["o percentual vai de 1 a 100"]})
+        if valor <= 0 and tipo != "PRECO_FIXO":
+            raise serializers.ValidationError({"valor": ["informe o desconto"]})
+        dias = attrs.get("dias")
+        if dias is not None and (not isinstance(dias, list) or any(d not in range(7) for d in dias)):
+            raise serializers.ValidationError({"dias": ["dias de 0 (segunda) a 6 (domingo)"]})
+        canais = attrs.get("canais")
+        if canais and any(c not in ("ONLINE", "BALCAO", "DELIVERY", "MESA") for c in canais):
+            raise serializers.ValidationError({"canais": ["canal inválido"]})
+        ini, fim = attrs.get("data_inicio"), attrs.get("data_fim")
+        if ini and fim and fim < ini:
+            raise serializers.ValidationError({"data_fim": ["termina antes de começar"]})
+        # produtos/categorias precisam ser da mesma loja
+        view = self.context.get("view")
+        loja_id = getattr(self.instance, "loja_id", None) or (view.get_loja().id if view and hasattr(view, "get_loja") else None)
+        if loja_id:
+            from apps.cardapio.models import Categoria as Cat
+            from apps.cardapio.models import Produto as Prod
+
+            for campo, modelo in (("produtos", Prod), ("categorias", Cat)):
+                ids = [str(x) for x in attrs.get(campo) or []]
+                if ids and modelo.objects.filter(loja_id=loja_id, id__in=ids).count() != len(set(ids)):
+                    raise serializers.ValidationError({campo: ["item de outra loja ou inexistente"]})
+                if campo in attrs:
+                    attrs[campo] = sorted(set(ids))
+        return attrs
 CategoriaDespesaSerializer = cadastro(CategoriaDespesa)
 TaxaFormaPagamentoSerializer = cadastro(TaxaFormaPagamento)
 
@@ -181,9 +223,14 @@ class ItemOut(serializers.ModelSerializer):
 
 
 class PagamentoOut(serializers.ModelSerializer):
+    pagador = serializers.SerializerMethodField()
+
     class Meta:
         model = Pagamento
         fields = "__all__"
+
+    def get_pagador(self, pg):
+        return (pg.dados_externos or {}).get("pagador", "")
 
 
 class HistoricoOut(serializers.ModelSerializer):
@@ -291,6 +338,8 @@ class PagamentoIn(serializers.Serializer):
     bandeira = serializers.CharField(required=False, allow_blank=True, default="")
     referencia_externa = serializers.CharField(required=False, allow_blank=True, default="")
     pago_online = serializers.BooleanField(default=False)
+    pagador = serializers.CharField(required=False, allow_blank=True, default="", max_length=60,
+                                    help_text='quem pagou esta parte (mesa): "Cliente 1", "João"')
 
 
 # --- caixa ------------------------------------------------------------------

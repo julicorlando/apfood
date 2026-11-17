@@ -169,6 +169,8 @@ class ItemPedido(ModeloBase):
     total_adicionais_centavos = models.PositiveIntegerField(default=0, help_text="por unidade")
     total_centavos = models.PositiveIntegerField(help_text="(unitário + adicionais) × quantidade")
     observacao = models.CharField(max_length=255, blank=True, help_text='"sem cebola"')
+    promocao = models.CharField(max_length=80, blank=True, help_text="promoção aplicada (snapshot)")
+    desconto_promocao_centavos = models.PositiveIntegerField(default=0, help_text="por unidade, já abatido do preço")
 
     # Produção (cozinha / KDS)
     setor = models.ForeignKey(

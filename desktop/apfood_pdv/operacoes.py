@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime
 
-from apfood_core import totais
+from apfood_core import promocoes, totais
 from apfood_core.enums import RegraPrecoSabores
 from apfood_core.precos import preco_sabores
 
@@ -76,7 +76,13 @@ class PDV:
                                                   key=lambda a: (a.get("ordem", 0), a["nome"]))})
         return out
 
-    def precificar_item(self, item: dict) -> int:
+    def promocao(self, produto: dict, preco_centavos: int, canal: str = "BALCAO") -> tuple[int, object]:
+        """(desconto por unidade, promoção) que vale agora para o produto."""
+        return promocoes.melhor(self.banco.listar("promocoes"), str(produto.get("id", "")),
+                                str(produto["categoria"]) if produto.get("categoria") else None,
+                                preco_centavos, datetime.now(), canal)
+
+    def precificar_item(self, item: dict, canal: str = "BALCAO") -> int:
         """Total do item calculado localmente (o servidor recalcula ao receber)."""
         p = self.banco.obter("produtos", item["produto_id"]) or {}
         var = self.banco.obter("variacoes", item["variacao_id"]) if item.get("variacao_id") else None
@@ -90,6 +96,7 @@ class PDV:
                 sv = next((v for v in self.variacoes(sid) if var and v["nome"] == var["nome"]), None)
                 precos.append(sv["preco_centavos"] if sv else sp.get("preco_centavos", 0))
             preco = preco_sabores(precos, RegraPrecoSabores(cat.get("regra_preco_sabores", "MAIOR")))
+        preco -= self.promocao(p, preco, canal)[0]  # promoção programada (dia/horário)
         escolhidos = []
         for a in item.get("adicionais", []):
             ad = self.banco.obter("adicionais", a["adicional_id"]) or {}
@@ -98,11 +105,31 @@ class PDV:
         return totais.Item(preco, item.get("quantidade", 1), escolhidos).total_centavos
 
     # --- pedidos -------------------------------------------------------------
+    def senha_balcao_local(self) -> str:
+        """Número do balcão quando o pedido sai sem internet: sequência do dia neste caixa."""
+        return f"{self.banco.proximo('senha_balcao_' + datetime.now().strftime('%Y%m%d')):04d}"
+
     def criar_pedido(self, dados: dict) -> dict:
         payload = {"id": novo_id(), "codigo_local": self.codigo_local(), **dados}
-        r = self._executar("pedido.criar", payload, lambda: self.api.post("/api/pedidos/", payload))
+        senha_auto = payload.get("canal") == "BALCAO" and not payload.get("senha")
+        if senha_auto and self.banco.total_pendentes() == 0:
+            # online: o servidor numera (0124 = número do pedido do dia)
+            try:
+                r = self.api.post("/api/pedidos/", payload)
+                self.online = True
+                return {**(r or {}), "offline": False}
+            except SemConexao:
+                self.online = False
+        if senha_auto:
+            payload["senha"] = self.senha_balcao_local()
+            self.banco.enfileirar("pedido.criar", payload, op_id=novo_id())
+            if self.ao_enfileirar:
+                self.ao_enfileirar()
+            r = {**payload, "offline": True}
+        else:
+            r = self._executar("pedido.criar", payload, lambda: self.api.post("/api/pedidos/", payload))
         if r["offline"]:
-            sub = sum(self.precificar_item(i) for i in dados["itens"])
+            sub = sum(self.precificar_item(i, dados.get("canal", "BALCAO")) for i in dados["itens"])
             taxa = dados.get("taxa_entrega_centavos") or 0
             r.update(numero=None, status="RECEBIDO", subtotal_centavos=sub, taxa_entrega_centavos=taxa,
                      total_centavos=max(0, sub + taxa + dados.get("acrescimo_centavos", 0) - dados.get("desconto_centavos", 0)),

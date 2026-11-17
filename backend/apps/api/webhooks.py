@@ -74,10 +74,11 @@ class MercadoPagoPlataformaWebhook(Webhook):
         if wh is None or wh.processado_em:
             return Response({"ok": True})
         try:
-            info = MercadoPago(settings.APFOOD_MP_TOKEN_PLATAFORMA).consultar(pid)
+            info = MercadoPago(cobranca.token_mp()).consultar(pid)
             ref = info.get("external_reference") or ""
             if info["status"] == STATUS_PAGO and ref.startswith("fatura-"):
-                fatura = Fatura.objects.get(pk=ref.removeprefix("fatura-"))
+                # "fatura-<uuid>" ou "fatura-<uuid>-<data>" (Pix gerado de novo)
+                fatura = Fatura.objects.get(pk=ref.removeprefix("fatura-")[:36])
                 if info["valor_centavos"] >= fatura.valor_centavos:
                     cobranca.confirmar_fatura(fatura)
             wh.processado_em = timezone.now()

@@ -1,9 +1,9 @@
 // Área do MASTER: empresas clientes, planos e faturas da plataforma.
-import { ErroApi, get, post } from "../api.js";
+import { ErroApi, get, post, put } from "../api.js";
 import { recarregarSessao } from "../app.js";
 import { paginaCadastro } from "../crud.js";
 import { formulario } from "../form.js";
-import { aviso, botaoAcao, data, dinheiro, etiquetaStatus, h, kpi, modal, simNao, tabela, trocar } from "../ui.js";
+import { aviso, botaoAcao, confirmar, data, dinheiro, erro, etiquetaStatus, h, kpi, modal, simNao, tabela, trocar } from "../ui.js";
 
 export function visaoGeral() {
   return {
@@ -167,5 +167,76 @@ export function faturas() {
     ],
     novo: { status: "ABERTA" },
     antesDeSalvar: (d) => ({ ...d, forma_pagamento: d.forma_pagamento || "" }),
+    acoes: (f, recarregar) => (f.status === "ABERTA" ? [
+      f.link_pagamento ? h("a", { class: "botao botao-pequeno", href: f.link_pagamento, target: "_blank", rel: "noopener" }, "Abrir link") : null,
+      f.link_pagamento ? botaoAcao("Copiar link", async () => {
+        try { await navigator.clipboard.writeText(f.link_pagamento); aviso("Link copiado.", "ok"); } catch { aviso(f.link_pagamento); }
+      }, "botao botao-pequeno") : null,
+      botaoAcao(f.link_pagamento ? "Gerar de novo" : "Gerar cobrança", async () => {
+        try { await post(`/api/faturas/${f.id}/cobrar/`, {}); aviso("Link de pagamento gerado.", "ok"); recarregar(); } catch (e) { erro(e); }
+      }, "botao botao-pequeno"),
+      botaoAcao("Marcar paga", async () => {
+        if (!(await confirmar(`Dar baixa manual na fatura de ${f.empresa_nome} (${dinheiro(f.valor_centavos)})? Use quando recebeu por fora do Mercado Pago.`, { ok: "Marcar paga" }))) return;
+        try { await post(`/api/faturas/${f.id}/marcar-paga/`, { forma: "PIX" }); aviso("Fatura paga. Empresa liberada.", "ok"); recarregar(); } catch (e) { erro(e); }
+      }, "botao botao-pequeno"),
+    ] : null),
   });
+}
+
+// ---------------------------------------------------------------- recebimentos (Mercado Pago da plataforma)
+export function recebimentos() {
+  return {
+    titulo: "Recebimentos",
+    async render(raiz) {
+      const desenhar = async (d) => {
+        d = d || await get("/api/plataforma/recebimentos/", { semLoja: true });
+        const token = h("input", { type: "password", autocomplete: "off", placeholder: d.configurado ? "•••••• (salvo) — cole outro para trocar" : "APP_USR-…" });
+        const metodo = h("select", null, d.metodos.map((m) => h("option", { value: m.valor, selected: m.valor === d.metodo }, m.rotulo)));
+        const msg = h("div", { class: "alerta alerta-erro", hidden: true });
+        const salvar = async (corpo) => {
+          msg.hidden = true;
+          try { await desenhar(await put("/api/plataforma/recebimentos/", corpo, { semLoja: true })); aviso("Salvo.", "ok"); }
+          catch (e) { msg.textContent = e.mensagem || String(e); msg.hidden = false; }
+        };
+        const situacao = d.configurado
+          ? h("div", { class: "alerta alerta-ok" }, `Recebendo pelo Mercado Pago${d.conta ? ` (conta ${d.conta})` : ""}`
+            + (d.origem === "ambiente" ? " — token da variável APFOOD_MP_TOKEN_PLATAFORMA." : "."))
+          : h("div", { class: "alerta alerta-aviso" }, "Mercado Pago não configurado: as faturas são geradas, mas sem link de pagamento.");
+        trocar(raiz,
+          h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+            kpi("Recebido no mês", dinheiro(d.recebido_mes.valor_centavos), `${d.recebido_mes.quantidade} fatura(s)`),
+            kpi("Últimos 30 dias", dinheiro(d.recebido_30d.valor_centavos), `${d.recebido_30d.quantidade} fatura(s)`),
+            kpi("A vencer", dinheiro(d.em_aberto.valor_centavos), `${d.em_aberto.quantidade} fatura(s)`),
+            kpi("Vencido", dinheiro(d.vencido.valor_centavos), `${d.vencido.quantidade} fatura(s)`)),
+          h("div", { class: "cartao" },
+            h("h2", null, "Conta que recebe as assinaturas"),
+            situacao, msg,
+            h("div", { class: "grade grade-2", style: { marginTop: "12px" } },
+              h("label", { class: "campo" }, h("span", null, "Access token de produção do Mercado Pago"), token,
+                h("small", { class: "muted" }, "Mercado Pago → Seu negócio → Configurações → Credenciais de produção. Fica guardado cifrado.")),
+              h("label", { class: "campo" }, h("span", null, "Como o cliente paga"), metodo)),
+            h("div", { class: "acoes", style: { marginTop: "12px" } },
+              botaoAcao("Salvar e conferir", () => salvar({ ...(token.value.trim() ? { token: token.value.trim() } : {}), metodo: metodo.value }), "botao botao-primario"),
+              d.origem === "painel" ? botaoAcao("Remover token", async () => {
+                if (await confirmar("Remover o token salvo? As cobranças novas ficam sem link.", { perigo: true, ok: "Remover" })) salvar({ token: "" });
+              }) : null),
+            h("p", { class: "suave", style: { marginTop: "14px" } }, "Notificações de pagamento (webhook) — cadastre no Mercado Pago, evento \"Pagamentos\":"),
+            h("code", { style: { display: "block", padding: "8px", background: "var(--fundo)", borderRadius: "8px", wordBreak: "break-all" } }, d.webhook_url),
+            h("p", { class: "suave", style: { marginTop: "8px" } }, "Quando o pagamento é aprovado, a fatura vira paga sozinha e a empresa bloqueada é liberada.")),
+          h("div", { class: "cartao" },
+            h("h2", null, "Faturas sem link de pagamento"),
+            h("p", null, d.sem_link ? `${d.sem_link} fatura(s) em aberto ainda sem link.` : "Todas as faturas em aberto já têm link."),
+            h("div", { class: "acoes" },
+              d.sem_link && d.configurado ? botaoAcao("Gerar links agora", async () => {
+                try {
+                  const r = await post("/api/plataforma/recebimentos/", {}, { semLoja: true });
+                  aviso(`${r.gerados} link(s) gerado(s).` + (r.falhas.length ? ` Falhas: ${r.falhas.join("; ")}` : ""), r.falhas.length ? "" : "ok");
+                  desenhar(r);
+                } catch (e) { erro(e); }
+              }, "botao botao-primario") : null,
+              h("a", { class: "botao", href: "#/faturas" }, "Ver faturas"))));
+      };
+      await desenhar();
+    },
+  };
 }

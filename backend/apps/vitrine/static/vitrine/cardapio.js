@@ -102,16 +102,31 @@
 
   // ---------------------------------------------------------------- cardápio
   function precoExibicao(p) {
-    if ((p.variacoes || []).length) {
-      return "a partir de " + C.reais(Math.min.apply(null, p.variacoes.map(function (v) { return v.preco_centavos; })));
-    }
-    return C.reais(p.preco_centavos);
+    const varia = (p.variacoes || []).length;
+    const base = varia ? Math.min.apply(null, p.variacoes.map(function (v) { return v.preco_centavos; })) : p.preco_centavos;
+    const desconto = C.descontoPromocao(p.promocao, base);
+    const prefixo = varia ? "a partir de " : "";
+    if (!desconto) return prefixo + C.reais(base);
+    return el("span", { class: "preco-promo" }, [
+      el("s", { text: C.reais(base) }), " ", el("b", { text: prefixo + C.reais(base - desconto) }),
+      el("span", { class: "selo-promo", text: "🔥 " + p.promocao.nome + (p.promocao.ate ? " até " + p.promocao.ate : "") }),
+    ]);
+  }
+
+  function faixaPromocoes() {
+    const lista = DADOS.promocoes || [];
+    if (!lista.length) return null;
+    return el("div", { class: "faixa-promo" }, [el("strong", { text: "🔥 Promoções de hoje" })].concat(lista.map(function (pr) {
+      return el("div", { text: pr.nome + " — " + pr.resumo + (pr.descricao ? " · " + pr.descricao : "") });
+    })));
   }
 
   function renderCardapio(filtro) {
     const termo = (filtro || "").trim().toLowerCase();
     const main = $("#lista");
     main.replaceChildren();
+    const faixa = !termo && faixaPromocoes();
+    if (faixa) main.appendChild(faixa);
     const chips = [];
     let algum = false;
     DADOS.categorias.forEach(function (c) {
@@ -129,7 +144,7 @@
       ].concat(produtos.map(function (p) {
         return el("button", { class: "produto", disabled: p.esgotado, onclick: function () { abrirProduto(p); } }, [
           el("div", { class: "txt" }, [el("strong", { text: p.nome }), p.descricao ? el("div", { class: "d", text: p.descricao }) : null,
-            p.esgotado ? el("span", { class: "etiqueta", text: "Esgotado" }) : el("span", { class: "preco", text: precoExibicao(p) })]),
+            p.esgotado ? el("span", { class: "etiqueta", text: "Esgotado" }) : el("span", { class: "preco" }, [precoExibicao(p)])]),
           p.imagem ? el("img", { src: p.imagem, alt: "", loading: "lazy" }) : null,
         ]);
       }))));
