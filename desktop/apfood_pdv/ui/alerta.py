@@ -13,14 +13,22 @@ from ..config import pasta_dados
 
 
 def gerar_som(caminho: Path) -> Path:
-    """Dois bipes (880 Hz e 1320 Hz) — gerado na primeira execução, sem arquivo de áudio no instalador."""
+    """Três toques fortes (988, 1319 e 1760 Hz, onda quase quadrada no volume máximo), duas vezes —
+    gerado na primeira execução, sem arquivo de áudio no instalador. Bem audível numa cozinha barulhenta."""
     if caminho.exists():
         return caminho
     taxa, quadros = 22050, bytearray()
-    for freq, dur in ((880, 0.18), (0, 0.07), (1320, 0.25)):
-        for i in range(int(taxa * dur)):
-            v = int(12000 * math.sin(2 * math.pi * freq * i / taxa)) if freq else 0
-            quadros += struct.pack("<h", v)
+    padrao = [(988, 0.16), (0, 0.04), (1319, 0.16), (0, 0.04), (1760, 0.24), (0, 0.25)] * 2
+    for freq, dur in padrao:
+        n = int(taxa * dur)
+        for i in range(n):
+            if not freq:
+                quadros += struct.pack("<h", 0)
+                continue
+            s = math.sin(2 * math.pi * freq * i / taxa)
+            onda = math.tanh(4 * s) / math.tanh(4)  # senoide "achatada": quase quadrada, mais alta e sem estalo
+            env = min(1.0, i / (taxa * 0.005), (n - i) / (taxa * 0.005))  # 5 ms de entrada/saída
+            quadros += struct.pack("<h", int(31000 * onda * env))
     with wave.open(str(caminho), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
@@ -39,7 +47,7 @@ class AlertaSonoro(QObject):
             from PySide6.QtMultimedia import QSoundEffect
 
             self.efeito = QSoundEffect(self)
-            self.efeito.setSource(QUrl.fromLocalFile(str(gerar_som(pasta_dados() / "novo_pedido.wav"))))
+            self.efeito.setSource(QUrl.fromLocalFile(str(gerar_som(pasta_dados() / "novo_pedido_forte.wav"))))
             self.efeito.setVolume(1.0)
         except Exception:  # noqa: BLE001 — sem backend de áudio: usa o bipe do sistema
             self.efeito = None

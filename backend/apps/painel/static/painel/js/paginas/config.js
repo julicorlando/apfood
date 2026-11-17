@@ -2,6 +2,7 @@
 import { del, ehAdmin, ehGerente, ehMaster, ErroApi, get, lista, patch, post, put, sessao } from "../api.js";
 import { mostrarAssinatura, recarregarSessao } from "../app.js";
 import { paginaCadastro } from "../crud.js";
+import { bipe, definirVolumeAlerta, volumeAlerta } from "../realtime.js";
 import { imprimirLinhas, infoPonte, ponteDisponivel } from "./comum.js";
 import { formulario } from "../form.js";
 import { aviso, botaoAcao, confirmar, data, dataHora, dinheiro, erro, etiqueta, h, limpar, modal, rotulo, simNao, trocar } from "../ui.js";
@@ -379,7 +380,8 @@ export function impressao() {
             h("span", null, "Usar sempre a janela de impressão do navegador")),
           h("div", { class: "acoes", style: { marginTop: "16px" } },
             botaoAcao("Imprimir teste", () => imprimirLinhas(linhasTeste), "botao botao-primario"),
-            botaoAcao("Verificar de novo", desenhar))));
+            botaoAcao("Verificar de novo", desenhar))),
+          cartaoSom());
       };
       await desenhar();
     },
@@ -471,4 +473,16 @@ function cartaoTotem(l) {
   return h("div", { class: "cartao" }, h("h2", null, "Totem de autoatendimento"),
     h("p", { class: "muted" }, "Abra este link em tela cheia num tablet no balcão: o cliente monta o pedido, escolhe comer aqui ou para levar, "
       + "paga no caixa (ou no Pix) e recebe a senha. O pedido cai direto na cozinha."), area);
+}
+
+
+// Volume do alerta de pedido novo (vale para este navegador/computador)
+function cartaoSom() {
+  const valor = h("strong", null, `${Math.round(volumeAlerta() * 100)}%`);
+  const barra = h("input", { type: "range", min: 0, max: 100, step: 5, value: Math.round(volumeAlerta() * 100), style: { flex: 1 },
+    oninput: (ev) => { definirVolumeAlerta(ev.target.value / 100); valor.textContent = `${ev.target.value}%`; } });
+  return h("div", { class: "cartao", style: { marginTop: "16px" } }, h("h2", null, "Som de pedido novo"),
+    h("p", { class: "suave" }, "Toque forte e repetido quando chega pedido (cardápio, delivery, mesa ou totem). "
+      + "Se ainda estiver baixo, aumente também o volume do computador ou do celular."),
+    h("div", { class: "acoes" }, h("span", null, "Volume"), barra, valor, botaoAcao("▶ Testar som", () => bipe(), "botao")));
 }
