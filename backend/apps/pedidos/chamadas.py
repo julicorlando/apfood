@@ -152,7 +152,7 @@ def iniciar(pedido: Pedido, usuario=None) -> ChamadaEntrega:
 
 @transaction.atomic
 def avancar(ch: ChamadaEntrega) -> ChamadaEntrega:
-    ch = (ChamadaEntrega.objects.select_for_update()
+    ch = (ChamadaEntrega.objects.select_for_update(of=("self",))
           .select_related("pedido", "loja", "entregador_atual", "aceita_por").get(pk=ch.pk))
     if ch.status != ChamadaEntrega.PROCURANDO:
         return ch

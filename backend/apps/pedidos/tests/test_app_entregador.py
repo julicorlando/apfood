@@ -53,7 +53,7 @@ def entrar(tel, pin):
 
 
 def test_login_pin_e_troca_de_pin(loja):
-    entregador(loja, "João", "(11) 98888-7777", -23.55, -46.63)
+    entregador(loja, "João", "11988887777", -23.55, -46.63)
     assert app().post("/api/entregador/entrar/", {"telefone": "11988887777", "pin": "0000"}, format="json").status_code == 400
     r = app().post("/api/entregador/entrar/", {"telefone": "+55 11 98888-7777", "pin": "2580"}, format="json")
     assert r.status_code == 200 and r.data["trocar_pin"] is True and r.data["nome"] == "João"
