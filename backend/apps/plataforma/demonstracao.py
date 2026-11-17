@@ -276,8 +276,10 @@ def _historico(loja, card, entregadores, admin, inicio, fim) -> int:
                     c = salao.pedir_conta(c, admin)
                     pessoas = rnd.choice([1, 1, 2])
                     resto = c.total_centavos
+                    parte = c.total_centavos // pessoas
                     for k in range(pessoas):
-                        valor = resto if k == pessoas - 1 else resto // pessoas
+                        valor = resto if k == pessoas - 1 else parte
+                        resto -= valor
                         ps.registrar_pagamento(usuario=admin, comanda=c, forma=rnd.choice(FORMAS), valor_centavos=valor,
                                                pago_online=True, pagador=f"Cliente {k + 1}" if pessoas > 1 else "")
                     salao.fechar(c, admin)
