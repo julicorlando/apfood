@@ -160,6 +160,8 @@ def _linhas_delivery(turno, largura):
            par("Taxas de entrega", formatar(d["taxas_centavos"]))]
     out += [par(f"Online - {rot(f)}", formatar(v)) for f, v in d["online"].items()]
     out += [par(f"Na entrega - {rot(f)}", formatar(v)) for f, v in d["na_entrega"].items()]
+    if d.get("com_entregadores_centavos"):
+        out.append(par("Com entregadores (a repassar)", formatar(d["com_entregadores_centavos"])))
     if d["a_receber_centavos"]:
         out.append(par("A RECEBER (sem pagamento)", formatar(d["a_receber_centavos"])))
     for e in d["por_entregador"]:

@@ -235,8 +235,9 @@ const PROXIMO = {
 };
 const FINAIS = ["CONCLUIDO", "CANCELADO", "RECUSADO"];
 
-export function pago(p) {
-  return (p.pagamentos || []).filter((x) => x.status === "CONFIRMADO").reduce((s, x) => s + x.valor_centavos, 0);
+export function pago(p) {  // inclui o dinheiro já cobrado pelo entregador (aguardando o repasse)
+  return (p.pagamentos || []).filter((x) => x.status === "CONFIRMADO" || (x.status === "PENDENTE" && x.cobrado_em))
+    .reduce((s, x) => s + x.valor_centavos, 0);
 }
 
 export async function mudarStatus(p, para) {
@@ -326,7 +327,9 @@ export async function abrirPedido(id, { aoMudar } = {}) {
           h("h3", { style: { marginTop: "16px" } }, "Pagamento"),
           p.forma_pagamento_prevista ? h("p", { class: "muted" }, `Previsto: ${rotulo("FormaPagamento", p.forma_pagamento_prevista)}${p.troco_para_centavos ? ` (troco para ${dinheiro(p.troco_para_centavos)})` : ""}`) : null,
           h("ul", { class: "lista-simples" }, (p.pagamentos || []).map((pg) => h("li", null,
-            h("span", null, rotulo("FormaPagamento", pg.forma), " ", etiquetaStatus("StatusPagamento", pg.status)),
+            h("span", null, rotulo("FormaPagamento", pg.forma), " ",
+              pg.status === "PENDENTE" && pg.cobrado_em ? h("span", { class: "etiqueta" }, "com o entregador") : etiquetaStatus("StatusPagamento", pg.status),
+              pg.cobrado_em && pg.forma === "DINHEIRO" && pg.valor_recebido_centavos ? h("span", { class: "muted" }, ` · recebeu ${dinheiro(pg.valor_recebido_centavos)}, troco ${dinheiro(pg.troco_centavos || 0)}`) : null),
             h("span", { class: "num" }, dinheiro(pg.valor_centavos))))),
           falta > 0 && !FINAIS.includes(p.status) ? h("div", { class: "alerta alerta-aviso", style: { marginTop: "8px" } }, `Falta receber ${dinheiro(falta)}`)
             : totalPago >= p.total_centavos ? h("div", { class: "alerta alerta-ok", style: { marginTop: "8px" } }, "Pago") : null,
@@ -463,7 +466,10 @@ export function cartaoDelivery(d, titulo = "Delivery no período") {
       h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Recebido na entrega"), h("div", { class: "kpi-valor" }, dinheiro(d.na_entrega_centavos))),
       h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "A receber"),
         h("div", { class: "kpi-valor", style: { color: d.a_receber_centavos ? "var(--erro)" : "" } }, dinheiro(d.a_receber_centavos)),
-        h("div", { class: "kpi-detalhe" }, "entregue sem pagamento registrado"))),
+        h("div", { class: "kpi-detalhe" }, "entregue sem pagamento registrado")),
+      d.com_entregadores_centavos ? h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Com os entregadores"),
+        h("div", { class: "kpi-valor" }, dinheiro(d.com_entregadores_centavos)),
+        h("div", { class: "kpi-detalhe" }, "dinheiro cobrado, aguardando o repasse")) : null),
     h("div", { class: "grade grade-2" },
       h("div", null, h("h3", null, "Por forma de pagamento"),
         h("ul", { class: "lista-simples" }, ...linhas(d.online).map((li) => { li.firstChild.textContent = `Online · ${li.firstChild.textContent}`; return li; }),

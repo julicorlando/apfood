@@ -260,6 +260,8 @@ async function iniciar() {
     }
     if (ev.tipo === "pedido.lembrete") { bipe(); aviso(`⏰ Pedido agendado #${ev.numero} para as ${ev.hora}: hora de começar o preparo.`, "ok"); }
     if (ev.tipo === "reserva.nova") { bipe(); aviso(`📅 Nova reserva: ${ev.nome}, ${ev.pessoas} pessoa(s) — ${ev.quando}.`, "ok"); }
+    if (ev.tipo === "repasse.enviado") { bipe(); aviso(`💵 ${ev.entregador} informou o repasse de ${dinheiro(ev.valor_centavos)}. Confira em Caixa.`, "ok"); }
+    if (ev.tipo === "pagamento.entregador") aviso(`💵 ${ev.entregador} recebeu ${dinheiro(ev.valor_centavos)} em dinheiro no pedido #${ev.numero}.`, "ok");
     if (ev.tipo === "pedido.avaliado") aviso(`⭐ Pedido #${ev.numero} avaliado com ${ev.nota} estrela${ev.nota > 1 ? "s" : ""}.`, "ok");
   });
   window.addEventListener("hashchange", navegar);

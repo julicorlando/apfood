@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.caixa.models import TurnoCaixa
-from apps.core.api import EhGerente, loja_da_requisicao
+from apps.core.api import EhGerente, UsuarioLiberado, loja_da_requisicao
 from apps.financeiro.models import Despesa
 from apps.pedidos.models import ItemPedido, Pagamento, Pedido
 
@@ -380,3 +380,25 @@ class GarconsView(Relatorio):
         return Response({"inicio": inicio, "fim": fim, "garcons": linhas,
                          "total_taxa_centavos": sum(r["taxa_centavos"] for r in linhas),
                          "comandas": comandas.count()})
+
+
+class RepassesEntregadorView(APIView):
+    """Dinheiro das entregas com os entregadores.
+    GET: repasses a conferir, dinheiro ainda com cada entregador e os últimos recebidos.
+    POST {"repasse_id" ou "entregador_id", "valor_centavos", "observacao"}: a loja recebe (entra no caixa aberto)."""
+
+    permission_classes = [UsuarioLiberado]
+
+    def get(self, request):
+        from apps.pedidos import cobranca_entrega
+
+        return Response(cobranca_entrega.pendentes_loja(loja_da_requisicao(request)))
+
+    def post(self, request):
+        from apps.pedidos import cobranca_entrega
+
+        d = request.data
+        r = cobranca_entrega.receber(loja_da_requisicao(request), request.user, valor=d.get("valor_centavos"),
+                                     repasse_id=d.get("repasse_id") or None, entregador_id=d.get("entregador_id") or None,
+                                     observacao=str(d.get("observacao") or ""))
+        return Response(cobranca_entrega._repasse_out(r), status=201)

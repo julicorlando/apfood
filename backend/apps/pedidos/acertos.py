@@ -25,8 +25,25 @@ def _pendentes(loja, entregador=None):
 
 
 def _em_maos(p: Pedido) -> int:
-    return sum(pg.valor_centavos for pg in p.pagamentos.all()
-               if pg.forma == "DINHEIRO" and not pg.pago_online and pg.status in ("PENDENTE", "CONFIRMADO"))
+    """Dinheiro do cliente que ainda está com o entregador. Cobrado pelo app: até a loja receber
+    o repasse. Lançado na loja (antes do app): todo dinheiro do pedido, como sempre foi."""
+    total = 0
+    for pg in p.pagamentos.all():
+        if pg.forma != "DINHEIRO" or pg.pago_online:
+            continue
+        if pg.cobrado_em is not None:
+            total += pg.valor_centavos if pg.status == "PENDENTE" else 0  # a loja ainda não recebeu
+        elif pg.status in ("PENDENTE", "CONFIRMADO"):
+            total += pg.valor_centavos
+    return total
+
+
+def _faltas_repasse(loja, e=None):
+    """Repasses que chegaram com falta e ainda não entraram em um acerto (o entregador deve a diferença)."""
+    from .models import RepasseEntregador
+
+    qs = RepasseEntregador.objects.filter(loja=loja, status=RepasseEntregador.DIVERGENTE, acerto__isnull=True)
+    return qs.filter(entregador=e) if e is not None else qs
 
 
 def resumo(loja) -> list[dict]:
@@ -43,6 +60,9 @@ def resumo(loja) -> list[dict]:
         d = timezone.localtime(p.concluido_em).date() if p.concluido_em else p.data_referencia
         r["desde"] = min(r["desde"] or d, d)
         r["ate"] = max(r["ate"] or d, d)
+    for rp in _faltas_repasse(loja).select_related("entregador"):
+        if rp.diferenca_centavos < 0 and rp.entregador_id in por:
+            por[rp.entregador_id]["em_maos_centavos"] += -rp.diferenca_centavos
     for r in por.values():
         r["saldo_centavos"] = r["ganhos_centavos"] - r["em_maos_centavos"]
     return sorted(por.values(), key=lambda r: -r["saldo_centavos"])
@@ -58,12 +78,19 @@ def registrar(loja, entregador_id, *, pago_centavos: int, observacao: str = "", 
     if not pedidos:
         raise ErroNegocio("este entregador não tem entregas para acertar")
     datas = [timezone.localtime(p.concluido_em).date() if p.concluido_em else p.data_referencia for p in pedidos]
+    faltas = list(_faltas_repasse(loja, e).select_for_update())
     a = AcertoEntregador.objects.create(
         loja=loja, entregador=e, inicio=min(datas), fim=max(datas), entregas=len(pedidos),
-        ganhos_centavos=sum(e.ganho(p) for p in pedidos), em_maos_centavos=sum(_em_maos(p) for p in pedidos),
+        ganhos_centavos=sum(e.ganho(p) for p in pedidos),
+        em_maos_centavos=sum(_em_maos(p) for p in pedidos) + sum(max(0, -x.diferenca_centavos) for x in faltas),
         pago_centavos=max(0, int(pago_centavos or 0)), observacao=(observacao or "")[:255], usuario=usuario,
     )
     Pedido.objects.filter(pk__in=[p.pk for p in pedidos]).update(acerto_entregador=a)
+    from . import cobranca_entrega
+    from .models import RepasseEntregador
+
+    RepasseEntregador.objects.filter(pk__in=[x.pk for x in faltas]).update(acerto=a)
+    cobranca_entrega.abater_no_acerto(loja, e, a, [p.pk for p in pedidos])
     if gerar_despesa and a.pago_centavos > 0:
         from apps.financeiro.models import Despesa
 
@@ -129,10 +156,15 @@ def delivery_no_periodo(loja, inicio, fim) -> dict:
     online: dict[str, int] = {}
     na_entrega: dict[str, int] = {}
     a_receber = 0
+    com_entregador = 0
     por_entregador: dict[str, dict] = {}
     for p in ps:
         pago = 0
         for pg in p.pagamentos.all():
+            if pg.status == "PENDENTE" and pg.cobrado_em is not None:
+                com_entregador += pg.valor_centavos  # cobrado na porta, aguardando o repasse à loja
+                pago += pg.valor_centavos
+                continue
             if pg.status != "CONFIRMADO":
                 continue
             alvo = online if pg.pago_online else na_entrega
@@ -153,6 +185,6 @@ def delivery_no_periodo(loja, inicio, fim) -> dict:
         "taxas_centavos": sum(p.taxa_entrega_centavos for p in ps),
         "online": online, "online_centavos": sum(online.values()),
         "na_entrega": na_entrega, "na_entrega_centavos": sum(na_entrega.values()),
-        "a_receber_centavos": a_receber,
+        "a_receber_centavos": a_receber, "com_entregadores_centavos": com_entregador,
         "por_entregador": sorted(por_entregador.values(), key=lambda x: -x["total_centavos"]),
     }

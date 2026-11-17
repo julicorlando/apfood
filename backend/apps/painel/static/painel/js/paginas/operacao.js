@@ -487,6 +487,8 @@ export function caixa() {
         } else {
           area.append(painelTurno(t, carregar, true));
         }
+        const rep = await get("/api/repasses-entregador/").catch(() => null);
+        if (rep) area.append(cartaoRepasses(rep, !!t, carregar));
         if (ehGerente()) {
           const abertos = (await lista("/api/turnos/", { status: "ABERTO" })).filter((x) => x.loja === sessao.loja?.id && x.id !== t?.id);
           if (abertos.length) {
@@ -504,6 +506,66 @@ export function caixa() {
       await carregar();
     },
   };
+}
+
+// Dinheiro que os entregadores cobraram na porta: o entregador informa o repasse, a loja confere digitando o que recebeu
+function cartaoRepasses(r, caixaAberto, recarregar) {
+  if (!r.aguardando.length && !r.com_entregadores.length && !r.recebidos.length) return h("span");
+  const receber = (alvo) => {
+    const esperado = alvo.esperado_centavos ?? alvo.em_maos_centavos;
+    const valor = h("input", { type: "text", inputmode: "decimal", placeholder: "0,00" });
+    const obs = h("input", { type: "text", placeholder: "Opcional" });
+    const m = modal({
+      titulo: `Receber de ${alvo.entregador}`, tamanho: "modal-pequeno",
+      corpo: h("div", { class: "grade" },
+        h("ul", { class: "lista-simples" },
+          h("li", null, "Cobrado nas entregas", h("span", { class: "num" }, dinheiro(esperado))),
+          alvo.informado_entregador_centavos != null
+            ? h("li", null, "O entregador informou", h("span", { class: "num" }, dinheiro(alvo.informado_entregador_centavos)))
+            : h("li", { class: "muted" }, "O entregador ainda não informou o repasse no app.")),
+        h("label", { class: "campo" }, h("span", null, "Quanto você recebeu (conte o dinheiro) R$"), valor),
+        h("label", { class: "campo" }, h("span", null, "Observação"), obs),
+        h("p", { class: "muted" }, "O valor entra no seu caixa aberto. Se for diferente, a diferença fica registrada e entra no acerto do entregador.")),
+      rodape: [botaoAcao("Confirmar recebimento", async () => {
+        const v = centavos(valor.value);
+        if (!valor.value.trim()) { erro("Digite o valor recebido."); return; }
+        const res = await post("/api/repasses-entregador/", { repasse_id: alvo.id && alvo.esperado_centavos != null ? alvo.id : null,
+          entregador_id: alvo.entregador_id, valor_centavos: v, observacao: obs.value.trim() });
+        m.fechar();
+        aviso(res.diferenca_centavos ? `Recebido com diferença de ${dinheiro(res.diferenca_centavos)}.` : "Repasse recebido. Confere!", res.diferenca_centavos ? "erro" : "ok");
+        recarregar();
+      }, "botao botao-primario")],
+    });
+    setTimeout(() => valor.focus(), 50);
+  };
+  const botao = (x) => (caixaAberto ? botaoAcao("Receber", () => receber(x), "botao botao-primario botao-pequeno")
+    : h("span", { class: "muted" }, "abra o caixa"));
+  return h("div", { class: "cartao", style: { marginTop: "16px" } }, h("h2", null, "💵 Dinheiro dos entregadores"),
+    h("p", { class: "muted" }, "Dinheiro que os entregadores cobraram na entrega. Eles informam o repasse no app; aqui você confere digitando quanto recebeu."),
+    r.aguardando.length ? h("div", null, h("h3", null, "Repasses para conferir"), tabela([
+      { rotulo: "Entregador", valor: (x) => h("strong", null, x.entregador) },
+      { rotulo: "Informado em", valor: (x) => dataHora(x.informado_em) },
+      { rotulo: "Entregas", classe: "num", campo: "entregas" },
+      { rotulo: "Cobrado", classe: "num", valor: (x) => dinheiro(x.esperado_centavos) },
+      { rotulo: "Entregador diz", classe: "num", valor: (x) => h("strong", { style: { color: x.informado_entregador_centavos !== x.esperado_centavos ? "var(--erro)" : "" } }, dinheiro(x.informado_entregador_centavos)) },
+      { rotulo: "", classe: "acoes-linha", valor: botao },
+    ], r.aguardando)) : null,
+    r.com_entregadores.length ? h("div", null, h("h3", null, "Ainda com o entregador"), tabela([
+      { rotulo: "Entregador", valor: (x) => h("strong", null, x.entregador) },
+      { rotulo: "Entregas", classe: "num", campo: "entregas" },
+      { rotulo: "Em mãos", classe: "num", valor: (x) => dinheiro(x.em_maos_centavos) },
+      { rotulo: "", classe: "acoes-linha", valor: botao },
+    ], r.com_entregadores)) : null,
+    r.recebidos.length ? h("details", null, h("summary", null, "Últimos recebidos"), tabela([
+      { rotulo: "Quando", valor: (x) => dataHora(x.recebido_em) },
+      { rotulo: "Entregador", campo: "entregador" },
+      { rotulo: "Cobrado", classe: "num", valor: (x) => dinheiro(x.esperado_centavos) },
+      { rotulo: "Entregador disse", classe: "num", valor: (x) => (x.informado_entregador_centavos == null ? "—" : dinheiro(x.informado_entregador_centavos)) },
+      { rotulo: "Loja recebeu", classe: "num", valor: (x) => dinheiro(x.recebido_loja_centavos) },
+      { rotulo: "Situação", valor: (x) => h("span", { style: { color: x.status === "DIVERGENTE" ? "var(--erro)" : "" } },
+        x.status_rotulo + (x.diferenca_centavos ? ` (${x.diferenca_centavos > 0 ? "+" : ""}${dinheiro(x.diferenca_centavos)})` : "")) },
+      { rotulo: "Por", campo: "recebido_por" },
+    ], r.recebidos)) : null);
 }
 
 function painelTurno(t, recarregar, meu) {

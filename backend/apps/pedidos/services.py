@@ -557,9 +557,18 @@ def _estornar_pagamentos(pedido, usuario, motivo):
 # Pagamentos
 # =============================================================================
 def total_pago(*, pedido=None, comanda=None) -> int:
-    qs = Pagamento.objects.filter(status=StatusPagamento.CONFIRMADO)
+    """Confirmado + o dinheiro que o entregador já cobrou do cliente (aguardando o repasse à loja)."""
+    from django.db.models import Q
+
+    qs = Pagamento.objects.filter(Q(status=StatusPagamento.CONFIRMADO)
+                                  | Q(status=StatusPagamento.PENDENTE, cobrado_em__isnull=False))
     qs = qs.filter(pedido=pedido) if pedido is not None else qs.filter(comanda=comanda)
     return qs.aggregate(s=Sum("valor_centavos"))["s"] or 0
+
+
+def limpar_pendentes(pedido) -> None:
+    """Remove a forma "prevista" e cobranças online abertas — nunca o que o entregador já cobrou."""
+    pedido.pagamentos.filter(status=StatusPagamento.PENDENTE, cobrado_em__isnull=True).delete()
 
 
 def _taxa_e_previsao(loja, forma, bandeira, valor):
@@ -623,7 +632,7 @@ def registrar_pagamento(
 
     # Se havia um pagamento PENDENTE (forma escolhida no online), ele é substituído
     if pedido is not None:
-        pedido.pagamentos.filter(status=StatusPagamento.PENDENTE).delete()
+        limpar_pendentes(pedido)
     pg = Pagamento.objects.create(
         **({"id": id} if id else {}), pedido=pedido, comanda=comanda, forma=forma,
         status=StatusPagamento.CONFIRMADO, valor_centavos=valor_centavos,
@@ -713,7 +722,7 @@ def cobrar_pix(*, pedido=None, comanda=None, valor_centavos: int | None = None, 
     if valor <= 0 or valor > restante:
         raise ErroNegocio("valor inválido para a cobrança Pix")
     if pedido is not None:
-        pedido.pagamentos.filter(status=StatusPagamento.PENDENTE).delete()
+        limpar_pendentes(pedido)
     pg = Pagamento.objects.create(pedido=pedido, comanda=comanda, forma=FormaPagamento.PIX, valor_centavos=valor,
                                   status=StatusPagamento.PENDENTE, pago_online=True)
     url = settings.APFOOD["URL_PUBLICA"].rstrip("/") + f"/api/webhooks/mercadopago/{alvo.loja_id}/"
@@ -746,7 +755,7 @@ def cobrar_cartao(*, pedido) -> Pagamento:
     restante = pedido.total_centavos - total_pago(pedido=pedido)
     if restante <= 0:
         raise ErroNegocio("pedido já está pago")
-    pedido.pagamentos.filter(status=StatusPagamento.PENDENTE).delete()
+    limpar_pendentes(pedido)
     pg = Pagamento.objects.create(pedido=pedido, forma=FormaPagamento.CARTAO_CREDITO, valor_centavos=restante,
                                   status=StatusPagamento.PENDENTE, pago_online=True)
     base = settings.APFOOD["URL_PUBLICA"].rstrip("/")
@@ -776,10 +785,16 @@ def confirmar_pagamento_online(pagamento: Pagamento, *, valor_centavos: int | No
     loja = (pg.pedido or pg.comanda).loja
     pg.taxa_centavos, pg.previsao_recebimento = _taxa_e_previsao(loja, pg.forma, pg.bandeira, pg.valor_centavos)
     pg.status, pg.pago_online, pg.confirmado_em = StatusPagamento.CONFIRMADO, True, timezone.now()
+    if pg.entregador_id and pg.cobrado_em is None:
+        pg.cobrado_em = pg.confirmado_em
     pg.save()
     if pg.pedido_id:
         p = pg.pedido
         eventos.publicar(eventos.grupo_pdv(p.loja_id), "pagamento.confirmado",
                          {"pedido": str(p.id), "valor_centavos": pg.valor_centavos})
         eventos.publicar(eventos.grupo_pedido(p.token_rastreio), "pagamento.confirmado", {"pago": True})
+        # Pix gerado pelo entregador na porta do cliente: o gateway confirmou → entrega concluída
+        if (pg.entregador_id and p.status == S.SAIU_PARA_ENTREGA and p.entregador_id == pg.entregador_id
+                and total_pago(pedido=p) >= p.total_centavos):
+            transicionar(p, S.CONCLUIDO, None, motivo="Pix confirmado na entrega")
     return pg
