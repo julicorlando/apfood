@@ -1,5 +1,8 @@
 """Loja de demonstração."""
 
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.cardapio.models import Produto
@@ -70,7 +73,8 @@ def test_relatorio_por_operador(loja, gerente):
     demonstracao.preencher(loja, dias=2)
     api = APIClient()
     api.force_authenticate(gerente)
-    r = api.get(f"/api/relatorios/operadores/?loja={loja.id}&inicio=2000-01-01&fim=2100-01-01").data
+    hoje = timezone.localdate()
+    r = api.get(f"/api/relatorios/operadores/?loja={loja.id}&inicio={hoje - timedelta(days=30)}&fim={hoje}").data
     nomes = {o["operador"] for o in r["operadores"]}
     assert {"Maria Souza", "João Ferreira"} <= nomes
     maria = next(o for o in r["operadores"] if o["operador"] == "Maria Souza")

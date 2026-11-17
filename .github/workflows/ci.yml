@@ -175,7 +175,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: Android SDK do runner
+        run: echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV && ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools"
       - name: ImageMagick
         run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
       - name: Gerar APKs
