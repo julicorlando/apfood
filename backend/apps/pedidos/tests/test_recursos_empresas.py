@@ -158,7 +158,8 @@ def test_indicacao_da_cashback_a_quem_indicou(loja, cardapio, operador):
                                           nome_cliente="Caio", telefone_cliente="11922220000", cupom_codigo=codigo,
                                           itens=[ps.ItemIn(str(cardapio["lata"].id), 2)]), operador)
     assert p.desconto_centavos == 500
-    ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
+    ps.transicionar(p, StatusPedido.PRONTO, operador)
+    ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.CONCLUIDO, operador)
     ana.refresh_from_db()
     assert ana.saldo_cashback_centavos >= 1000
     assert Cliente.objects.get(telefone="11922220000").indicado_por == ana
