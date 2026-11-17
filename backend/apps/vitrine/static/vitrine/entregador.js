@@ -1,5 +1,6 @@
 /* Peças opcionais da tela (null/undefined/false) não viram o texto "null" ao montar a página. */
 (function () {
+  if (typeof Element === "undefined") return;  // fora do navegador (testes)
   [Element.prototype, DocumentFragment.prototype].forEach(function (proto) {
     ["append", "prepend", "replaceChildren"].forEach(function (m) {
       const original = proto[m];
