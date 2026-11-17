@@ -134,3 +134,13 @@ button { cursor: pointer; }
   .oferta .dados div { padding: 6px 8px; }
   .oferta .botoes .btn { min-height: 48px; }
 }
+
+/* cobrança na porta e repasse */
+.bloco-cobranca { display: grid; gap: 10px; margin: 10px 0; }
+.formas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.formas .btn { padding: 12px 8px; font-size: 15px; }
+.formas .btn.escolhida { border: 2px solid var(--ok); background: var(--ok-suave); color: var(--ok); }
+.cobranca, .repasse { display: grid; gap: 10px; }
+.cobranca p { margin: 0; }
+.cobranca .qr { width: min(260px, 80vw); height: auto; justify-self: center; border-radius: 12px; background: #fff; padding: 8px; border: 1px solid var(--linha); }
+.cobranca .centro { text-align: center; font-weight: 700; }

@@ -291,6 +291,12 @@ def entregar(pedido_id, e: Entregador, codigo: str) -> Pedido:
         return p
     if p.status != S.SAIU_PARA_ENTREGA:
         raise ErroNegocio("confirme a retirada na loja antes")
+    from apfood_core.dinheiro import formatar
+
+    from .cobranca_entrega import falta
+
+    if (resta := falta(p)) > 0:
+        raise ErroNegocio(f"registre o pagamento de {formatar(resta)} antes de concluir a entrega")
     _conferir(p, codigo, "codigo_entrega", "recebimento")
     with transaction.atomic():
         return services.transicionar(p, S.CONCLUIDO, None, motivo=f"entregue por {e.nome}")

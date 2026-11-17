@@ -111,6 +111,9 @@ def test_chamada_vai_do_mais_perto_ao_proximo_e_aceita(loja, cardapio, operador,
     assert app(t_longe).post(f"/api/entregador/entregas/{p.id}/retirar/", {"codigo": p.codigo_retirada}).status_code == 200
     assert Pedido.objects.get(pk=p.pk).status == StatusPedido.SAIU_PARA_ENTREGA
     assert app().get(f"/api/publico/pedidos/{p.token_rastreio}/").data["codigo_entrega"] == p.codigo_entrega
+    r = app(t_longe).post(f"/api/entregador/entregas/{p.id}/entregar/", {"codigo": p.codigo_entrega})
+    assert r.status_code == 400 and "pagamento" in str(r.data)  # cobra antes de concluir
+    assert app(t_longe).post(f"/api/entregador/entregas/{p.id}/cobrar/", {"forma": "CARTAO_DEBITO"}).status_code == 200
     assert app(t_longe).post(f"/api/entregador/entregas/{p.id}/entregar/", {"codigo": p.codigo_entrega}).status_code == 200
     assert Pedido.objects.get(pk=p.pk).status == StatusPedido.CONCLUIDO
 

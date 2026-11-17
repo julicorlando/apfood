@@ -28,7 +28,7 @@ from rest_framework.views import APIView
 
 from apps.clientes.models import Entregador
 from apps.core.excecoes import ErroNegocio
-from apps.pedidos import acertos, chamadas
+from apps.pedidos import acertos, chamadas, cobranca_entrega
 from apps.pedidos.models import Pedido
 
 SAL = "apfood.entregador"
@@ -178,9 +178,25 @@ def _oferta(ch, es) -> dict:
     }
 
 
+def _cobranca(p: Pedido, e: Entregador) -> dict | None:
+    """O que o entregador registrou na porta (para o app mostrar e não cobrar duas vezes)."""
+    feitos = [pg for pg in p.pagamentos.all() if pg.entregador_id == e.id and pg.cobrado_em is not None
+              and pg.status in ("PENDENTE", "CONFIRMADO")]
+    pix = next((pg for pg in p.pagamentos.all() if pg.entregador_id == e.id and pg.forma == "PIX"
+                and pg.status == "PENDENTE" and pg.pago_online and pg.dados_externos.get("qr_code")), None)
+    return {
+        "feitos": [{"forma": pg.forma, "forma_rotulo": pg.get_forma_display(), "valor_centavos": pg.valor_centavos,
+                    "recebido_centavos": pg.valor_recebido_centavos, "troco_centavos": pg.troco_centavos,
+                    "com_voce": pg.status == "PENDENTE"} for pg in feitos],
+        "pix": {"qr_code": pix.dados_externos.get("qr_code", ""), "qr_code_base64": pix.dados_externos.get("qr_code_base64", ""),
+                "valor_centavos": pix.valor_centavos} if pix else None,
+    }
+
+
 def _entrega(p: Pedido, e: Entregador) -> dict:
-    pago = sum(pg.valor_centavos for pg in p.pagamentos.all() if pg.status == "CONFIRMADO")
-    pendente = next((pg for pg in p.pagamentos.all() if pg.status == "PENDENTE"), None)
+    pago = sum(pg.valor_centavos for pg in p.pagamentos.all()
+               if pg.status == "CONFIRMADO" or (pg.status == "PENDENTE" and pg.cobrado_em is not None))
+    pendente = next((pg for pg in p.pagamentos.all() if pg.status == "PENDENTE" and pg.cobrado_em is None), None)
     end, l = _endereco(p), p.loja
     saiu = p.status == S.SAIU_PARA_ENTREGA
     return {
@@ -193,6 +209,9 @@ def _entrega(p: Pedido, e: Entregador) -> dict:
         "mapa": _mapa(p.entrega_latitude, p.entrega_longitude, end),
         "cobrar_centavos": max(0, p.total_centavos - pago),
         "forma": pendente.get_forma_display() if pendente else "",
+        "forma_prevista": pendente.forma if pendente else "",
+        "pix_automatico": cobranca_entrega.tem_gateway(l),
+        "cobranca": _cobranca(p, e),
         "troco_para_centavos": p.troco_para_centavos,
         "ganho_centavos": e.ganho(p) if e.remuneracao != "NENHUM" else None,
     }
@@ -240,6 +259,7 @@ class EstadoView(Base):
             "oferta": _oferta(ch, es) if ch else None,
             "entregas": [_entrega(p, por_id[p.entregador_id]) for p in entregas],
             "ganhos": {**resumo_ganhos(es), **acertos.para_app(es)},
+            "repasses": cobranca_entrega.para_app(es),
         })
 
 
@@ -274,18 +294,50 @@ class OfertaView(Base):
 
 
 class EntregaView(Base):
-    def post(self, request, pedido, acao):
-        if acao not in ("retirar", "entregar"):
-            raise ValidationError({"detail": "ação inválida"})
+    def _dele(self, request, pedido):
         es = entregadores_da(request)
-        codigo = str(request.data.get("codigo", ""))
         p = Pedido.objects.filter(pk=pedido, entregador__in=es).first()
         if p is None:
             raise ErroNegocio("pedido não encontrado")
-        e = next(x for x in es if x.id == p.entregador_id)
+        return p, next(x for x in es if x.id == p.entregador_id)
+
+    def get(self, request, pedido, acao):
+        if acao != "pix":
+            raise ValidationError({"detail": "ação inválida"})
+        p, e = self._dele(request, pedido)
+        return Response(cobranca_entrega.situacao_pix(p.id, e))
+
+    def post(self, request, pedido, acao):
+        if acao not in ("retirar", "entregar", "cobrar", "pix"):
+            raise ValidationError({"detail": "ação inválida"})
+        p, e = self._dele(request, pedido)
+        codigo = str(request.data.get("codigo", ""))
+        if acao == "cobrar":
+            d = request.data
+            pg = cobranca_entrega.cobrar(p.id, e, str(d.get("forma", "")), recebido=d.get("valor_recebido_centavos"),
+                                         troco=d.get("troco_centavos"), bandeira=str(d.get("bandeira") or ""))
+            return Response({"ok": True, "status": pg.status})
+        if acao == "pix":
+            pg = cobranca_entrega.gerar_pix(p.id, e)
+            return Response({"qr_code": pg.dados_externos.get("qr_code", ""),
+                             "qr_code_base64": pg.dados_externos.get("qr_code_base64", ""),
+                             "valor_centavos": pg.valor_centavos}, status=201)
         if acao == "retirar":
             chamadas.retirar(p.id, e, codigo)
         else:
             chamadas.entregar(p.id, e, codigo)
         return Response({"ok": True})
 
+
+
+class RepasseView(Base):
+    """O entregador declara o dinheiro das entregas que entregou na loja."""
+
+    def post(self, request):
+        es = entregadores_da(request)
+        eid = str(request.data.get("entregador_id") or "")
+        e = next((x for x in es if str(x.id) == eid), es[0] if len(es) == 1 else None)
+        if e is None:
+            raise ErroNegocio("escolha a loja")
+        r = cobranca_entrega.informar(e, request.data.get("valor_centavos"))
+        return Response({"ok": True, "repasse": str(r.id)}, status=201)

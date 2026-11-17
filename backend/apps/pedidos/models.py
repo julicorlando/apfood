@@ -275,6 +275,12 @@ class Pagamento(ModeloBase):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
     confirmado_em = models.DateTimeField(null=True, blank=True)
+    # Cobrado pelo entregador no app (dinheiro fica PENDENTE até a loja receber o repasse)
+    entregador = models.ForeignKey("clientes.Entregador", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="cobrancas")
+    cobrado_em = models.DateTimeField(null=True, blank=True)
+    repasse = models.ForeignKey("pedidos.RepasseEntregador", on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="pagamentos")
 
     class Meta:
         db_table = "pagamentos"
@@ -369,3 +375,35 @@ class AcertoEntregador(DaLoja, ModeloBase):
     class Meta:
         db_table = "acertos_entregador"
         ordering = ["-criado_em"]
+
+
+class RepasseEntregador(DaLoja, ModeloBase):
+    """Dinheiro cobrado pelo entregador nas entregas e repassado à loja.
+    O entregador informa quanto entregou; a loja informa quanto recebeu (os dois digitam)."""
+
+    ENVIADO, CONFERIDO, DIVERGENTE = "ENVIADO", "CONFERIDO", "DIVERGENTE"
+    STATUS = [(ENVIADO, "Aguardando a loja"), (CONFERIDO, "Recebido"), (DIVERGENTE, "Recebido com diferença")]
+
+    entregador = models.ForeignKey("clientes.Entregador", on_delete=models.PROTECT, related_name="repasses")
+    status = models.CharField(max_length=12, choices=STATUS, default=ENVIADO)
+    esperado_centavos = models.PositiveIntegerField(default=0, help_text="soma do dinheiro cobrado nas entregas")
+    informado_entregador_centavos = models.PositiveIntegerField(null=True, blank=True)
+    informado_em = models.DateTimeField(null=True, blank=True)
+    recebido_loja_centavos = models.PositiveIntegerField(null=True, blank=True)
+    recebido_em = models.DateTimeField(null=True, blank=True)
+    recebido_por = models.ForeignKey("contas.Usuario", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    turno = models.ForeignKey("caixa.TurnoCaixa", on_delete=models.SET_NULL, null=True, blank=True, related_name="repasses")
+    observacao = models.CharField(max_length=255, blank=True)
+    acerto = models.ForeignKey("pedidos.AcertoEntregador", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="repasses", help_text="falta descontada neste acerto")
+
+    class Meta:
+        db_table = "repasses_entregador"
+        ordering = ["-criado_em"]
+        indexes = [models.Index(fields=["loja", "status"], name="repasses_loja_status_idx")]
+
+    @property
+    def diferenca_centavos(self) -> int:
+        if self.recebido_loja_centavos is None:
+            return 0
+        return self.recebido_loja_centavos - self.esperado_centavos

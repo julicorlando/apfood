@@ -43,6 +43,7 @@ urlpatterns = [
     path("relatorios/garcons/", relatorios.GarconsView.as_view()),
     path("acertos-entregador/", relatorios.AcertoEntregadoresView.as_view()),
     path("acertos-entregador/<uuid:pk>/recibo/", relatorios.ReciboAcertoView.as_view()),
+    path("repasses-entregador/", relatorios.RepassesEntregadorView.as_view()),
     # app ApFood Entregador
     path("entregador/entrar/", entregador.EntrarView.as_view()),
     path("entregador/pin/", entregador.PinView.as_view()),
@@ -55,6 +56,7 @@ urlpatterns = [
     path("entregador/historico/", entregador.HistoricoView.as_view()),
     path("entregador/ofertas/<uuid:chamada>/<str:acao>/", entregador.OfertaView.as_view()),
     path("entregador/entregas/<uuid:pedido>/<str:acao>/", entregador.EntregaView.as_view()),
+    path("entregador/repasses/", entregador.RepasseView.as_view()),
     path("relatorios/fechamentos/", relatorios.FechamentosView.as_view()),
     path("relatorios/fluxo-caixa/", relatorios.FluxoCaixaView.as_view()),
     path("plataforma/resumo/", relatorios.PlataformaResumoView.as_view()),
