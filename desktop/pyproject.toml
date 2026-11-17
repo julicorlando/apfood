@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
   "PySide6>=6.7",                               # interface, som, WebSocket
   "pywin32>=306; sys_platform == 'win32'",      # impressora instalada no Windows (spooler RAW)
+  "segno>=1.6",                                 # QR Code no cupom impresso pelo driver do Windows
 ]
 
 [project.optional-dependencies]

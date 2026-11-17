@@ -53,3 +53,15 @@ pip install -e core -e desktop
 python -m apfood_pdv                      # abre o PDV
 QT_QPA_PLATFORM=offscreen pytest desktop/tests
 ```
+
+## Versão 0.4.0
+
+- **Impressoras instaladas no PC**: em Configurações, escolha a impressora na lista (ou digite `IP:porta` / `arquivo:`) e o modo:
+  - **Térmica (ESC/POS)** — envia RAW (rápido, corta o papel, abre a gaveta), como antes;
+  - **Comum (driver do Windows)** — qualquer impressora instalada (laser, jato de tinta, térmica só com driver): o cupom é desenhado pelo driver, com negrito, letra grande e QR Code. Fica salvo como `windows:<nome>`.
+  Botões **Testar impressora do caixa** e **Testar da cozinha**. As impressoras de setor cadastradas no painel aceitam o mesmo formato.
+- **Pedidos**: 📅 agendado, entregador, **código de retirada** e **Chamar entregador (app)** com o andamento ao vivo (30 s por entregador, até 2 min; “Ninguém aceitou” → chamar de novo ou escolher o entregador).
+- **Delivery**: campo **CEP** que preenche rua, bairro e cidade; bairro editável com a lista dos bairros cadastrados (▾ Bairros).
+- **Caixa**: gerente/administrador vê o **delivery do período** (pago online, recebido na entrega, a receber, por entregador).
+- **Painel web (F12)**: atalhos para Reservas, Acerto de entregadores, Avaliações, Visão da rede, Taxa por garçom e Dados da loja.
+- Avisos em tempo real: entrega aceita / ninguém aceitou, lembrete de pedido agendado, reserva nova, avaliação.

@@ -66,13 +66,18 @@ class PaginaPedidos(QWidget):
         self.btn_recusar = botao("Recusar", self.recusar, "perigo")
         self.btn_avancar = botao("Avançar status  [Espaço]", self.avancar, atalho="Space")
         self.btn_despachar = botao("Saiu para entrega", self.despachar)
+        self.btn_chamar = botao("🛵 Chamar entregador (app)", self.chamar_entregador, "primario")
+        self.lbl_chamada = QLabel("")
+        self.lbl_chamada.setWordWrap(True)
+        self.lbl_chamada.setStyleSheet("padding:6px;border-radius:6px")
+        ll.addWidget(self.lbl_chamada)
         self.btn_concluir = botao("Concluir", self.concluir)
         self.btn_receber = botao("Receber pagamento", self.receber)
         self.btn_cancelar = botao("Cancelar pedido", self.cancelar, "perigo")
         g1, g2, g3 = QHBoxLayout(), QHBoxLayout(), QHBoxLayout()
         for b in (self.btn_aceitar, self.btn_recusar):
             g1.addWidget(b)
-        for b in (self.btn_avancar, self.btn_despachar, self.btn_concluir):
+        for b in (self.btn_avancar, self.btn_chamar, self.btn_despachar, self.btn_concluir):
             g2.addWidget(b)
         for b in (self.btn_receber, botao("Reimprimir cupom", self.reimprimir),
                   botao("Via cozinha", self.reimprimir_cozinha), self.btn_cancelar):
@@ -87,6 +92,10 @@ class PaginaPedidos(QWidget):
         self.timer = QTimer(self)
         self.timer.setInterval(15000)
         self.timer.timeout.connect(self.atualizar)
+        self.timer_chamada = QTimer(self)  # andamento da chamada do entregador (30 s por entregador, até 2 min)
+        self.timer_chamada.setInterval(2500)
+        self.timer_chamada.timeout.connect(self._acompanhar_chamada)
+        self._chamada_pedido = None
         self._botoes(None)
 
     def ao_mostrar(self):
@@ -123,6 +132,8 @@ class PaginaPedidos(QWidget):
             situacao = "PAGO" if pago >= p["total_centavos"] else ("na entrega" if any(
                 pg["status"] == "PENDENTE" for pg in p.get("pagamentos", [])) else "A RECEBER")
             quem = p.get("nome_cliente") or (f"Mesa {p['mesa']}" if p.get("mesa") else "") or p.get("senha") or ""
+            if p.get("agendado_para"):
+                quem = f"📅 {p['agendado_para'][8:10]}/{p['agendado_para'][5:7]} {p['agendado_para'][11:16]} · {quem}"
             linhas.append([f"#{p.get('numero') or p.get('codigo_local')}", p["criado_em"][11:16],
                            CANAIS.get(p["canal"], p["canal"]) + (" ⚠" if p["status"] == "PENDENTE" else ""),
                            quem, STATUS.get(p["status"], p["status"]), reais(p["total_centavos"]), situacao])
@@ -168,7 +179,20 @@ class PaginaPedidos(QWidget):
         if pend:
             texto += "\n\nPAGAR NA ENTREGA: " + ", ".join(f"{FORMAS.get(pg['forma'], pg['forma'])} {reais(pg['valor_centavos'])}"
                                                        for pg in pend)
+        extra = []
+        if p.get("agendado_para"):
+            extra.append(f"📅 AGENDADO PARA {p['agendado_para'][8:10]}/{p['agendado_para'][5:7]} às {p['agendado_para'][11:16]}")
+        if p.get("tipo_atendimento") == "ENTREGA":
+            if p.get("entregador_nome"):
+                extra.append(f"🛵 Entregador: {p['entregador_nome']}")
+            if p.get("entregador") and p["status"] in ("RECEBIDO", "EM_PREPARO", "PRONTO"):
+                extra.append(f"🔑 CÓDIGO DE RETIRADA: {p.get('codigo_retirada', '')}  (o entregador digita no app ao pegar)")
+        if extra:
+            texto = "\n".join(extra) + "\n" + "=" * 44 + "\n" + texto
         self.detalhe.setPlainText(texto)
+        if self._chamada_pedido != p["id"]:
+            self.lbl_chamada.clear()
+            self.lbl_chamada.setStyleSheet("padding:6px;border-radius:6px")
 
     def _botoes(self, p):
         st = p["status"] if p else None
@@ -176,6 +200,8 @@ class PaginaPedidos(QWidget):
         self.btn_recusar.setEnabled(st == "PENDENTE")
         self.btn_avancar.setEnabled(st in ("RECEBIDO", "EM_PREPARO"))
         self.btn_despachar.setEnabled(st in ("RECEBIDO", "EM_PREPARO", "PRONTO") and p.get("tipo_atendimento") == "ENTREGA")
+        self.btn_chamar.setEnabled(st in ("RECEBIDO", "EM_PREPARO", "PRONTO") and p.get("tipo_atendimento") == "ENTREGA"
+                                   and not p.get("entregador"))
         self.btn_concluir.setEnabled(st in ("PRONTO", "SAIU_PARA_ENTREGA"))
         self.btn_receber.setEnabled(bool(p) and st not in ("CANCELADO", "RECUSADO") and self._falta(p) > 0)
         self.btn_cancelar.setEnabled(st not in (None, "CONCLUIDO", "CANCELADO", "RECUSADO"))
@@ -230,6 +256,66 @@ class PaginaPedidos(QWidget):
                 return
             atual = "PRONTO"
         self._status(p, "SAIU_PARA_ENTREGA", entregador=entregador)
+
+    # ----------------------------------------------- chamar entregador (app ApFood Entregador)
+    def chamar_entregador(self):
+        p = self.selecionado()
+        if not p:
+            return
+        r = seguro(self, self.ctx.api.post, f"/api/pedidos/{p['id']}/chamada/", {})
+        if r is None:
+            return
+        self._chamada_pedido = p["id"]
+        self._mostrar_chamada(p, r)
+        self.timer_chamada.start()
+
+    def _acompanhar_chamada(self):
+        pid = self._chamada_pedido
+        if not pid:
+            self.timer_chamada.stop()
+            return
+        try:
+            r = self.ctx.api.get(f"/api/pedidos/{pid}/chamada/")
+        except Exception:  # noqa: BLE001 - tenta de novo no próximo ciclo
+            return
+        p = next((x for x in self.pedidos if x["id"] == pid), {"id": pid, "numero": ""})
+        self._mostrar_chamada(p, r)
+
+    def _mostrar_chamada(self, p, r):
+        c = (r or {}).get("chamada") or {}
+        st = c.get("status")
+        if st == "PROCURANDO":
+            quem = (f"oferecendo para {c['entregador_atual']} ({c['segundos_oferta']} s)" if c.get("entregador_atual")
+                    else "nenhum entregador disponível no app agora — aguardando")
+            self.lbl_chamada.setStyleSheet("padding:6px;border-radius:6px;background:#fdf3e1;color:#8a5a00")
+            self.lbl_chamada.setText(f"Procurando entregador para o pedido #{p.get('numero')}: {quem}. "
+                                     f"Tentativas: {c.get('tentativas', 0)} · resta {c.get('segundos_total', 0)} s")
+            return
+        self.timer_chamada.stop()
+        self._chamada_pedido = None
+        if st == "ACEITA":
+            self.lbl_chamada.setStyleSheet("padding:6px;border-radius:6px;background:#e5f5ec;color:#1f8a4c")
+            self.lbl_chamada.setText(f"✓ {c.get('aceita_por')} aceitou a entrega do pedido #{p.get('numero')}.")
+            self.ctx.status(f"{c.get('aceita_por')} aceitou o pedido #{p.get('numero')}")
+            self.atualizar()
+        elif st == "SEM_RESPOSTA":
+            self.lbl_chamada.setStyleSheet("padding:6px;border-radius:6px;background:#fbe9e7;color:#c0392b")
+            self.lbl_chamada.setText(f"Ninguém aceitou o pedido #{p.get('numero')} em 2 minutos.")
+            d = DialogoEscolha(f"Ninguém aceitou o pedido #{p.get('numero')}",
+                               [("Chamar novamente", "chamar"), ("Outra forma: escolher o entregador", "manual")], self)
+            if d.exec():
+                sel = next((x for x in self.pedidos if x["id"] == p.get("id")), None)
+                if sel is not None:
+                    self._selecionar(sel["id"])
+                (self.chamar_entregador if d.valor() == "chamar" else self.despachar)()
+        else:
+            self.lbl_chamada.clear()
+
+    def _selecionar(self, pid):
+        for r_, x in enumerate(self.pedidos):
+            if x["id"] == pid:
+                self.tabela.selectRow(r_)
+                return
 
     def concluir(self):
         p = self.selecionado()

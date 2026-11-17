@@ -2,7 +2,8 @@
 
 Destino (texto configurado):
     "192.168.0.50:9100"      → impressora de rede (porta RAW 9100)
-    "EPSON TM-T20"           → impressora instalada no Windows (spooler RAW, requer pywin32)
+    "EPSON TM-T20"           → térmica instalada no Windows (spooler RAW, ESC/POS; requer pywin32)
+    "windows:HP LaserJet"    → qualquer impressora instalada, pelo driver (impressao_qt.py)
     "arquivo:C:/cupons"      → grava .txt (sem impressora / testes)
 """
 
@@ -111,4 +112,22 @@ def enviar(destino: str, dados: bytes, *, texto: str = "") -> str:
 
 
 def imprimir(destino: str, linhas, *, largura: int = 48, abrir_gaveta: bool = False) -> str:
+    destino = (destino or "").strip()
+    if destino.startswith("windows:"):
+        from .impressao_qt import imprimir_driver
+
+        return imprimir_driver(destino.removeprefix("windows:").strip(), linhas, largura)
     return enviar(destino, para_escpos(linhas, abrir_gaveta=abrir_gaveta), texto=para_texto(linhas, largura))
+
+
+def descrever(destino: str) -> str:
+    """Texto amigável do destino configurado."""
+    destino = (destino or "").strip()
+    if not destino:
+        return "nenhuma"
+    if destino.startswith("windows:"):
+        return f"{destino[8:]} (driver do Windows)"
+    if destino.startswith("arquivo:"):
+        return f"arquivo em {destino[8:]}"
+    host, _, porta = destino.rpartition(":")
+    return f"rede {destino}" if host and porta.isdigit() else f"{destino} (térmica ESC/POS)"

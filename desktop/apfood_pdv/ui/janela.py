@@ -201,7 +201,8 @@ class DialogoLogin(QDialog):
 # =============================================================================
 class JanelaPrincipal(QMainWindow):
     MENU = [("Pedidos", "F1"), ("Novo pedido", "F3"), ("Delivery", "F4"), ("Mesas", "F6"), ("Caixa", "F8"),
-            ("Cozinha", "F9"), ("Estoque", ""), ("Relatórios", ""), ("Configurações", ""), ("Trocar operador", "Ctrl+T")]
+            ("Cozinha", "F9"), ("Estoque", ""), ("Relatórios", ""), ("Configurações", ""), ("Painel web", "F12"),
+            ("Trocar operador", "Ctrl+T")]
 
     def __init__(self, ctx):
         super().__init__()
@@ -315,6 +316,12 @@ class JanelaPrincipal(QMainWindow):
 
     # ---------------------------------------------------------------- navegação
     def ir_para(self, linha: int):
+        if self.MENU[linha][0] == "Painel web":  # reservas, acerto de entregadores, rede, avaliações, totem...
+            self._abrir_painel_web()
+            self.menu.blockSignals(True)
+            self.menu.setCurrentRow(self.pilha.currentIndex())
+            self.menu.blockSignals(False)
+            return
         if linha == len(self.MENU) - 1:  # trocar operador
             self.trocar_operador()
             self.menu.blockSignals(True)
@@ -330,6 +337,20 @@ class JanelaPrincipal(QMainWindow):
                 self.p_venda.grupo_modo.button(0).setChecked(True)
         if hasattr(pagina, "ao_mostrar"):
             pagina.ao_mostrar()
+
+    def _abrir_painel_web(self):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from .dialogos import DialogoEscolha
+
+        atalhos = [("Painel completo", ""), ("Reservas", "/reservas"), ("Acerto de entregadores", "/acerto-entregadores"),
+                   ("Avaliações dos clientes", "/avaliacoes"), ("Visão da rede (várias lojas)", "/rede"),
+                   ("Taxa de serviço por garçom", "/garcons"), ("Dados da loja (agendamento, totem, reconquista)", "/loja")]
+        d = DialogoEscolha("Abrir no painel web", atalhos, self)
+        if d.exec():
+            base = self.ctx.cfg.api_url.rstrip("/")
+            QDesktopServices.openUrl(QUrl(f"{base}/painel/#{d.valor()}"))
 
     def _rodada(self, comanda: dict):
         self.menu.blockSignals(True)
@@ -354,7 +375,7 @@ class JanelaPrincipal(QMainWindow):
             self.raise_()
             self.activateWindow()
             self.ctx.status(f"NOVO PEDIDO ONLINE #{ev['pedido'].get('numero')} — {ev['pedido'].get('nome_cliente', '')}")
-        if tipo.startswith("pedido."):
+        if tipo.startswith("pedido.") and tipo not in ("pedido.lembrete", "pedido.avaliado"):
             self.p_pedidos.atualizar()
         elif tipo == "catalogo.alterado" and self.ctx.sync:
             self.ctx.sync.acordar()
@@ -362,8 +383,22 @@ class JanelaPrincipal(QMainWindow):
             p = ev.get("produto", {})
             self.ctx.status(f"Estoque baixo: {p.get('nome')} ({p.get('estoque_atual')})")
         elif tipo == "pagamento.confirmado":
-            self.ctx.status("Pagamento Pix confirmado")
+            self.ctx.status("Pagamento online confirmado")
             self.p_pedidos.atualizar()
+        elif tipo == "entrega.chamada" and ev.get("status") == "ACEITA":
+            self.ctx.status(f"🛵 {ev.get('entregador')} aceitou o pedido #{ev.get('numero')}")
+            self.p_pedidos.atualizar()
+        elif tipo == "entrega.chamada" and ev.get("status") == "SEM_RESPOSTA":
+            from PySide6.QtWidgets import QApplication
+
+            QApplication.beep()
+            self.ctx.status(f"Ninguém aceitou a entrega do pedido #{ev.get('numero')} — chame de novo ou escolha outra forma")
+        elif tipo == "pedido.lembrete":
+            self.ctx.status(f"⏰ Pedido agendado #{ev.get('numero')} para as {ev.get('hora')}: hora de começar o preparo")
+        elif tipo == "reserva.nova":
+            self.ctx.status(f"📅 Nova reserva: {ev.get('nome')} · {ev.get('pessoas')} pessoa(s) · {ev.get('quando')}")
+        elif tipo == "pedido.avaliado":
+            self.ctx.status(f"⭐ Pedido #{ev.get('numero')} avaliado com {ev.get('nota')} estrela(s)")
 
     def _pendentes(self, n: int):
         item = self.menu.item(0)
