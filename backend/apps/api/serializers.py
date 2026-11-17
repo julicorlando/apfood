@@ -148,7 +148,51 @@ class ClienteSerializer(BaseLoja):
 
 
 ZonaEntregaSerializer = cadastro(ZonaEntrega)
-EntregadorSerializer = cadastro(Entregador)
+_EntregadorBase = cadastro(Entregador)
+
+
+class EntregadorSerializer(_EntregadorBase):
+    """Cadastro do entregador. `pin` (4 a 6 números) é o acesso ao app ApFood Entregador:
+    a loja define o inicial (ou redefine) e o entregador pode trocar no app."""
+
+    pin = serializers.RegexField(r"^\d{4,6}$", write_only=True, required=False, allow_blank=True,
+                                 error_messages={"invalid": "PIN com 4 a 6 números"})
+    tem_pin = serializers.SerializerMethodField()
+    online_agora = serializers.SerializerMethodField()
+
+    class Meta(_EntregadorBase.Meta):
+        exclude = ["loja", "pin_hash"]
+
+    def get_tem_pin(self, e):
+        return bool(e.pin_hash)
+
+    def get_online_agora(self, e):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        return bool(e.online and e.online_em and e.online_em >= timezone.now() - timedelta(seconds=90))
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        tel = "".join(c for c in (attrs.get("telefone") or getattr(self.instance, "telefone", "") or "") if c.isdigit())
+        if attrs.get("pin") and len(tel) < 10:
+            raise serializers.ValidationError({"telefone": ["informe o celular com DDD: é o login do app"]})
+        return attrs
+
+    def _pin(self, e, pin):
+        if pin:
+            e.definir_pin(pin, trocado=False)
+            e.save(update_fields=["pin_hash", "pin_trocado", "atualizado_em"])
+        return e
+
+    def create(self, validated_data):
+        pin = validated_data.pop("pin", "")
+        return self._pin(super().create(validated_data), pin)
+
+    def update(self, instance, validated_data):
+        pin = validated_data.pop("pin", "")
+        return self._pin(super().update(instance, validated_data), pin)
 MesaSerializer = cadastro(Mesa)
 FornecedorSerializer = cadastro(Fornecedor)
 CupomSerializer = cadastro(Cupom, read_only_fields=BaseLoja.Meta.read_only_fields + ["usos"])
@@ -244,6 +288,7 @@ class HistoricoOut(serializers.ModelSerializer):
 
 
 class PedidoOut(serializers.ModelSerializer):
+    entregador_nome = serializers.CharField(source="entregador.nome", read_only=True, default=None)
     itens = ItemOut(many=True, read_only=True)
     pagamentos = PagamentoOut(many=True, read_only=True)
     historico = HistoricoOut(many=True, read_only=True)

@@ -276,3 +276,25 @@ class OperadoresView(Relatorio):
         return Response({"inicio": inicio, "fim": fim, "operadores": linhas,
                          "total_recebido_centavos": sum(o["recebido_centavos"] for o in linhas),
                          "total_pedidos_centavos": sum(o["pedidos_centavos"] for o in linhas)})
+
+
+class AvaliacoesView(Relatorio):
+    """Avaliações dos clientes no período: média, distribuição e comentários."""
+
+    def get(self, request):
+        from apps.pedidos.models import Avaliacao
+
+        loja, inicio, fim = self.base(request)
+        qs = Avaliacao.objects.filter(loja=loja, criado_em__date__range=(inicio, fim)).select_related("pedido")
+        lista = list(qs[:500])
+        n = len(lista)
+        dist = {str(i): sum(1 for a in lista if a.nota == i) for i in range(1, 6)}
+        concluidos = Pedido.objects.filter(loja=loja, status="CONCLUIDO", data_referencia__range=(inicio, fim)).count()
+        return Response({
+            "inicio": inicio, "fim": fim, "quantidade": n,
+            "media": round(sum(a.nota for a in lista) / n, 2) if n else None,
+            "distribuicao": dist, "taxa_resposta": round(100 * n / concluidos, 1) if concluidos else None,
+            "avaliacoes": [{"pedido": a.pedido.numero, "pedido_id": str(a.pedido_id), "nota": a.nota,
+                            "comentario": a.comentario, "cliente": a.pedido.nome_cliente, "em": a.criado_em}
+                           for a in lista],
+        })

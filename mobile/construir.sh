@@ -21,9 +21,13 @@ npx cap add android
 npx cap sync android
 
 MANIFESTO=android/app/src/main/AndroidManifest.xml
-if [ "$APP" = "cliente" ]; then
-  # "Perto de mim" usa a localização do aparelho
+if [ "$APP" = "cliente" ] || [ "$APP" = "entregador" ]; then
+  # cliente: "Perto de mim"; entregador: chamadas pelo mais perto e rastreio da entrega
   sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n\n    <application#' "$MANIFESTO"
+fi
+if [ "$APP" = "entregador" ]; then
+  # alerta de chamada: notificação, vibração e tela acesa enquanto disponível
+  sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n\n    <application#' "$MANIFESTO"
 fi
 
 # versão

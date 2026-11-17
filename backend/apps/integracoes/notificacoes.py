@@ -9,8 +9,8 @@ MENSAGENS = {
     "RECEBIDO": "✅ *{loja}*: recebemos seu pedido *#{numero}*! Acompanhe: {link}",
     "EM_PREPARO": "👨‍🍳 Seu pedido *#{numero}* está sendo preparado.",
     "PRONTO": "🍔 Seu pedido *#{numero}* está pronto{retirada}.",
-    "SAIU_PARA_ENTREGA": "🛵 Seu pedido *#{numero}* saiu para entrega! Acompanhe o entregador: {link}",
-    "CONCLUIDO": "🙏 Obrigado por pedir na *{loja}*! Bom apetite.",
+    "SAIU_PARA_ENTREGA": "🛵 Seu pedido *#{numero}* saiu para entrega! Acompanhe o entregador: {link}{codigo}",
+    "CONCLUIDO": "🙏 Obrigado por pedir na *{loja}*! Bom apetite.\n⭐ Se puder, conte como foi (é rapidinho): {link}",
     "CANCELADO": "❌ Seu pedido *#{numero}* foi cancelado. {motivo}",
     "RECUSADO": "❌ Não conseguimos aceitar seu pedido *#{numero}*. {motivo}",
 }
@@ -25,6 +25,8 @@ def mensagem(pedido) -> str | None:
     return modelo.format(
         loja=pedido.loja.nome, numero=pedido.numero, link=link, motivo=pedido.motivo_cancelamento,
         retirada=" para retirada" if pedido.tipo_atendimento == "RETIRADA" else "",
+        codigo=f"\n🔑 Código de recebimento: *{pedido.codigo_entrega}* — informe ao entregador ao receber."
+        if pedido.entregador_id else "",
     ).strip()
 
 

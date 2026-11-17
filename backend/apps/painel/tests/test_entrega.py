@@ -31,7 +31,10 @@ def test_gerente_gera_link_e_entregador_conclui(client, loja, cardapio, operador
     html = client.get(f"/entrega/{e.token_acesso}/").content.decode()
     assert f"Pedido #{p.numero}" in html and "Cobrar R$ 19,00" in html and "troco para R$ 50,00" in html
 
-    r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/")
+    r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/", {"codigo": "x"})
+    assert r.status_code == 302 and "erro=codigo" in r["Location"]  # sem o código do cliente não conclui
+    assert Pedido.objects.get(pk=p.pk).status == StatusPedido.SAIU_PARA_ENTREGA
+    r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/", {"codigo": p.codigo_entrega})
     assert r.status_code == 302
     assert Pedido.objects.get(pk=p.pk).status == StatusPedido.CONCLUIDO
     assert f"Pedido #{p.numero}" not in client.get(f"/entrega/{e.token_acesso}/").content.decode()

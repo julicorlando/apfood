@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -360,7 +360,7 @@ class PedidoViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModel
     """Fila do PDV: `?status=PENDENTE&status=EM_PREPARO`, `?canal=ONLINE`, `?data=2026-11-12`,
     `?abertos=1` (não finalizados)."""
 
-    queryset = Pedido.objects.prefetch_related("itens__adicionais", "itens__sabores", "pagamentos", "historico")
+    queryset = Pedido.objects.select_related("entregador").prefetch_related("itens__adicionais", "itens__sabores", "pagamentos", "historico")
     serializer_class = s.PedidoOut
     permission_classes = [UsuarioLiberado]
     filterset_fields = ["canal", "tipo_atendimento", "comanda", "data_referencia", "entregador"]
@@ -406,6 +406,40 @@ class PedidoViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModel
             id=d.get("id"),
         )
         return Response(s.PagamentoOut(pg).data, status=status.HTTP_201_CREATED)
+
+    # --- App ApFood Entregador ------------------------------------------------
+    @action(detail=True, methods=["get", "post"], url_path="chamada")
+    def chamada(self, request, pk=None):
+        """GET: andamento da última chamada. POST: chamar entregador pelo app."""
+        from apps.pedidos import chamadas
+
+        p = self.get_object()
+        ch = chamadas.iniciar(p, request.user) if request.method == "POST" else chamadas.ultima(p)
+        return Response({"chamada": chamadas.resumo(ch), "disponiveis": chamadas.disponiveis(p.loja).count()})
+
+    @action(detail=True, methods=["post"], url_path="chamada/cancelar")
+    def cancelar_chamada(self, request, pk=None):
+        from apps.pedidos import chamadas
+
+        chamadas.cancelar(self.get_object())
+        return Response({"ok": True})
+
+    @action(detail=True, methods=["post"], url_path="entregador")
+    def definir_entregador(self, request, pk=None):
+        """Outra forma de entrega: escolhe o entregador na mão (ou tira, com null)."""
+        from apps.pedidos import chamadas
+        from apps.realtime import eventos
+
+        p = self.get_object()
+        eid = request.data.get("entregador_id")
+        e = Entregador.objects.ativos().filter(loja=p.loja, pk=eid).first() if eid else None
+        if eid and e is None:
+            raise ValidationError({"entregador_id": ["entregador não encontrado"]})
+        chamadas.cancelar(p)
+        p.entregador = e
+        p.save(update_fields=["entregador", "atualizado_em"])
+        eventos.pedido_status(p)
+        return Response(s.PedidoOut(p).data)
 
 
 class CozinhaViewSet(EscopoLojaMixin, mixins.ListModelMixin, viewsets.GenericViewSet):

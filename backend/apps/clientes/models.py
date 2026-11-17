@@ -113,6 +113,33 @@ class Entregador(DaLoja, ModeloSincronizavel):
     latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, editable=False)
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, editable=False)
     localizacao_em = models.DateTimeField(null=True, blank=True, editable=False)
+    # App ApFood Entregador: entra com telefone + PIN (4 a 6 dígitos)
+    pin_hash = models.CharField(max_length=128, blank=True, editable=False)
+    pin_trocado = models.BooleanField(default=False, editable=False, help_text="o entregador já trocou o PIN inicial")
+    online = models.BooleanField(default=False, editable=False, help_text="disponível no app")
+    online_em = models.DateTimeField(null=True, blank=True, editable=False)
+    # Só para a projeção de ganhos no app: o pagamento é combinado entre loja e entregador
+    REMUNERACAO = [("TAXA", "Recebe a taxa de entrega"), ("FIXO", "Valor fixo por entrega"), ("NENHUM", "Não mostrar")]
+    remuneracao = models.CharField(max_length=10, choices=REMUNERACAO, default="TAXA")
+    valor_por_entrega_centavos = models.PositiveIntegerField(default=0)
+
+    def definir_pin(self, pin: str, *, trocado: bool) -> None:
+        from django.contrib.auth.hashers import make_password
+
+        self.pin_hash = make_password(pin)
+        self.pin_trocado = trocado
+
+    def confere_pin(self, pin: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+
+        return bool(self.pin_hash) and check_password(pin, self.pin_hash)
+
+    def ganho(self, pedido) -> int:
+        if self.remuneracao == "FIXO":
+            return self.valor_por_entrega_centavos
+        if self.remuneracao == "TAXA":
+            return pedido.taxa_entrega_centavos
+        return 0
 
     def gerar_link(self) -> str:
         import secrets

@@ -147,6 +147,32 @@ export function operadores() {
   });
 }
 
+export function avaliacoes() {
+  return paginaRelatorio("Avaliações dos clientes", async (area, q) => {
+    const r = await get(`/api/relatorios/avaliacoes/?${q}`);
+    const estrelas = (n) => h("span", { class: "estrelas", "aria-label": `${n} de 5` }, "★".repeat(n) + "☆".repeat(5 - n));
+    const maior = Math.max(1, ...Object.values(r.distribuicao));
+    trocar(area,
+      h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+        kpi("Nota média", r.media ? r.media.toFixed(1).replace(".", ",") + " ★" : "—", `${r.quantidade} avaliação(ões)`),
+        kpi("Clientes que avaliaram", r.taxa_resposta != null ? `${String(r.taxa_resposta).replace(".", ",")}%` : "—", "dos pedidos concluídos")),
+      h("div", { class: "cartao", style: { marginBottom: "16px" } },
+        h("h2", null, "Distribuição"),
+        h("div", { class: "barras-notas" }, [5, 4, 3, 2, 1].map((n) => h("div", { class: "barra-nota" },
+          h("span", null, `${n} ★`),
+          h("div", { class: "trilho" }, h("div", { class: "cheio", style: { width: `${(100 * r.distribuicao[n]) / maior}%` } })),
+          h("span", { class: "num" }, String(r.distribuicao[n])))))),
+      h("p", { class: "muted" }, "A avaliação é opcional: o cliente vê o pedido de avaliação na tela de acompanhamento e na mensagem de WhatsApp de pedido entregue."),
+      tabela([
+        { rotulo: "Quando", valor: (a) => dataHora(a.em) },
+        { rotulo: "Pedido", valor: (a) => `#${a.pedido}` },
+        { rotulo: "Cliente", campo: "cliente" },
+        { rotulo: "Nota", valor: (a) => estrelas(a.nota) },
+        { rotulo: "Comentário", valor: (a) => a.comentario || h("span", { class: "muted" }, "—") },
+      ], r.avaliacoes, { vazio: "Nenhuma avaliação no período." }));
+  });
+}
+
 export function fechamentos() {
   return paginaRelatorio("Fechamentos de caixa", async (area, q) => {
     const r = await get(`/api/relatorios/fechamentos/?${q}`);

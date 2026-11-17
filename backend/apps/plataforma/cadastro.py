@@ -26,7 +26,7 @@ from .models import Plano
 
 DIAS_TRIAL_PADRAO = 14
 MAX_CADASTROS_POR_IP_HORA = 5
-RESERVADOS = {"app", "apps", "empresas", "admin", "api", "painel", "static", "media", "health", "pedido", "ws", "planos", "cadastro", "entrega",
+RESERVADOS = {"app", "apps", "empresas", "entregador", "entregadores", "admin", "api", "painel", "static", "media", "health", "pedido", "ws", "planos", "cadastro", "entrega",
               "termos", "privacidade"}
 
 

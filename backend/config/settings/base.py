@@ -162,7 +162,7 @@ STORAGES = {
 APFOOD = {
     "URL_PUBLICA": env("APFOOD_URL_PUBLICA", default="http://localhost:8000"),
     # APKs (app do cliente e app da empresa) publicados pela CI como "apps-v<versão>"
-    "APPS_VERSAO": env("APFOOD_APPS_VERSAO", default="1.0.1"),
+    "APPS_VERSAO": env("APFOOD_APPS_VERSAO", default="1.0.2"),
     "DEMO_SLUG": env("APFOOD_DEMO_SLUG", default="testehh"),
     # Atualização automática do PDV: versão publicada, link do .exe e SHA-256 (gerados pela CI)
     "PDV_VERSAO": env("APFOOD_PDV_VERSAO", default=""),

@@ -1,0 +1,282 @@
+"""API do app ApFood Entregador: /api/entregador/...
+
+Login com telefone + PIN (4 a 6 dígitos, definido pela loja no cadastro; o
+entregador troca no app). O mesmo telefone pode estar cadastrado em mais de uma
+loja: a sessão vale para todas em que o PIN confere.
+
+Sessão = token assinado (Authorization: Entregador <token>), válido por 60 dias
+e invalidado quando o PIN muda."""
+
+from __future__ import annotations
+
+import calendar
+import hashlib
+import re
+from datetime import timedelta
+from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
+
+from apfood_core.entrega import distancia_km
+from apfood_core.enums import StatusPedido as S
+from django.core import signing
+from django.core.cache import cache
+from django.utils import timezone
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.clientes.models import Entregador
+from apps.core.excecoes import ErroNegocio
+from apps.pedidos import chamadas
+from apps.pedidos.models import Pedido
+
+SAL = "apfood.entregador"
+VALIDADE_S = 60 * 24 * 3600
+PIN = re.compile(r"^\d{4,6}$")
+EM_ANDAMENTO = (S.RECEBIDO, S.EM_PREPARO, S.PRONTO, S.SAIU_PARA_ENTREGA)
+
+
+def digitos(telefone: str) -> str:
+    d = re.sub(r"\D", "", telefone or "")
+    return d[2:] if len(d) > 11 and d.startswith("55") else d
+
+
+def _assinatura(es) -> str:
+    return hashlib.sha256("|".join(sorted(e.pin_hash for e in es)).encode()).hexdigest()[:16]
+
+
+def token_para(es) -> str:
+    return signing.dumps({"ids": sorted(str(e.id) for e in es), "h": _assinatura(es)}, salt=SAL)
+
+
+def _validos():
+    return (Entregador.objects.ativos().filter(ativo=True, loja__ativa=True, loja__empresa__ativa=True)
+            .exclude(pin_hash="").select_related("loja", "loja__empresa"))
+
+
+def entregadores_da(request) -> list[Entregador]:
+    cab = request.headers.get("Authorization", "")
+    if not cab.startswith("Entregador "):
+        raise AuthenticationFailed("entre com telefone e PIN")
+    try:
+        dados = signing.loads(cab.split(" ", 1)[1], salt=SAL, max_age=VALIDADE_S)
+    except signing.BadSignature as exc:
+        raise AuthenticationFailed("sessão expirada: entre de novo") from exc
+    es = [e for e in _validos().filter(pk__in=dados.get("ids") or []) if e.loja.empresa.liberada]
+    if not es or _assinatura(es) != dados.get("h"):
+        raise AuthenticationFailed("sessão expirada: entre de novo")
+    return es
+
+
+class Base(APIView):
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def get_authenticate_header(self, request):
+        return 'Entregador realm="ApFood"'  # sessão inválida responde 401 (o app volta ao login)
+
+
+# ----------------------------------------------------------------------------- login e conta
+class EntrarView(Base):
+    def post(self, request):
+        tel = digitos(request.data.get("telefone", ""))
+        pin = str(request.data.get("pin", "")).strip()
+        if len(tel) < 10 or not PIN.match(pin):
+            raise ValidationError({"detail": "Informe o telefone com DDD e o PIN (4 a 6 números)."})
+        chave = f"entregador-login-{tel}"
+        if cache.get(chave, 0) >= 8:
+            raise ValidationError({"detail": "Muitas tentativas. Espere 15 minutos ou peça à loja para redefinir o PIN."})
+        es = [e for e in _validos() if digitos(e.telefone) == tel and e.loja.empresa.liberada and e.confere_pin(pin)]
+        if not es:
+            cache.set(chave, cache.get(chave, 0) + 1, 15 * 60)
+            raise ValidationError({"detail": "Telefone ou PIN incorretos."})
+        cache.delete(chave)
+        return Response({"token": token_para(es), "nome": es[0].nome, "trocar_pin": not all(e.pin_trocado for e in es),
+                         "lojas": [e.loja.nome for e in es]})
+
+
+class PinView(Base):
+    def post(self, request):
+        es = entregadores_da(request)
+        atual, novo = str(request.data.get("atual", "")), str(request.data.get("novo", ""))
+        if not es[0].confere_pin(atual):
+            raise ValidationError({"detail": "PIN atual incorreto."})
+        if not PIN.match(novo):
+            raise ValidationError({"detail": "O novo PIN deve ter de 4 a 6 números."})
+        if len(set(novo)) == 1 or novo in "0123456789" or novo in "9876543210":
+            raise ValidationError({"detail": "Escolha um PIN menos óbvio (sem números repetidos ou em sequência)."})
+        for e in es:
+            e.definir_pin(novo, trocado=True)
+            e.save(update_fields=["pin_hash", "pin_trocado", "atualizado_em"])
+        return Response({"token": token_para(es)})
+
+
+class OnlineView(Base):
+    """Disponível/indisponível + posição (o app manda a cada ~15 s enquanto disponível)."""
+
+    def post(self, request):
+        es = entregadores_da(request)
+        campos = {"online": bool(request.data.get("online")), "online_em": timezone.now()}
+        try:
+            lat, lng = Decimal(str(request.data["latitude"])), Decimal(str(request.data["longitude"]))
+            if -90 <= lat <= 90 and -180 <= lng <= 180:
+                campos.update(latitude=round(lat, 7), longitude=round(lng, 7), localizacao_em=timezone.now())
+        except (KeyError, InvalidOperation, TypeError, ValueError):
+            pass
+        Entregador.objects.filter(pk__in=[e.pk for e in es]).update(**campos)
+        if not campos["online"]:  # ficou indisponível: passa a oferta adiante
+            ch = chamadas.oferta_para(es)
+            if ch is not None:
+                chamadas.recusar(ch.id, next(e for e in es if e.id == ch.entregador_atual_id))
+        return Response({"online": campos["online"]})
+
+
+# ----------------------------------------------------------------------------- estado (polling do app)
+def _endereco(p: Pedido) -> str:
+    return ", ".join(x for x in [f"{p.entrega_logradouro} {p.entrega_numero}".strip(), p.entrega_complemento,
+                                  p.entrega_bairro, p.entrega_cidade] if x)
+
+
+def _endereco_loja(l) -> str:
+    return ", ".join(x for x in [f"{getattr(l, 'logradouro', '')} {getattr(l, 'numero', '')}".strip(),
+                                  getattr(l, "bairro", ""), getattr(l, "cidade", "")] if x)
+
+
+def _mapa(lat, lng, endereco: str) -> str:
+    if lat is not None and lng is not None:
+        return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+    return f"https://www.google.com/maps/dir/?api=1&destination={quote(endereco)}"
+
+
+def _km(a_lat, a_lng, b_lat, b_lng):
+    if None in (a_lat, a_lng, b_lat, b_lng):
+        return None
+    return round(distancia_km(float(a_lat), float(a_lng), float(b_lat), float(b_lng)), 1)
+
+
+def _oferta(ch, es) -> dict:
+    p, l = ch.pedido, ch.loja
+    e = next(x for x in es if x.id == ch.entregador_atual_id)
+    return {
+        "chamada": str(ch.id), "numero": p.numero, "loja": l.nome, "loja_endereco": _endereco_loja(l),
+        "bairro": p.entrega_bairro, "cidade": p.entrega_cidade,
+        "ate_loja_km": _km(e.latitude, e.longitude, l.latitude, l.longitude),
+        "entrega_km": _km(l.latitude, l.longitude, p.entrega_latitude, p.entrega_longitude),
+        "ganho_centavos": e.ganho(p) if e.remuneracao != "NENHUM" else None,
+        "segundos": max(0, int((ch.oferta_ate - timezone.now()).total_seconds())) if ch.oferta_ate else 0,
+        "total_segundos": chamadas.OFERTA_S,
+    }
+
+
+def _entrega(p: Pedido, e: Entregador) -> dict:
+    pago = sum(pg.valor_centavos for pg in p.pagamentos.all() if pg.status == "CONFIRMADO")
+    pendente = next((pg for pg in p.pagamentos.all() if pg.status == "PENDENTE"), None)
+    end, l = _endereco(p), p.loja
+    saiu = p.status == S.SAIU_PARA_ENTREGA
+    return {
+        "id": str(p.id), "numero": p.numero, "status": p.status, "loja": l.nome,
+        "loja_endereco": _endereco_loja(l), "loja_telefone": l.whatsapp or l.telefone,
+        "loja_mapa": _mapa(l.latitude, l.longitude, _endereco_loja(l)),
+        "pronto": p.status in (S.PRONTO, S.SAIU_PARA_ENTREGA), "saiu": saiu,
+        "cliente": p.nome_cliente, "telefone": p.telefone_cliente if saiu else "",
+        "endereco": end, "referencia": p.entrega_referencia,
+        "mapa": _mapa(p.entrega_latitude, p.entrega_longitude, end),
+        "cobrar_centavos": max(0, p.total_centavos - pago),
+        "forma": pendente.get_forma_display() if pendente else "",
+        "troco_para_centavos": p.troco_para_centavos,
+        "ganho_centavos": e.ganho(p) if e.remuneracao != "NENHUM" else None,
+    }
+
+
+def resumo_ganhos(es) -> dict:
+    agora = timezone.localtime()
+    hoje = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    semana = hoje - timedelta(days=hoje.weekday())
+    mes = hoje.replace(day=1)
+    por_id = {e.id: e for e in es}
+    feitas = list(Pedido.objects.filter(entregador__in=es, status=S.CONCLUIDO, concluido_em__gte=min(mes, semana))
+                  .only("id", "entregador_id", "taxa_entrega_centavos", "concluido_em"))
+    def soma(desde):
+        ps = [p for p in feitas if p.concluido_em >= desde]
+        return len(ps), sum(por_id[p.entregador_id].ganho(p) for p in ps)
+    n_hoje, g_hoje = soma(hoje)
+    n_sem, g_sem = soma(semana)
+    n_mes, g_mes = soma(mes)
+    dias_mes = calendar.monthrange(agora.year, agora.month)[1]
+    mostrar = any(e.remuneracao != "NENHUM" for e in es)
+    return {
+        "hoje": {"entregas": n_hoje, "ganhos_centavos": g_hoje},
+        "semana": {"entregas": n_sem, "ganhos_centavos": g_sem},
+        "mes": {"entregas": n_mes, "ganhos_centavos": g_mes},
+        "projecao_mes_centavos": round(g_mes / agora.day * dias_mes) if n_mes else 0,
+        "projecao_entregas_mes": round(n_mes / agora.day * dias_mes) if n_mes else 0,
+        "total_entregas": Pedido.objects.filter(entregador__in=es, status=S.CONCLUIDO).count(),
+        "mostrar_ganhos": mostrar,
+        "acordo": [{"loja": e.loja.nome, "regra": e.get_remuneracao_display(),
+                    "valor_centavos": e.valor_por_entrega_centavos if e.remuneracao == "FIXO" else None} for e in es],
+    }
+
+
+class EstadoView(Base):
+    def get(self, request):
+        es = entregadores_da(request)
+        ch = chamadas.oferta_para(es)
+        entregas = (Pedido.objects.filter(entregador__in=es, status__in=EM_ANDAMENTO)
+                    .select_related("loja").prefetch_related("pagamentos").order_by("criado_em"))
+        por_id = {e.id: e for e in es}
+        return Response({
+            "nome": es[0].nome, "online": any(e.online for e in es), "lojas": [e.loja.nome for e in es],
+            "trocar_pin": not all(e.pin_trocado for e in es),
+            "oferta": _oferta(ch, es) if ch else None,
+            "entregas": [_entrega(p, por_id[p.entregador_id]) for p in entregas],
+            "ganhos": resumo_ganhos(es),
+        })
+
+
+class HistoricoView(Base):
+    def get(self, request):
+        es = entregadores_da(request)
+        por_id = {e.id: e for e in es}
+        ps = (Pedido.objects.filter(entregador__in=es, status=S.CONCLUIDO).select_related("loja")
+              .order_by("-concluido_em")[:50])
+        return Response([{"numero": p.numero, "loja": p.loja.nome, "bairro": p.entrega_bairro,
+                          "concluido_em": p.concluido_em,
+                          "ganho_centavos": por_id[p.entregador_id].ganho(p)} for p in ps])
+
+
+# ----------------------------------------------------------------------------- ações
+class OfertaView(Base):
+    def post(self, request, chamada, acao):
+        if acao not in ("aceitar", "recusar"):
+            raise ValidationError({"detail": "ação inválida"})
+        es = entregadores_da(request)
+        from apps.pedidos.models import ChamadaEntrega
+
+        ch = ChamadaEntrega.objects.filter(pk=chamada).first()
+        e = next((x for x in es if ch and x.id == ch.entregador_atual_id), None)
+        if ch is None or e is None:
+            raise ErroNegocio("esta entrega não está mais disponível")
+        if acao == "aceitar":
+            chamadas.aceitar(ch.id, e)
+            return Response({"ok": True})
+        chamadas.recusar(ch.id, e)
+        return Response({"ok": True})
+
+
+class EntregaView(Base):
+    def post(self, request, pedido, acao):
+        if acao not in ("retirar", "entregar"):
+            raise ValidationError({"detail": "ação inválida"})
+        es = entregadores_da(request)
+        codigo = str(request.data.get("codigo", ""))
+        p = Pedido.objects.filter(pk=pedido, entregador__in=es).first()
+        if p is None:
+            raise ErroNegocio("pedido não encontrado")
+        e = next(x for x in es if x.id == p.entregador_id)
+        if acao == "retirar":
+            chamadas.retirar(p.id, e, codigo)
+        else:
+            chamadas.entregar(p.id, e, codigo)
+        return Response({"ok": True})
+

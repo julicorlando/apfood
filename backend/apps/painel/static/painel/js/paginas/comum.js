@@ -319,6 +319,7 @@ export async function abrirPedido(id, { aoMudar } = {}) {
           h("p", null, p.nome_cliente || "—", p.telefone_cliente ? h("span", { class: "muted" }, ` · ${p.telefone_cliente}`) : null),
           p.mesa ? h("p", null, `Mesa: ${p.mesa}`) : null,
           enderecoTexto(p) ? h("p", null, "📍 ", enderecoTexto(p)) : null,
+          p.tipo_atendimento === "ENTREGA" ? blocoEntrega() : null,
           p.observacao ? h("div", { class: "alerta alerta-aviso" }, `Obs.: ${p.observacao}`) : null,
           p.motivo_cancelamento ? h("div", { class: "alerta alerta-erro" }, `Motivo: ${p.motivo_cancelamento}`) : null,
           h("h3", { style: { marginTop: "16px" } }, "Pagamento"),
@@ -335,6 +336,9 @@ export async function abrirPedido(id, { aoMudar } = {}) {
     );
 
     const acoes = [];
+    if (podeChamar() && !(chamada && chamada.status === "PROCURANDO")) {
+      acoes.push(botaoAcao("🛵 Chamar entregador", chamar, "botao botao-primario"));
+    }
     for (const [para, texto, cls] of PROXIMO[p.status] || []) {
       if (para === "SAIU_PARA_ENTREGA" && p.tipo_atendimento !== "ENTREGA") continue;
       acoes.push(botaoAcao(texto, async () => { if (await mudarStatus(p, para)) await recarregar(); }, `botao ${cls}`));
@@ -362,7 +366,87 @@ export async function abrirPedido(id, { aoMudar } = {}) {
     }
     trocar(rodape, acoes);
   }
+
+  // ---- entrega pelo app ApFood Entregador: chamada em fila e códigos
+  let chamada = null;
+  let disponiveis = null;
+  let espera = null;
+  const ativo = () => document.body.contains(m.el);
+  const podeChamar = () => p.tipo_atendimento === "ENTREGA" && !p.entregador && ["RECEBIDO", "EM_PREPARO", "PRONTO"].includes(p.status);
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  function blocoEntrega() {
+    const linhas = [h("h3", { style: { marginTop: "16px" } }, "Entrega")];
+    if (p.entregador_nome) linhas.push(h("p", null, "🛵 Entregador: ", h("b", null, p.entregador_nome)));
+    if (!FINAIS.includes(p.status) && p.status !== "SAIU_PARA_ENTREGA" && p.entregador) {
+      linhas.push(h("div", { class: "alerta alerta-info codigo-retirada" },
+        h("span", null, "Código de retirada"), h("b", null, p.codigo_retirada),
+        h("small", null, "Informe ao entregador: ele digita no app ao pegar o pedido.")));
+    }
+    if (chamada) linhas.push(blocoChamada());
+    else if (podeChamar()) linhas.push(h("p", { class: "muted" }, "Sem entregador. Use “Chamar entregador” para oferecer aos entregadores do app."));
+    return h("div", null, linhas);
+  }
+
+  function blocoChamada() {
+    const c = chamada;
+    if (c.status === "PROCURANDO") {
+      return h("div", { class: "alerta alerta-aviso chamada" },
+        h("div", { class: "negrito" }, "Procurando entregador…"),
+        c.entregador_atual ? h("div", null, `Oferecendo para ${c.entregador_atual} · ${c.segundos_oferta}s para aceitar`)
+          : h("div", null, disponiveis ? "Passando para o próximo…" : "Nenhum entregador disponível no app agora — esperando alguém ficar online."),
+        h("div", { class: "muted" }, `Tentativas: ${c.tentativas}${c.recusas ? ` · recusas: ${c.recusas}` : ""} · tempo restante ${mmss(c.segundos_total)}`),
+        h("div", { class: "acoes", style: { marginTop: "6px" } },
+          botaoAcao("Cancelar chamada", async () => { await post(`/api/pedidos/${p.id}/chamada/cancelar/`); await atualizarChamada(); }, "botao botao-pequeno")));
+    }
+    if (c.status === "ACEITA") return h("div", { class: "alerta alerta-ok" }, `✓ ${c.aceita_por} aceitou a entrega.`);
+    if (c.status === "SEM_RESPOSTA" && podeChamar()) {
+      return h("div", { class: "alerta alerta-erro chamada" },
+        h("div", { class: "negrito" }, "Ninguém aceitou."),
+        h("div", null, disponiveis ? `${disponiveis} entregador(es) online não responderam em 2 minutos.` : "Nenhum entregador estava disponível no app."),
+        h("div", { class: "acoes", style: { marginTop: "6px" } },
+          botaoAcao("Chamar novamente", chamar, "botao botao-primario botao-pequeno"),
+          botaoAcao("Outra forma de entrega", outraForma, "botao botao-pequeno")));
+    }
+    return h("span");
+  }
+
+  async function chamar() {
+    const r = await post(`/api/pedidos/${p.id}/chamada/`);
+    chamada = r.chamada; disponiveis = r.disponiveis;
+    desenhar();
+    acompanhar();
+  }
+
+  async function outraForma() {
+    const ents = await lista("/api/entregadores/", { ativo: "true" });
+    const ops = ents.map((e) => ({ valor: e.id, rotulo: `${e.nome}${e.online_agora ? " · online" : ""}` }));
+    const escolhido = await escolher("Quem vai entregar?", [...ops, { valor: "__proprio", rotulo: "Entrega própria / sem entregador cadastrado" }]);
+    if (!escolhido) return;
+    await post(`/api/pedidos/${p.id}/entregador/`, { entregador_id: escolhido === "__proprio" ? null : escolhido });
+    chamada = null;
+    await recarregar();
+    aviso(escolhido === "__proprio" ? "Ok: marque “Saiu para entrega” quando sair." : "Entregador definido.", "ok");
+  }
+
+  async function atualizarChamada() {
+    const r = await get(`/api/pedidos/${p.id}/chamada/`);
+    const antes = chamada?.status;
+    chamada = r.chamada; disponiveis = r.disponiveis;
+    if (chamada?.status === "ACEITA" && antes === "PROCURANDO") { aviso(`${chamada.aceita_por} aceitou o pedido #${p.numero}.`, "ok"); await recarregar(); return; }
+    desenhar();
+  }
+
+  function acompanhar() {
+    clearTimeout(espera);
+    if (!ativo() || chamada?.status !== "PROCURANDO") return;
+    espera = setTimeout(async () => { try { await atualizarChamada(); } catch (e) { /* tenta de novo */ } acompanhar(); }, 2000);
+  }
+
   desenhar();
+  if (p.tipo_atendimento === "ENTREGA" && !FINAIS.includes(p.status)) {
+    atualizarChamada().then(acompanhar).catch(() => {});
+  }
   return m;
 }
 
