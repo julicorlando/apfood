@@ -5,7 +5,8 @@ from . import views
 app_name = "vitrine"
 
 urlpatterns = [
-    path("", views.inicio, name="inicio"),
+    path("", views.app_cliente, name="inicio"),
+    path("empresas/", views.empresas, name="empresas"),
     path("pedido/<str:token>/", views.acompanhar_pedido, name="acompanhar"),
     path("app/", views.app_cliente, name="app_cliente"),
     path("app/manifest.webmanifest", views.app_manifest, name="app_manifest"),

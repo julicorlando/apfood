@@ -71,3 +71,10 @@ def test_esqueci_senha_envia_link_que_funciona(client, operador):
 def test_esqueci_senha_nao_revela_email_inexistente(client, db):
     r = client.post("/painel/senha/esqueci/", {"email": "ninguem@exemplo.com"})
     assert r.status_code == 302 and len(mail.outbox) == 0
+
+
+def test_pagina_de_vendas_tem_chamadas_e_formulario(client, db):
+    html = client.get("/planos/").content.decode()
+    assert 'id="cadastro"' in html and 'href="#cadastro"' in html and "Perguntas frequentes" in html
+    r = client.post("/planos/", {**DADOS, "aceite": ""})
+    assert r.status_code == 200 and "scrollIntoView" in r.content.decode()  # erro: volta ao formulário

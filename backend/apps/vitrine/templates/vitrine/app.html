@@ -7,7 +7,8 @@
   <header class="topo app-topo">
     <div class="topo-linha">
       <img class="logo" src="{% static 'marca/logo-pequena.png' %}" alt="ApFood">
-      <div><h1>Peça perto de você</h1><div class="info" id="onde">Restaurantes com entrega e retirada</div></div>
+      <div class="app-titulo"><h1>Peça perto de você</h1><div class="info" id="onde">Restaurantes com entrega e retirada</div></div>
+      <a class="app-empresas" id="login-empresas" href="{% url 'vitrine:empresas' %}">Login empresas</a>
     </div>
     <div class="app-busca">
       <input id="busca" type="search" placeholder="Buscar restaurante ou bairro" autocomplete="off">

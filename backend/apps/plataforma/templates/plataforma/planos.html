@@ -4,99 +4,314 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f26a0f">
-  <title>Planos e teste grátis — ApFood</title>
-  <meta name="description" content="Gestão, PDV e cardápio digital para restaurantes e hamburguerias. Teste grátis.">
+  <title>ApFood — venda mais no seu restaurante | Teste grátis {{ dias_trial }} dias</title>
+  <meta name="description" content="Cardápio digital com pedidos direto para você, PDV que funciona sem internet, caixa por operador e WhatsApp automático. Teste grátis por {{ dias_trial }} dias.">
   {% include "marca/cabeca.html" %}
   <link rel="stylesheet" href="{% static 'painel/painel.css' %}">
   <style>
-    body { background: var(--fundo); }
-    .pagina { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
-    .topo-site { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
-    .topo-site img { height: 56px; width: auto; }
-    .chamada { text-align: center; margin: 8px 0 28px; }
-    .chamada h1 { font-size: clamp(26px, 4vw, 38px); margin: 0 0 8px; letter-spacing: -.5px; }
-    .chamada p { color: var(--suave); font-size: 18px; margin: 0; }
-    .planos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }
-    .plano { background: #fff; border-radius: 14px; box-shadow: var(--sombra); padding: 22px; border: 2px solid transparent; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
-    .plano:has(input:checked) { border-color: var(--cor); }
-    .plano input { position: absolute; opacity: 0; pointer-events: none; }
-    .plano .nome { font-weight: 800; font-size: 20px; }
-    .plano .preco { font-size: 30px; font-weight: 800; color: var(--cor-escura); }
-    .plano .preco small { font-size: 14px; color: var(--suave); font-weight: 500; }
-    .plano ul { margin: 6px 0 0; padding-left: 18px; color: #3a3a3f; }
-    .plano .marcador { margin-top: auto; font-weight: 700; color: var(--cor-escura); }
-    .plano:not(:has(input:checked)) .marcador { color: var(--suave); font-weight: 500; }
-    .cadastro { max-width: 640px; margin: 0 auto; }
-    .vantagens { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 32px; }
-    .vantagens div { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: var(--sombra); }
-    .vantagens strong { display: block; }
+    :root { --laranja: #f26a0f; --laranja-escuro: #c9520a; --tinta: #1d1d1f; --cinza: #5f5f66; --creme: #fff7f1; }
+    html { scroll-behavior: smooth; }
+    body { background: #fff; color: var(--tinta); }
+    .largura { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+    section { padding: 64px 0; }
+    .titulo-secao { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.6px; line-height: 1.15; margin: 0 0 10px; text-align: center; }
+    .lead { color: var(--cinza); font-size: 18px; line-height: 1.55; text-align: center; max-width: 680px; margin: 0 auto 36px; }
+    .cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--laranja); color: #fff; font-weight: 800;
+           font-size: 18px; padding: 16px 26px; border-radius: 14px; text-decoration: none; box-shadow: 0 8px 24px rgba(242,106,15,.35); }
+    .cta:hover { background: var(--laranja-escuro); }
+    .cta-2 { display: inline-flex; align-items: center; gap: 8px; color: var(--tinta); font-weight: 700; font-size: 17px; padding: 15px 22px;
+             border-radius: 14px; text-decoration: none; border: 2px solid #eadfd6; background: #fff; }
+    a:focus-visible { outline: 3px solid var(--tinta); outline-offset: 3px; }
+
+    /* topo */
+    .barra { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid #f1e9e2; }
+    .barra .largura { display: flex; align-items: center; gap: 16px; height: 68px; }
+    .barra img { height: 40px; width: auto; display: block; }
+    .barra nav { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+    .barra nav a { color: var(--tinta); text-decoration: none; font-weight: 600; font-size: 15px; }
+    .barra nav a.cta { color: #fff; font-size: 15px; padding: 10px 16px; box-shadow: none; }
+    @media (max-width: 720px) { .barra nav .some { display: none; } }
+
+    /* herói */
+    .heroi { background: radial-gradient(1200px 500px at 85% -10%, #ffe2cc 0, transparent 60%), var(--creme); padding: 56px 0 72px; }
+    .heroi .largura { display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; }
+    @media (max-width: 880px) { .heroi .largura { grid-template-columns: 1fr; } .celular { display: none; } }
+    .selo { display: inline-block; background: #fff; border: 1px solid #f6d3ba; color: var(--laranja-escuro); font-weight: 700; font-size: 14px;
+            padding: 6px 12px; border-radius: 999px; margin-bottom: 18px; }
+    .heroi h1 { font-size: clamp(34px, 5.2vw, 58px); line-height: 1.04; letter-spacing: -1.6px; margin: 0 0 18px; }
+    .heroi h1 em { font-style: normal; color: var(--laranja); }
+    .heroi p.sub { font-size: 20px; line-height: 1.5; color: var(--cinza); margin: 0 0 28px; max-width: 580px; }
+    .acoes { display: flex; flex-wrap: wrap; gap: 12px; }
+    .garantias { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; color: var(--cinza); font-size: 15px; padding: 0; list-style: none; }
+    .garantias li::before { content: "✓ "; color: #1f9d55; font-weight: 800; }
+
+    .celular { justify-self: center; width: 290px; border-radius: 38px; background: #1d1d1f; padding: 12px; box-shadow: 0 30px 60px rgba(0,0,0,.18); transform: rotate(2deg); }
+    .tela { background: #fff; border-radius: 28px; overflow: hidden; }
+    .tela .cab { background: var(--laranja); color: #fff; padding: 22px 16px 16px; }
+    .tela .cab b { display: block; font-size: 18px; }
+    .tela .cab span { font-size: 13px; opacity: .9; }
+    .tela .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f2ede8; font-size: 14px; }
+    .tela .item small { display: block; color: var(--cinza); }
+    .tela .item .mais { background: var(--laranja); color: #fff; border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; font-weight: 800; }
+    .tela .carrinho { margin: 12px; background: #1f9d55; color: #fff; border-radius: 12px; padding: 12px; font-weight: 700; display: flex; justify-content: space-between; font-size: 14px; }
+    .tela .aviso { margin: 0 12px 14px; font-size: 12px; color: var(--cinza); text-align: center; }
+
+    /* dores */
+    .dores { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+    .dor { border: 1px solid #f0e6de; border-radius: 18px; padding: 24px; background: #fff; }
+    .dor .antes { color: #b42318; font-weight: 700; font-size: 15px; margin: 0 0 6px; }
+    .dor h3 { margin: 0 0 8px; font-size: 21px; }
+    .dor p { color: var(--cinza); line-height: 1.55; margin: 0; }
+
+    /* recursos */
+    .faixa { background: var(--creme); }
+    .recursos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .recurso { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.04); }
+    .recurso .ico { font-size: 26px; }
+    .recurso h3 { margin: 8px 0 6px; font-size: 18px; }
+    .recurso p { margin: 0; color: var(--cinza); line-height: 1.5; font-size: 15px; }
+
+    /* passos */
+    .passos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; counter-reset: passo; }
+    .passo { position: relative; padding: 26px 24px 24px 24px; border-radius: 18px; background: #fff; border: 1px solid #f0e6de; }
+    .passo::before { counter-increment: passo; content: counter(passo); display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+                     background: var(--laranja); color: #fff; font-weight: 800; margin-bottom: 12px; }
+    .passo h3 { margin: 0 0 6px; }
+    .passo p { margin: 0; color: var(--cinza); line-height: 1.5; }
+    .centro { text-align: center; margin-top: 32px; }
+
+    /* cliente */
+    .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 880px) { .duas { grid-template-columns: 1fr; } }
+    .duas h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.6px; line-height: 1.15; margin: 0 0 12px; }
+    .lista-check { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+    .lista-check li { padding-left: 32px; position: relative; line-height: 1.5; color: var(--cinza); }
+    .lista-check li strong { color: var(--tinta); }
+    .lista-check li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: #e7f6ee;
+                              color: #1f9d55; font-weight: 800; display: grid; place-items: center; font-size: 13px; }
+    .cartao-num { background: var(--tinta); color: #fff; border-radius: 22px; padding: 32px; display: grid; gap: 20px; }
+    .cartao-num div b { display: block; font-size: 40px; letter-spacing: -1px; color: #ffb27a; }
+    .cartao-num div span { color: #d6d6db; }
+
+    /* planos + cadastro */
+    #cadastro { scroll-margin-top: 84px; max-width: 1120px; }
+    .cadastro .cartao { max-width: 640px; margin: 0 auto; }
+
+    /* faq */
+    .faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
+    .faq details { border: 1px solid #f0e6de; border-radius: 14px; padding: 16px 20px; background: #fff; }
+    .faq summary { font-weight: 700; cursor: pointer; font-size: 17px; }
+    .faq p { color: var(--cinza); line-height: 1.55; margin: 10px 0 0; }
+
+    .final { background: var(--tinta); color: #fff; text-align: center; }
+    .final h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -.8px; margin: 0 0 12px; }
+    .final p { color: #cfcfd4; font-size: 18px; margin: 0 0 28px; }
+    footer.rodape { text-align: center; color: var(--cinza); font-size: 13px; padding: 24px; }
+    footer.rodape a { color: inherit; }
+
+    .fixo { display: none; }
+    @media (max-width: 720px) {
+      section { padding: 48px 0; }
+      .fixo { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 20; }
+      .fixo .cta { width: 100%; }
+      body { padding-bottom: 84px; }
+    }
     .escondido { position: absolute; left: -9999px; }
   </style>
 </head>
 <body>
-  <div class="pagina">
-    <header class="topo-site">
-      <a href="/"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
-      <a class="botao" href="{% url 'painel:entrar' %}">Já tenho conta</a>
-    </header>
+  <header class="barra">
+    <div class="largura">
+      <a href="/empresas/" aria-label="ApFood"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
+      <nav aria-label="Página">
+        <a class="some" href="#recursos">Recursos</a>
+        <a class="some" href="#como">Como funciona</a>
+        <a class="some" href="#duvidas">Dúvidas</a>
+        <a href="{% url 'painel:entrar' %}">Entrar</a>
+        <a class="cta" href="#cadastro">Testar grátis</a>
+      </nav>
+    </div>
+  </header>
 
-    <section class="chamada">
-      <h1>Teste grátis por {{ dias_trial }} dias</h1>
-      <p>PDV, pedidos online, mesas, cozinha, caixa e estoque. Sem cartão de crédito.</p>
-    </section>
-
-    <section class="vantagens" aria-label="O que vem incluído">
-      <div><strong>🧾 PDV no navegador</strong><span class="muted">ou no app para Windows, que funciona sem internet</span></div>
-      <div><strong>📱 Cardápio digital</strong><span class="muted">seu link próprio para pedidos de delivery e retirada</span></div>
-      <div><strong>🛎️ Pedidos em tempo real</strong><span class="muted">aviso sonoro, cozinha e acompanhamento do cliente</span></div>
-      <div><strong>💵 Caixa e relatórios</strong><span class="muted">fechamento conferido, curva ABC e fluxo de caixa</span></div>
-    </section>
-
-    <form method="post" class="cadastro" novalidate>
-      {% csrf_token %}
-      {% if planos %}
-      <h2 style="text-align:center">Escolha o plano</h2>
-      <div class="planos" role="radiogroup" aria-label="Planos">
-        {% for p in planos %}
-        <label class="plano">
-          <input type="radio" name="plano" value="{{ p.pk }}" {% if form.plano.value|stringformat:"s" == p.pk|stringformat:"s" %}checked{% endif %}>
-          <span class="nome">{{ p.nome }}</span>
-          <span class="preco">R$ {% widthratio p.preco_mensal_centavos 100 1 %}<small>/mês depois do teste</small></span>
-          {% if p.descricao %}<span class="muted">{{ p.descricao }}</span>{% endif %}
-          <ul>
-            <li>{% if p.limite_lojas %}Até {{ p.limite_lojas }} loja{{ p.limite_lojas|pluralize }}{% else %}Lojas ilimitadas{% endif %}</li>
-            <li>{% if p.limite_usuarios %}Até {{ p.limite_usuarios }} usuários{% else %}Usuários ilimitados{% endif %}</li>
-            {% for r in p.recursos %}<li>{% if r == "fiscal" %}Nota fiscal (NFC-e){% elif r == "mesas" %}Mesas e comandas{% elif r == "marketplace" %}Integração iFood{% elif r == "pix" %}Pix com QR Code{% elif r == "whatsapp" %}Avisos por WhatsApp{% elif r == "multiloja" %}Várias lojas{% elif r == "kds" %}Tela da cozinha{% else %}{{ r }}{% endif %}</li>{% endfor %}
+  <main>
+    <section class="heroi">
+      <div class="largura">
+        <div>
+          <span class="selo">🍔 Feito para restaurantes, lanchonetes e hamburguerias</span>
+          <h1>Seu restaurante vendendo <em>mais</em>, com tudo num lugar só.</h1>
+          <p class="sub">Cardápio digital com pedidos direto para você, PDV que não para quando a internet cai, caixa conferido por operador e WhatsApp que responde sozinho.</p>
+          <div class="acoes">
+            <a class="cta" href="#cadastro">Começar meu teste grátis</a>
+            {% if demo %}<a class="cta-2" href="/{{ demo }}/" target="_blank" rel="noopener">Ver um cardápio de exemplo →</a>{% endif %}
+          </div>
+          <ul class="garantias">
+            <li>{{ dias_trial }} dias grátis</li>
+            <li>Sem cartão de crédito</li>
+            <li>Pronto para vender no mesmo dia</li>
           </ul>
-          <span class="marcador">✓ Escolhido</span>
-        </label>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="cartao">
-        <h2>Crie sua conta</h2>
-        {% if form.non_field_errors %}<div class="alerta alerta-erro" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
-        <div class="form-grade">
-          {% for campo in form %}{% if campo.name != "plano" and campo.name != "aceite" and campo.name != "site" %}
-          <label class="campo {% if campo.name == 'restaurante' %}largo{% endif %}">
-            <span>{{ campo.label }}</span>
-            <input type="{% if campo.name == 'senha' %}password{% elif campo.name == 'email' %}email{% elif campo.name == 'telefone' %}tel{% else %}text{% endif %}"
-                   name="{{ campo.name }}" value="{% if campo.name != 'senha' %}{{ campo.value|default:'' }}{% endif %}"
-                   {% if campo.name == 'senha' %}autocomplete="new-password"{% elif campo.name == 'email' %}autocomplete="email"{% elif campo.name == 'nome' %}autocomplete="name"{% endif %} required>
-            {% for e in campo.errors %}<span class="erro">{{ e }}</span>{% endfor %}
-          </label>
-          {% endif %}{% endfor %}
-          <label class="escondido" aria-hidden="true">Não preencha <input type="text" name="site" tabindex="-1" autocomplete="off"></label>
-          <div class="campo largo">
-            <label class="check"><input type="checkbox" name="aceite" {% if form.aceite.value %}checked{% endif %}> <span>Li e aceito os <a href="{% url 'termos' %}" target="_blank" rel="noopener">termos de uso</a> e a <a href="{% url 'privacidade' %}" target="_blank" rel="noopener">política de privacidade</a></span></label>
-            {% for e in form.aceite.errors %}<span class="erro">Marque para continuar.</span>{% endfor %}
+        </div>
+        <div class="celular" aria-hidden="true">
+          <div class="tela">
+            <div class="cab"><b>Seu Restaurante</b><span>Aberto · entrega em ~35 min</span></div>
+            <div class="item"><div>X-Bacon da Casa<small>Pão brioche, blend 160 g, bacon</small></div><span class="mais">+</span></div>
+            <div class="item"><div>Combo Família<small>2 burgers, batata e refri 2 L</small></div><span class="mais">+</span></div>
+            <div class="item"><div>Batata com cheddar<small>🔥 Happy hour: 20% off</small></div><span class="mais">+</span></div>
+            <div class="carrinho"><span>Ver carrinho · 3 itens</span><span>Pix</span></div>
+            <p class="aviso">Pedido chega na hora no seu painel e na cozinha</p>
           </div>
         </div>
-        <button type="submit" class="botao botao-primario botao-grande botao-bloco" style="margin-top:16px">Começar teste grátis</button>
-        <p class="muted" style="text-align:center;margin-bottom:0">Você entra direto no painel para cadastrar o cardápio.</p>
       </div>
-    </form>
-  </div>
+    </section>
+
+    <section>
+      <div class="largura">
+        <h2 class="titulo-secao">Conhece algum destes problemas?</h2>
+        <p class="lead">O ApFood foi feito para tirar estas dores do dia a dia do restaurante.</p>
+        <div class="dores">
+          <div class="dor">
+            <p class="antes">Comissão em cada pedido do aplicativo</p>
+            <h3>Tenha o seu próprio canal de pedidos</h3>
+            <p>Seu link de cardápio para divulgar no Instagram e no WhatsApp. O cliente pede, paga no Pix e acompanha a entrega — e o pedido é seu, sem intermediário.</p>
+          </div>
+          <div class="dor">
+            <p class="antes">Pedido perdido no meio das conversas do WhatsApp</p>
+            <h3>WhatsApp que atende sozinho</h3>
+            <p>Conecte o número do restaurante lendo um QR Code. O atendente automático manda o cardápio, informa horário e status do pedido, e você dispara campanhas para quem já comprou.</p>
+          </div>
+          <div class="dor">
+            <p class="antes">Caixa que não bate no fim da noite</p>
+            <h3>Caixa conferido, operador por operador</h3>
+            <p>Abertura, sangria e fechamento com conferência. Você vê quanto cada atendente lançou e recebeu, por forma de pagamento — mesmo de longe, pelo celular.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="faixa" id="recursos">
+      <div class="largura">
+        <h2 class="titulo-secao">Tudo o que o seu restaurante precisa</h2>
+        <p class="lead">Do balcão à entrega, da cozinha ao financeiro. Sem precisar juntar vários sistemas.</p>
+        <div class="recursos">
+          <div class="recurso"><div class="ico">🧾</div><h3>PDV rápido</h3><p>No navegador ou no app para Windows, que continua vendendo sem internet e imprime o cupom.</p></div>
+          <div class="recurso"><div class="ico">📱</div><h3>Cardápio digital</h3><p>Link próprio com fotos, adicionais, pizza meio a meio, cupons e taxa de entrega por bairro ou distância.</p></div>
+          <div class="recurso"><div class="ico">🪑</div><h3>Mesas com QR Code</h3><p>O cliente pede pela mesa, a conta pode ser paga em partes e a mesa continua consumindo.</p></div>
+          <div class="recurso"><div class="ico">👨‍🍳</div><h3>Tela da cozinha</h3><p>Pedidos em tempo real com aviso sonoro, do preparo até a saída.</p></div>
+          <div class="recurso"><div class="ico">🛵</div><h3>Entrega com rastreio</h3><p>O cliente acompanha o status e a localização do entregador até a porta.</p></div>
+          <div class="recurso"><div class="ico">🏷️</div><h3>Promoções programadas</h3><p>Happy hour, dia do burger, combos: configure uma vez e elas entram sozinhas nos dias certos.</p></div>
+          <div class="recurso"><div class="ico">⭐</div><h3>Cartão fidelidade</h3><p>Selos a cada pedido e prêmio automático — o cliente volta a comprar com você.</p></div>
+          <div class="recurso"><div class="ico">📦</div><h3>Estoque e CMV</h3><p>Ficha técnica baixa os insumos a cada venda e mostra o custo real de cada prato.</p></div>
+          <div class="recurso"><div class="ico">📊</div><h3>Relatórios que ajudam a decidir</h3><p>Faturamento, ticket médio, curva ABC, fluxo de caixa e resultado por operador.</p></div>
+          <div class="recurso"><div class="ico">📲</div><h3>App para a equipe</h3><p>Atendentes lançam pedidos e fecham o caixa pelo celular; o dono acompanha tudo de onde estiver.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="como">
+      <div class="largura">
+        <h2 class="titulo-secao">Comece a vender em 3 passos</h2>
+        <p class="lead">Sem instalação complicada e sem precisar de técnico.</p>
+        <div class="passos">
+          <div class="passo"><h3>Crie sua conta</h3><p>Leva 1 minuto. Você já entra no painel do seu restaurante.</p></div>
+          <div class="passo"><h3>Cadastre o cardápio</h3><p>Produtos, fotos, preços e adicionais. Defina horários e as regiões de entrega.</p></div>
+          <div class="passo"><h3>Divulgue e venda</h3><p>Compartilhe seu link, imprima os QR das mesas e acompanhe os pedidos chegando.</p></div>
+        </div>
+        <div class="centro"><a class="cta" href="#cadastro">Quero começar agora</a></div>
+      </div>
+    </section>
+
+    <section class="faixa">
+      <div class="largura duas">
+        <div>
+          <h2>Seu cliente também ganha</h2>
+          <ul class="lista-check">
+            <li><strong>Pede em poucos toques</strong> pelo cardápio, sem baixar nada — ou pelo app ApFood, que mostra os restaurantes da região.</li>
+            <li><strong>Paga como preferir:</strong> Pix, cartão ou dinheiro na entrega.</li>
+            <li><strong>Acompanha o pedido</strong> do preparo até a porta.</li>
+            <li><strong>Junta selos</strong> e ganha prêmios por comprar com você.</li>
+          </ul>
+        </div>
+        <div class="cartao-num">
+          <div><b>{{ dias_trial }} dias</b><span>para testar tudo, sem cartão de crédito</span></div>
+          <div><b>1 lugar</b><span>para PDV, delivery, mesas, cozinha, caixa e estoque</span></div>
+          <div><b>Na hora</b><span>cada pedido chega no painel e na cozinha com aviso sonoro</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <form method="post" class="cadastro" id="cadastro" novalidate>
+        {% csrf_token %}
+        {% if planos %}
+        <h2 class="titulo-secao">Escolha o plano e comece hoje</h2>
+        <p class="lead">Os {{ dias_trial }} primeiros dias são por nossa conta. Sem cartão de crédito.</p>
+        <div class="planos" role="radiogroup" aria-label="Planos">
+          {% for p in planos %}
+          <label class="plano">
+            <input type="radio" name="plano" value="{{ p.pk }}" {% if form.plano.value|stringformat:"s" == p.pk|stringformat:"s" %}checked{% endif %}>
+            <span class="nome">{{ p.nome }}</span>
+            <span class="preco">R$ {% widthratio p.preco_mensal_centavos 100 1 %}<small>/mês depois do teste</small></span>
+            {% if p.descricao %}<span class="muted">{{ p.descricao }}</span>{% endif %}
+            <ul>
+              <li>{% if p.limite_lojas %}Até {{ p.limite_lojas }} loja{{ p.limite_lojas|pluralize }}{% else %}Lojas ilimitadas{% endif %}</li>
+              <li>{% if p.limite_usuarios %}Até {{ p.limite_usuarios }} usuários{% else %}Usuários ilimitados{% endif %}</li>
+              {% for r in p.recursos %}<li>{% if r == "fiscal" %}Nota fiscal (NFC-e){% elif r == "mesas" %}Mesas e comandas{% elif r == "marketplace" %}Integração iFood{% elif r == "pix" %}Pix com QR Code{% elif r == "whatsapp" %}Avisos por WhatsApp{% elif r == "multiloja" %}Várias lojas{% elif r == "kds" %}Tela da cozinha{% else %}{{ r }}{% endif %}</li>{% endfor %}
+            </ul>
+            <span class="marcador">✓ Escolhido</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="cartao">
+          <h2>Crie sua conta</h2>
+          {% if form.non_field_errors %}<div class="alerta alerta-erro" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
+          <div class="form-grade">
+            {% for campo in form %}{% if campo.name != "plano" and campo.name != "aceite" and campo.name != "site" %}
+            <label class="campo {% if campo.name == 'restaurante' %}largo{% endif %}">
+              <span>{{ campo.label }}</span>
+              <input type="{% if campo.name == 'senha' %}password{% elif campo.name == 'email' %}email{% elif campo.name == 'telefone' %}tel{% else %}text{% endif %}"
+                     name="{{ campo.name }}" value="{% if campo.name != 'senha' %}{{ campo.value|default:'' }}{% endif %}"
+                     {% if campo.name == 'senha' %}autocomplete="new-password"{% elif campo.name == 'email' %}autocomplete="email"{% elif campo.name == 'nome' %}autocomplete="name"{% endif %} required>
+              {% for e in campo.errors %}<span class="erro">{{ e }}</span>{% endfor %}
+            </label>
+            {% endif %}{% endfor %}
+            <label class="escondido" aria-hidden="true">Não preencha <input type="text" name="site" tabindex="-1" autocomplete="off"></label>
+            <div class="campo largo">
+              <label class="check"><input type="checkbox" name="aceite" {% if form.aceite.value %}checked{% endif %}> <span>Li e aceito os <a href="{% url 'termos' %}" target="_blank" rel="noopener">termos de uso</a> e a <a href="{% url 'privacidade' %}" target="_blank" rel="noopener">política de privacidade</a></span></label>
+              {% for e in form.aceite.errors %}<span class="erro">Marque para continuar.</span>{% endfor %}
+            </div>
+          </div>
+          <button type="submit" class="botao botao-primario botao-grande botao-bloco" style="margin-top:16px">Começar teste grátis</button>
+          <p class="muted" style="text-align:center;margin-bottom:0">Você entra direto no painel para cadastrar o cardápio.</p>
+        </div>
+      </form>
+    </section>
+
+    <section class="faixa" id="duvidas">
+      <div class="largura">
+        <h2 class="titulo-secao">Perguntas frequentes</h2>
+        <div class="faq">
+          <details><summary>Preciso de cartão de crédito para testar?</summary><p>Não. Você cria a conta e usa tudo durante os {{ dias_trial }} dias de teste. Só depois escolhe se quer continuar.</p></details>
+          <details><summary>E se a internet cair no meio do movimento?</summary><p>O app do PDV para Windows continua vendendo sem internet e sincroniza tudo quando a conexão volta.</p></details>
+          <details><summary>Preciso comprar computador ou equipamento novo?</summary><p>Não. Funciona no computador, tablet ou celular que você já tem. Para imprimir o cupom, use sua impressora térmica.</p></details>
+          <details><summary>Já vendo pelo iFood. Dá para usar junto?</summary><p>Sim. Os pedidos dos marketplaces e os do seu cardápio próprio caem no mesmo painel e na mesma cozinha (conforme o plano).</p></details>
+          <details><summary>Quantos atendentes podem usar?</summary><p>Cada plano mostra o limite de usuários. Cada pessoa tem o próprio login, e você vê o que cada uma lançou e recebeu.</p></details>
+          <details><summary>É difícil de configurar?</summary><p>Não. Você cadastra o cardápio pelo painel e já pode divulgar o link no mesmo dia. Se precisar, fale com a gente.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="largura">
+        <h2>Pronto para vender mais?</h2>
+        <p>Comece hoje. Os primeiros {{ dias_trial }} dias são por nossa conta.</p>
+        <a class="cta" href="#cadastro">Criar minha conta grátis</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape">ApFood · <a href="/">Restaurantes</a> · <a href="{% url 'termos' %}">Termos de uso</a> · <a href="{% url 'privacidade' %}">Privacidade</a></footer>
+  <div class="fixo"><a class="cta" href="#cadastro">Testar grátis por {{ dias_trial }} dias</a></div>
+  {% if erro %}<script>document.getElementById("cadastro").scrollIntoView();</script>{% endif %}
 </body>
 </html>
