@@ -36,6 +36,7 @@ urlpatterns = [
     path("sync/push/", sync.PushView.as_view()),
     path("relatorios/vendas/", relatorios.VendasView.as_view()),
     path("relatorios/curva-abc/", relatorios.CurvaABCView.as_view()),
+    path("relatorios/cmv/", relatorios.CMVView.as_view()),
     path("relatorios/fechamentos/", relatorios.FechamentosView.as_view()),
     path("relatorios/fluxo-caixa/", relatorios.FluxoCaixaView.as_view()),
     path("plataforma/resumo/", relatorios.PlataformaResumoView.as_view()),
@@ -45,7 +46,10 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/pedidos/", publico.PedidoPublicoView.as_view()),
     path("publico/lojas/<slug:slug>/cupom/", publico.CupomPublicoView.as_view()),
     path("publico/pedidos/<str:token>/", publico.AcompanharPedidoView.as_view()),
+    path("publico/lojas/<slug:slug>/mesa/<str:token>/", publico.MesaPublicaView.as_view()),
+    path("publico/lojas/<slug:slug>/mesa/<str:token>/pedidos/", publico.PedidoMesaView.as_view()),
     path("webhooks/mercadopago/plataforma/", webhooks.MercadoPagoPlataformaWebhook.as_view()),
+    path("webhooks/zapi/<uuid:loja_id>/<str:chave>/", webhooks.ZApiWebhook.as_view()),
     path("webhooks/mercadopago/<uuid:loja_id>/", webhooks.MercadoPagoLojaWebhook.as_view()),
     path("", include(r.urls)),
 ]

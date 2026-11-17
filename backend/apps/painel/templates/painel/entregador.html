@@ -29,6 +29,7 @@
     <h1 style="font-size:20px;margin:0 0 12px">Olá, {{ entregador.nome }}!</h1>
     {% if aviso %}<div class="alerta alerta-ok" role="status" style="margin-bottom:12px">Pedido #{{ aviso }} marcado como entregue.</div>{% endif %}
 
+    {% if cartoes %}<div class="muted" id="gps" style="margin-bottom:10px">📡 Compartilhando sua localização com os clientes desta entrega…</div>{% endif %}
     {% for c in cartoes %}
     <article class="entrega">
       <h2>Pedido #{{ c.p.numero }}</h2>
@@ -54,5 +55,25 @@
     <div class="cartao vazio">Nenhuma entrega com você agora.<br><small>Esta página se atualiza sozinha.</small></div>
     {% endfor %}
   </div>
+  {% if cartoes %}
+  <script>
+    // Rastreio: envia a posição enquanto houver entrega com o entregador
+    (function () {
+      const aviso = document.getElementById("gps");
+      if (!("geolocation" in navigator)) { aviso.textContent = "Este celular não informa a localização."; return; }
+      let ultimo = 0;
+      navigator.geolocation.watchPosition(function (pos) {
+        if (Date.now() - ultimo < 15000) return;
+        ultimo = Date.now();
+        fetch("{% url 'entregador_localizacao' token=entregador.token_acesso %}", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        }).then(function () { aviso.textContent = "📡 Localização enviada às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); })
+          .catch(function () { aviso.textContent = "Sem internet para enviar a localização."; });
+      }, function () { aviso.textContent = "Permita a localização para o cliente acompanhar a entrega."; },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

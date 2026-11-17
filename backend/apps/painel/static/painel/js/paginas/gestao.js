@@ -90,6 +90,40 @@ export function curvaAbc() {
   });
 }
 
+export function cmv() {
+  return paginaRelatorio("CMV e margem", async (area, q) => {
+    const r = await get(`/api/relatorios/cmv/?${q}`);
+    const pct = (v) => (v === null || v === undefined ? "—" : `${Number(v).toFixed(1)}%`);
+    const corMargem = (m) => (m === null || m === undefined ? "" : m >= 60 ? "e-ok" : m >= 40 ? "e-alerta" : "e-erro");
+    const semCusto = r.cardapio.filter((p) => p.custo_centavos === null).length;
+    trocar(area,
+      h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+        kpi("Faturamento", dinheiro(r.faturamento_centavos), "pedidos concluídos"),
+        kpi("Custo (CMV)", dinheiro(r.custo_centavos), "pela ficha técnica"),
+        kpi("CMV %", pct(r.cmv_percentual), "ideal: abaixo de 35%"),
+        kpi("Lucro bruto", dinheiro(r.lucro_bruto_centavos), "faturamento − custo")),
+      r.faturamento_sem_custo_centavos ? h("div", { class: "alerta alerta-aviso", style: { marginBottom: "12px" } },
+        `${dinheiro(r.faturamento_sem_custo_centavos)} vendidos em produtos sem custo cadastrado (ficha técnica ou custo das compras) ficaram fora do CMV.`) : null,
+      h("h2", null, "Vendas do período"),
+      tabela([
+        { rotulo: "Produto", campo: "nome" },
+        { rotulo: "Qtd", classe: "num", campo: "quantidade" },
+        { rotulo: "Faturamento", classe: "num", valor: (l) => dinheiro(l.faturamento_centavos) },
+        { rotulo: "Custo", classe: "num", valor: (l) => (l.sem_custo ? "sem custo" : dinheiro(l.custo_centavos)) },
+        { rotulo: "CMV", classe: "num", valor: (l) => pct(l.cmv_percentual) },
+        { rotulo: "Margem", valor: (l) => (l.margem_percentual === null ? "—" : etiqueta(pct(l.margem_percentual), corMargem(l.margem_percentual))) },
+      ], r.itens, { vazio: "Sem vendas concluídas no período." }),
+      h("h2", { style: { marginTop: "20px" } }, "Cardápio: preço × custo"),
+      semCusto ? h("p", { class: "muted" }, `${semCusto} item(ns) sem custo: cadastre a ficha técnica (Cardápio → Produtos) e lance as compras dos insumos.`) : null,
+      tabela([
+        { rotulo: "Produto", campo: "nome" },
+        { rotulo: "Preço", classe: "num", valor: (l) => dinheiro(l.preco_centavos) },
+        { rotulo: "Custo", classe: "num", valor: (l) => (l.custo_centavos === null ? "—" : dinheiro(l.custo_centavos)) },
+        { rotulo: "Margem", valor: (l) => (l.margem_percentual === null ? "—" : etiqueta(pct(l.margem_percentual), corMargem(l.margem_percentual))) },
+      ], r.cardapio, { vazio: "Nenhum produto." }));
+  });
+}
+
 export function fechamentos() {
   return paginaRelatorio("Fechamentos de caixa", async (area, q) => {
     const r = await get(`/api/relatorios/fechamentos/?${q}`);

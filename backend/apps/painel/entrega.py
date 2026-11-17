@@ -7,7 +7,9 @@ from urllib.parse import quote
 
 from apfood_core.dinheiro import formatar
 from apfood_core.enums import StatusPedido
-from django.http import Http404
+from django.http import Http404, JsonResponse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -60,3 +62,24 @@ def marcar_entregue(request, token, pedido):
     except ErroNegocio:
         pass  # já concluído/cancelado: só volta para a lista
     return redirect(f"/entrega/{token}/?ok={p.numero}")
+
+
+@csrf_exempt  # protegido pelo token secreto do link; o celular manda só lat/lng
+@require_POST
+def localizacao(request, token):
+    """Posição do celular do entregador (a cada ~20 s com a página aberta).
+    O cliente vê no acompanhamento do pedido enquanto estiver "saiu para entrega"."""
+    import json
+    from decimal import Decimal, InvalidOperation
+
+    e = _entregador(token)
+    try:
+        dados = json.loads(request.body or b"{}")
+        lat, lng = Decimal(str(dados["latitude"])), Decimal(str(dados["longitude"]))
+    except (ValueError, KeyError, InvalidOperation, TypeError):
+        return JsonResponse({"ok": False}, status=400)
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return JsonResponse({"ok": False}, status=400)
+    Entregador.objects.filter(pk=e.pk).update(latitude=round(lat, 7), longitude=round(lng, 7),
+                                              localizacao_em=timezone.now())
+    return JsonResponse({"ok": True})

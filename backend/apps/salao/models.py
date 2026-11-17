@@ -10,12 +10,22 @@ from apps.core.models import DaLoja, ModeloBase, ModeloSincronizavel, choices, m
 ABERTAS = [StatusComanda.ABERTA, StatusComanda.FECHANDO]
 
 
+def novo_token_qr() -> str:
+    import secrets
+
+    return secrets.token_urlsafe(12)
+
+
 class Mesa(DaLoja, ModeloSincronizavel):
     nome = models.CharField(max_length=30, help_text='"Mesa 05", "Balcão 2"')
     area = models.CharField(max_length=40, blank=True, help_text='"Salão", "Varanda"')
     capacidade = models.PositiveSmallIntegerField(default=4)
     ordem = models.PositiveSmallIntegerField(default=0)
     ativa = models.BooleanField(default=True)
+    token_qr = models.CharField(
+        max_length=24, unique=True, null=True, blank=True, editable=False,
+        help_text="QR Code da mesa (/<loja>/mesa/<token>/); gerar outro invalida o impresso",
+    )
 
     class Meta:
         db_table = "mesas"
@@ -28,6 +38,11 @@ class Mesa(DaLoja, ModeloSincronizavel):
 
     def __str__(self):
         return self.nome
+
+    def save(self, *args, **kwargs):
+        if not self.token_qr:
+            self.token_qr = novo_token_qr()
+        super().save(*args, **kwargs)
 
 
 class Comanda(DaLoja, ModeloBase):

@@ -456,6 +456,38 @@ def _cashback_na_transicao(p, para) -> None:
     elif para in (S.CANCELADO, S.RECUSADO) and p.cashback_usado_centavos:
         Cliente.objects.filter(pk=p.cliente_id).update(
             saldo_cashback_centavos=F("saldo_cashback_centavos") + p.cashback_usado_centavos)
+    if para == S.CONCLUIDO:
+        _selo_fidelidade(p)
+
+
+def _selo_fidelidade(p) -> None:
+    """Cartão fidelidade: cada pedido concluído (acima do mínimo) vale um selo; ao
+    completar o cartão, o prêmio entra como crédito (saldo, igual ao cashback)."""
+    from apps.clientes.models import Cliente
+
+    loja = p.loja
+    meta = loja.fidelidade_selos or 0
+    if not meta or p.canal == CanalVenda.MARKETPLACE or p.total_centavos < loja.fidelidade_pedido_minimo_centavos:
+        return
+    c = Cliente.objects.select_for_update().get(pk=p.cliente_id)
+    c.selos += 1
+    completou = c.selos >= meta
+    if completou:
+        c.selos -= meta
+        c.saldo_cashback_centavos += loja.fidelidade_premio_centavos
+    c.save(update_fields=["selos", "saldo_cashback_centavos", "atualizado_em"])
+    if completou and len(c.telefone) >= 10:
+        from apps.integracoes.models import Integracao
+        from apps.integracoes.tarefas import enfileirar
+        from apfood_core.dinheiro import formatar
+
+        integ = Integracao.ativa(loja, "WHATSAPP")
+        if integ:
+            premio = loja.fidelidade_premio_descricao or f"{formatar(loja.fidelidade_premio_centavos)} de crédito"
+            enfileirar("whatsapp.enviar", {"integracao_id": str(integ.id), "telefone": c.telefone,
+                                           "mensagem": f"🎉 Você completou o cartão fidelidade da *{loja.nome}*! "
+                                                       f"Ganhou: {premio}. Use no próximo pedido."},
+                       chave=f"wa-fidelidade-{p.id}")
 
 
 def _ganchos_status(p, para, motivo, origem_externa):

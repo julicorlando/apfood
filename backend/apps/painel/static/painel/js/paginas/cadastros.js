@@ -1,5 +1,5 @@
 // Cadastros da loja (cardápio, clientes, entrega, financeiro).
-import { del, ehGerente, get, lista, patch, post, put } from "../api.js";
+import { del, ehGerente, get, lista, patch, post, put, sessao } from "../api.js";
 import { paginaCadastro } from "../crud.js";
 import { formulario } from "../form.js";
 import {
@@ -308,6 +308,7 @@ export function clientes() {
       { rotulo: "Telefone", campo: "telefone" },
       { rotulo: "Bairro", valor: (c) => c.enderecos?.[0]?.bairro || "—" },
       { rotulo: "Cashback", classe: "num", valor: (c) => (c.saldo_cashback_centavos ? dinheiro(c.saldo_cashback_centavos) : "—") },
+      { rotulo: "Selos", classe: "num", valor: (c) => (c.selos_meta ? `${c.selos || 0}/${c.selos_meta}` : "—") },
       { rotulo: "Marketing", valor: (c) => simNao(c.aceita_marketing) },
     ],
     campos: [
@@ -447,8 +448,50 @@ export function mesasCadastro() {
       { nome: "ativa", rotulo: "Ativa", tipo: "bool" },
     ],
     podeExcluir: excluirGerente,
-    topo: () => ehGerente() ? h("button", { type: "button", class: "botao", onclick: () => criarVarias() }, "Criar várias") : null,
+    acoes: (m, recarregar) => m.token_qr ? botaoAcao("QR Code", () => qrDaMesa(m, recarregar), "botao botao-pequeno") : null,
+    topo: () => h("div", { class: "acoes" },
+      ehGerente() ? h("button", { type: "button", class: "botao", onclick: () => criarVarias() }, "Criar várias") : null,
+      h("button", { type: "button", class: "botao", onclick: () => imprimirQrs() }, "Imprimir QR de todas")),
   });
+}
+
+// QR Code da mesa: o cliente abre o cardápio no celular e o pedido cai na comanda da mesa
+const urlMesa = (m) => `${location.origin}/${sessao.loja?.slug || ""}/mesa/${m.token_qr}/`;
+const imgQr = (url, px = 220) => h("img", { src: `/painel/qrcode.svg?t=${encodeURIComponent(url)}`, alt: "QR Code", width: px, height: px });
+
+function qrDaMesa(m, recarregar) {
+  const url = urlMesa(m);
+  const mm = modal({
+    titulo: `QR Code — ${m.nome}`, tamanho: "modal-pequeno",
+    corpo: h("div", { style: { textAlign: "center" } }, imgQr(url, 240),
+      h("p", { class: "suave", style: { wordBreak: "break-all" } }, url),
+      h("p", { class: "suave" }, "O cliente lê com a câmera, escolhe e o pedido vai para a cozinha, na conta desta mesa.")),
+    rodape: [
+      h("a", { class: "botao", href: url, target: "_blank", rel: "noopener" }, "Abrir"),
+      ehGerente() ? botaoAcao("Gerar outro", async () => {
+        try { await post(`/api/mesas/${m.id}/novo-qr/`, {}); aviso("Novo QR gerado. Imprima de novo para esta mesa.", "ok"); mm.fechar(); recarregar(); } catch (e) { erro(e); }
+      }) : null,
+      botaoAcao("Imprimir", () => imprimirQrs([m]), "botao botao-primario"),
+    ],
+  });
+}
+
+async function imprimirQrs(mesas) {
+  mesas = mesas || (await lista("/api/mesas/", { ativa: "true" })).filter((m) => m.token_qr);
+  if (!mesas.length) { aviso("Cadastre as mesas primeiro."); return; }
+  const loja = sessao.loja?.nome || "";
+  const w = window.open("", "_blank");
+  if (!w) { aviso("Permita pop-ups para imprimir."); return; }
+  const cartoes = mesas.map((m) => `<div class="c"><h2>${m.nome.replace(/</g, "&lt;")}</h2>
+    <img src="${location.origin}/painel/qrcode.svg?t=${encodeURIComponent(urlMesa(m))}" width="200" height="200">
+    <p>Aponte a câmera e faça seu pedido</p><small>${loja.replace(/</g, "&lt;")}</small></div>`).join("");
+  w.document.write(`<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>QR das mesas</title><style>
+    body{font-family:system-ui,sans-serif;margin:0;padding:10mm}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm}
+    .c{border:1px dashed #999;border-radius:8px;padding:6mm;text-align:center;break-inside:avoid}
+    .c h2{margin:0 0 4mm;font-size:22px}.c p{margin:3mm 0 1mm;font-weight:600}.c small{color:#666}
+    @media print{body{padding:0}}</style></head><body><div class="g">${cartoes}</div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script></body></html>`);
+  w.document.close();
 }
 
 function criarVarias() {

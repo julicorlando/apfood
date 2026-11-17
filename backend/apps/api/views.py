@@ -166,7 +166,21 @@ class EntregadorViewSet(_EntregadorBase):
             raise PermissionDenied("requer gerente")
         token = self.get_object().gerar_link()
         return Response({"url": request.build_absolute_uri(f"/entrega/{token}/")})
-MesaViewSet = cadastro_viewset(Mesa, s.MesaSerializer, filtros=["area", "ativa"])
+_MesaBase = cadastro_viewset(Mesa, s.MesaSerializer, filtros=["area", "ativa"])
+
+
+class MesaViewSet(_MesaBase):
+    @action(detail=True, methods=["post"], url_path="novo-qr")
+    def novo_qr(self, request, pk=None):
+        """Gera outro QR Code (o impresso antes deixa de funcionar). Gerente+."""
+        from apps.salao.models import novo_token_qr
+
+        if not request.user.eh_gerente:
+            raise PermissionDenied("requer gerente")
+        mesa = self.get_object()
+        mesa.token_qr = novo_token_qr()
+        mesa.save(update_fields=["token_qr", "atualizado_em"])
+        return Response(self.get_serializer(mesa).data)
 FornecedorViewSet = cadastro_viewset(Fornecedor, s.FornecedorSerializer)
 CupomViewSet = cadastro_viewset(Cupom, s.CupomSerializer, filtros=["ativo"])
 _PromocaoBase = cadastro_viewset(Promocao, s.PromocaoSerializer, filtros=["ativa"], entidade="promocao")

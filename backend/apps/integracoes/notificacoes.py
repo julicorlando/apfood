@@ -9,7 +9,7 @@ MENSAGENS = {
     "RECEBIDO": "✅ *{loja}*: recebemos seu pedido *#{numero}*! Acompanhe: {link}",
     "EM_PREPARO": "👨‍🍳 Seu pedido *#{numero}* está sendo preparado.",
     "PRONTO": "🍔 Seu pedido *#{numero}* está pronto{retirada}.",
-    "SAIU_PARA_ENTREGA": "🛵 Seu pedido *#{numero}* saiu para entrega!",
+    "SAIU_PARA_ENTREGA": "🛵 Seu pedido *#{numero}* saiu para entrega! Acompanhe o entregador: {link}",
     "CONCLUIDO": "🙏 Obrigado por pedir na *{loja}*! Bom apetite.",
     "CANCELADO": "❌ Seu pedido *#{numero}* foi cancelado. {motivo}",
     "RECUSADO": "❌ Não conseguimos aceitar seu pedido *#{numero}*. {motivo}",

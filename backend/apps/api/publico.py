@@ -54,6 +54,9 @@ def dados_loja_publica(loja, request) -> dict:
         "entrega": ZonaEntrega.objects.ativos().filter(loja=loja, ativa=True).exists(),
         "retirada": True,
         "pix_online": Integracao.ativa(loja, "PAGAMENTO", "mercadopago") is not None,
+        "fidelidade": {"selos": loja.fidelidade_selos, "premio": loja.fidelidade_premio_descricao
+                       or (f"R$ {loja.fidelidade_premio_centavos / 100:.2f} de crédito".replace(".", ",")
+                           if loja.fidelidade_premio_centavos else "")} if loja.fidelidade_selos else None,
     }
 
 
@@ -164,12 +167,33 @@ class PedidoPublicoView(Publica):
         return Response(resposta, status=status.HTTP_201_CREATED)
 
 
+def rastreio_entrega(p) -> dict | None:
+    """Onde está o entregador (só enquanto o pedido está "saiu para entrega" e a
+    posição tem menos de 10 minutos)."""
+    from datetime import timedelta
+
+    from apfood_core.entrega import distancia_km
+
+    e = p.entregador if p.entregador_id else None
+    if p.status != "SAIU_PARA_ENTREGA" or e is None or e.latitude is None or not e.localizacao_em:
+        return None
+    if timezone.now() - e.localizacao_em > timedelta(minutes=10):
+        return None
+    r = {"entregador": e.nome.split(" ")[0], "latitude": float(e.latitude), "longitude": float(e.longitude),
+         "atualizado_em": e.localizacao_em}
+    if p.entrega_latitude is not None and p.entrega_longitude is not None:
+        km = distancia_km(float(e.latitude), float(e.longitude), float(p.entrega_latitude), float(p.entrega_longitude))
+        r.update(destino={"latitude": float(p.entrega_latitude), "longitude": float(p.entrega_longitude)},
+                 distancia_km=round(km, 1), minutos=max(1, round(km / 20 * 60)))  # ~20 km/h na cidade
+    return r
+
+
 class AcompanharPedidoView(Publica):
     def get(self, request, token):
         from apfood_core.enums import StatusPedido
         from apfood_core.pedido_status import ETAPA_CLIENTE
 
-        p = get_object_or_404(Pedido.objects.select_related("loja"), token_rastreio=token)
+        p = get_object_or_404(Pedido.objects.select_related("loja", "cliente", "entregador"), token_rastreio=token)
         prevista = next((x.forma for x in p.pagamentos.filter(status="PENDENTE")), "")
         return Response({
             "loja": p.loja.nome, "loja_slug": p.loja.slug, "whatsapp": p.loja.whatsapp or p.loja.telefone,
@@ -186,6 +210,80 @@ class AcompanharPedidoView(Publica):
             "criado_em": p.criado_em, "aceito_em": p.aceito_em, "saiu_entrega_em": p.saiu_entrega_em,
             "concluido_em": p.concluido_em, "motivo_cancelamento": p.motivo_cancelamento,
             "pago": sum(x.valor_centavos for x in p.pagamentos.filter(status="CONFIRMADO")) >= p.total_centavos,
+            "fidelidade": {"selos": p.cliente.selos, "meta": p.loja.fidelidade_selos,
+                           "saldo_centavos": p.cliente.saldo_cashback_centavos}
+            if p.cliente_id and p.loja.fidelidade_selos else None,
+            "rastreio": rastreio_entrega(p),
             "pix": next(({"valor_centavos": x.valor_centavos, **x.dados_externos}
                          for x in p.pagamentos.filter(status="PENDENTE", forma="PIX") if x.dados_externos), None),
         })
+
+
+# =============================================================================
+# Autoatendimento na mesa (QR Code)
+# =============================================================================
+def mesa_publica(loja, token):
+    from apps.salao.models import Mesa
+
+    mesa = Mesa.objects.ativos().filter(loja=loja, token_qr=token, ativa=True).first()
+    if mesa is None or not loja.pedido_na_mesa:
+        from django.http import Http404
+
+        raise Http404
+    return mesa
+
+
+def comanda_da_mesa(loja, mesa):
+    """Comanda aberta da mesa; abre uma se a mesa está livre."""
+    from apps.salao import services as salao_srv
+    from apps.salao.models import ABERTAS, Comanda
+
+    c = Comanda.objects.filter(loja=loja, mesa=mesa, status__in=ABERTAS).order_by("criado_em").first()
+    if c is None:
+        c = salao_srv.abrir(loja, None, mesa=mesa)
+    return c
+
+
+class MesaPublicaView(Publica):
+    """GET: conta parcial da mesa (o cliente vê o que já pediu)."""
+
+    def get(self, request, slug, token):
+        from apps.pedidos.services import total_pago
+        from apps.salao.models import ABERTAS, Comanda
+
+        loja = loja_publica(slug)
+        mesa = mesa_publica(loja, token)
+        c = Comanda.objects.filter(loja=loja, mesa=mesa, status__in=ABERTAS).first()
+        if c is None:
+            return Response({"mesa": mesa.nome, "aberta": False, "itens": [], "total_centavos": 0, "pago_centavos": 0})
+        itens = [{"quantidade": i.quantidade, "nome": i.nome_produto, "total_centavos": i.total_centavos}
+                 for p in c.pedidos.exclude(status__in=["CANCELADO", "RECUSADO"]).prefetch_related("itens")
+                 for i in p.itens.all()]
+        return Response({"mesa": mesa.nome, "aberta": True, "status": c.status, "itens": itens,
+                         "subtotal_centavos": c.subtotal_centavos, "taxa_servico_centavos": c.taxa_servico_centavos,
+                         "total_centavos": c.total_centavos, "pago_centavos": total_pago(comanda=c)})
+
+
+class PedidoMesaView(Publica):
+    throttle_scope = "publico_pedido"
+
+    def post(self, request, slug, token):
+        from apps.core.excecoes import ErroNegocio
+
+        from .views import pedido_in
+
+        loja = loja_publica(slug)
+        if not loja.aberta_para_pedidos:
+            raise ErroNegocio("a loja não está recebendo pedidos agora — chame o garçom")
+        mesa = mesa_publica(loja, token)
+        entrada = s.PedidoMesaIn(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        comanda = comanda_da_mesa(loja, mesa)
+        if comanda.status != "ABERTA":
+            raise ErroNegocio("a conta desta mesa já foi pedida — chame o garçom para pedir mais")
+        dados = {**entrada.validated_data, "comanda": comanda.id, "mesa": mesa.nome[:10]}
+        dados["observacao"] = ("[pedido pelo QR da mesa] " + dados.get("observacao", "")).strip()
+        pedido = pedidos_srv.criar_pedido(loja, pedido_in(dados, loja))
+        return Response({"token": pedido.token_rastreio, "numero": pedido.numero, "status": pedido.status,
+                         "total_centavos": pedido.total_centavos, "mesa": mesa.nome,
+                         "acompanhar": f"/pedido/{pedido.token_rastreio}/"}, status=status.HTTP_201_CREATED)

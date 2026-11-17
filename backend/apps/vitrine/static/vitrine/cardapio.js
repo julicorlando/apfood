@@ -7,7 +7,8 @@
   const LOJA = DADOS.loja;
   const API = "/api/publico/lojas/" + encodeURIComponent(LOJA.slug) + "/";
   const idx = C.indexar(DADOS);
-  const carrinho = new C.Carrinho(LOJA.slug);
+  const MESA = DADOS.mesa || null;  // autoatendimento pelo QR Code da mesa
+  const carrinho = new C.Carrinho(MESA ? LOJA.slug + ":mesa:" + MESA.token : LOJA.slug);
   const estado = {
     tipo: LOJA.entrega ? "ENTREGA" : "RETIRADA", taxa: null, taxaErro: "", coords: null, cupom: null,
     pagamento: LOJA.pix_online ? "PIX" : "DINHEIRO", enviando: false,
@@ -88,8 +89,10 @@
       el("div", { class: "info" }, [el("span", { class: "selo" + (LOJA.aberta ? "" : " fechada"), text: LOJA.aberta ? "Aberto agora" : "Fechado" }),
         " " + info.join(" · ")]),
       LOJA.endereco ? el("div", { class: "info", text: "📍 " + LOJA.endereco }) : null,
+      LOJA.fidelidade ? el("div", { class: "info fid-topo", text: "⭐ Cartão fidelidade: a cada " + LOJA.fidelidade.selos +
+        " pedidos você ganha " + (LOJA.fidelidade.premio || "um prêmio") + "." }) : null,
     ])]));
-    if (!LOJA.aberta) {
+    if (!LOJA.aberta && !MESA) {
       let quando = "";
       if (LOJA.proxima_abertura) {
         const d = new Date(LOJA.proxima_abertura);
@@ -324,7 +327,7 @@
     }
     render();
     const continuar = el("button", { class: "btn", onclick: abrirCheckout }, [el("span", { text: "Continuar" }), el("span", { text: "→" })]);
-    if (!LOJA.aberta) { continuar.disabled = true; continuar.replaceChildren(el("span", { text: "Loja fechada no momento" })); }
+    if (!LOJA.aberta && !MESA) { continuar.disabled = true; continuar.replaceChildren(el("span", { text: "Loja fechada no momento" })); }
     abrirFolha("Seu pedido", corpo, continuar);
   }
 
@@ -332,7 +335,80 @@
   const PERFIL = "apfood_cliente";
   function perfil() { try { return JSON.parse(localStorage.getItem(PERFIL) || "{}"); } catch (e) { return {}; } }
 
+  // ------------------------------------------------------------ mesa (QR Code)
+  function faixaMesa() {
+    return el("div", { class: "faixa-mesa" }, [
+      el("div", {}, [el("strong", { text: "🍽️ " + MESA.nome }), el("div", { text: "Seu pedido vai direto para a cozinha e entra na conta da mesa." })]),
+      el("button", { type: "button", class: "btn secundario", text: "Ver minha conta", onclick: verContaMesa }),
+    ]);
+  }
+
+  async function verContaMesa() {
+    const corpo = el("div", { class: "corpo" }, [el("p", { text: "Carregando…" })]);
+    abrirFolha("Conta — " + MESA.nome, corpo, el("button", { class: "btn", text: "Fechar", onclick: function () { fecharFolha(); } }));
+    try {
+      const r = await fetch(API + "mesa/" + encodeURIComponent(MESA.token) + "/", { headers: { Accept: "application/json" } });
+      const d = await r.json();
+      corpo.replaceChildren();
+      if (!d.aberta || !d.itens.length) { corpo.appendChild(el("p", { text: "Nada pedido ainda nesta mesa." })); return; }
+      d.itens.forEach(function (i) {
+        corpo.appendChild(el("div", { class: "item-car" }, [el("div", { class: "txt" }, [el("b", { text: i.quantidade + "× " + i.nome })]),
+          el("div", { text: C.reais(i.total_centavos) })]));
+      });
+      const linhas = [["Consumo", d.subtotal_centavos]];
+      if (d.taxa_servico_centavos) linhas.push(["Serviço", d.taxa_servico_centavos]);
+      if (d.pago_centavos) linhas.push(["Já pago", -d.pago_centavos]);
+      corpo.appendChild(el("div", { class: "resumo" }, linhas.map(function ([a, v]) {
+        return el("div", {}, [el("span", { text: a }), el("span", { text: (v < 0 ? "−" : "") + C.reais(Math.abs(v)) })]);
+      }).concat([el("div", { class: "total" }, [el("span", { text: "Falta pagar" }), el("span", { text: C.reais(Math.max(0, d.total_centavos - d.pago_centavos)) })])])));
+      corpo.appendChild(el("p", { class: "ok", text: "Para pagar, chame o garçom ou vá ao caixa." }));
+    } catch (e) {
+      corpo.replaceChildren(el("p", { class: "erros", text: "Não foi possível carregar a conta." }));
+    }
+  }
+
+  function abrirCheckoutMesa() {
+    const corpo = el("div", { class: "corpo" });
+    const nome = el("input", { name: "nome", maxlength: "120", placeholder: "Opcional — para o garçom saber de quem é" });
+    nome.value = perfil().nome || "";
+    const obs = el("textarea", { placeholder: "Ex.: sem cebola, trazer junto (opcional)", maxlength: "500" });
+    const erros = el("p", { class: "erros", role: "alert" });
+    const enviar = el("button", { class: "btn" });
+    const t = C.totais(idx, carrinho.itens, 0, 0);
+    corpo.appendChild(el("p", { class: "ok", text: "Pedido para a " + MESA.nome + ". Você paga no fim, com o garçom ou no caixa." }));
+    corpo.appendChild(el("label", { class: "campo" }, [el("span", { text: "Seu nome" }), nome]));
+    corpo.appendChild(el("label", { class: "campo" }, [el("span", { text: "Observação" }), obs]));
+    corpo.appendChild(el("div", { class: "resumo" }, [el("div", { class: "total" }, [el("span", { text: "Total deste pedido" }), el("span", { text: C.reais(t.total) })])]));
+    let enviando = false;
+    function rotulo() { enviar.replaceChildren(el("span", { text: enviando ? "Enviando…" : "Enviar para a cozinha" }), el("span", { text: C.reais(t.total) })); enviar.disabled = enviando; }
+    enviar.addEventListener("click", async function () {
+      erros.textContent = "";
+      enviando = true; rotulo();
+      try {
+        const r = await post("mesa/" + encodeURIComponent(MESA.token) + "/pedidos/", {
+          nome_cliente: nome.value.trim(), observacao: obs.value.trim(),
+          itens: carrinho.itens.map(function (i) {
+            return { produto_id: i.produto_id, quantidade: i.quantidade, variacao_id: i.variacao_id || null,
+              sabores: i.sabores || [], adicionais: i.adicionais || [], observacao: i.observacao || "" };
+          }),
+        });
+        carrinho.limpar();
+        renderBarra();
+        abrirFolha("Pedido enviado!", el("div", { class: "corpo" }, [
+          el("p", { class: "ok", text: "Pedido #" + (r.numero || "") + " enviado para a cozinha. Quer mais alguma coisa? É só pedir de novo por aqui." }),
+          el("a", { class: "btn secundario", href: r.acompanhar, text: "Acompanhar o preparo" }),
+        ]), el("button", { class: "btn", text: "Voltar ao cardápio", onclick: function () { fecharFolha(); } }));
+      } catch (e) {
+        enviando = false; rotulo();
+        erros.textContent = e.message;
+      }
+    });
+    rotulo();
+    abrirFolha("Enviar pedido", corpo, [enviar, erros]);
+  }
+
   function abrirCheckout() {
+    if (MESA) return abrirCheckoutMesa();
     const salvo = perfil();
     const f = {};
     function campo(nome, rotulo, attrs) {
@@ -525,7 +601,7 @@
 
   // ------------------------------------------------------------------- início
   renderTopo();
-  renderMeusPedidos();
+  if (MESA) $("#topo").appendChild(faixaMesa()); else renderMeusPedidos();
   renderCardapio("");
   const removidos = carrinho.sanear(idx);
   renderBarra();
