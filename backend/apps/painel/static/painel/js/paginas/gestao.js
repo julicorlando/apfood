@@ -2,9 +2,9 @@
 import { ehGerente, get, lista, patch, post } from "../api.js";
 import { paginaCadastro } from "../crud.js";
 import {
-  abas, aviso, barras, botaoAcao, centavos, data, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, kpi, modal, pedirTexto, rotulo, tabela, trocar,
+  abas, aviso, barras, botaoAcao, centavos, confirmar, data, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, kpi, modal, pedirTexto, reais, rotulo, tabela, trocar,
 } from "../ui.js";
-import { imprimirLinhas, mostrarCupom } from "./comum.js";
+import { cartaoDelivery, imprimirLinhas, mostrarCupom } from "./comum.js";
 
 // ---------------------------------------------------------------- período
 function seletorPeriodo(aoMudar) {
@@ -147,6 +147,141 @@ export function operadores() {
   });
 }
 
+export function acertoEntregadores() {
+  return {
+    titulo: "Acerto de entregadores",
+    async render(raiz) {
+      const area = h("div");
+      trocar(raiz, h("p", { class: "muted" }, "Entregas concluídas ainda não acertadas. Ganhos seguem a regra do cadastro de cada entregador "
+        + "(taxa de entrega ou valor fixo); “em mãos” é o dinheiro que ele cobrou dos clientes na entrega. "
+        + "Saldo positivo: a loja paga; negativo: o entregador devolve."), area);
+      async function carregar() {
+        const r = await get("/api/acertos-entregador/");
+        const totais = r.pendentes.reduce((t, x) => ({ ent: t.ent + x.entregas, saldo: t.saldo + x.saldo_centavos }), { ent: 0, saldo: 0 });
+        trocar(area,
+          h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+            kpi("Entregas a acertar", String(totais.ent)), kpi("Saldo total", dinheiro(totais.saldo), "a pagar aos entregadores")),
+          h("div", { class: "cartao", style: { marginBottom: "16px" } }, h("h2", null, "A acertar"),
+            tabela([
+              { rotulo: "Entregador", valor: (x) => h("div", null, h("strong", null, x.entregador), h("div", { class: "muted" }, x.regra)) },
+              { rotulo: "Período", valor: (x) => `${data(x.desde)} a ${data(x.ate)}` },
+              { rotulo: "Entregas", classe: "num", campo: "entregas" },
+              { rotulo: "Ganhos", classe: "num", valor: (x) => dinheiro(x.ganhos_centavos) },
+              { rotulo: "Em mãos", classe: "num", valor: (x) => dinheiro(x.em_maos_centavos) },
+              { rotulo: "Saldo", classe: "num", valor: (x) => h("strong", { style: { color: x.saldo_centavos < 0 ? "var(--erro)" : "" } }, dinheiro(x.saldo_centavos)) },
+              { rotulo: "", classe: "acoes-linha", valor: (x) => ehGerente() ? botaoAcao("Registrar acerto", () => registrar(x), "botao botao-primario botao-pequeno") : null },
+            ], r.pendentes, { vazio: "Nenhuma entrega pendente de acerto." })),
+          h("div", { class: "cartao" }, h("h2", null, "Acertos feitos"),
+            tabela([
+              { rotulo: "Quando", valor: (a) => dataHora(a.em) },
+              { rotulo: "Entregador", campo: "entregador" },
+              { rotulo: "Período", valor: (a) => `${data(a.inicio)} a ${data(a.fim)}` },
+              { rotulo: "Entregas", classe: "num", campo: "entregas" },
+              { rotulo: "Pago", classe: "num", valor: (a) => dinheiro(a.pago_centavos) },
+              { rotulo: "", classe: "acoes-linha", valor: (a) => botaoAcao("Recibo", async () => {
+                const rr = await get(`/api/acertos-entregador/${a.id}/recibo/`);
+                mostrarCupom(rr.linhas, { titulo: "Recibo de acerto" });
+              }, "botao botao-pequeno") },
+            ], r.acertos, { vazio: "Nenhum acerto registrado." })));
+      }
+      function registrar(x) {
+        const valor = h("input", { type: "text", inputmode: "decimal", value: reais(Math.max(0, x.saldo_centavos)) });
+        const obs = h("input", { type: "text", placeholder: "Ex.: pago no Pix" });
+        const despesa = h("input", { type: "checkbox", checked: true });
+        const m = modal({
+          titulo: `Acerto — ${x.entregador}`, tamanho: "modal-pequeno",
+          corpo: h("div", { class: "grade" },
+            h("ul", { class: "lista-simples" },
+              h("li", null, `${x.entregas} entrega(s)`, h("span", { class: "num" }, `${data(x.desde)} a ${data(x.ate)}`)),
+              h("li", null, "Ganhos", h("span", { class: "num" }, dinheiro(x.ganhos_centavos))),
+              h("li", null, "Dinheiro em mãos", h("span", { class: "num" }, `− ${dinheiro(x.em_maos_centavos)}`)),
+              h("li", { class: "negrito" }, "Saldo", h("span", { class: "num" }, dinheiro(x.saldo_centavos)))),
+            h("label", { class: "campo" }, h("span", null, "Valor pago agora (R$)"), valor),
+            h("label", { class: "campo" }, h("span", null, "Observação"), obs),
+            h("label", { class: "check" }, despesa, h("span", null, "Lançar em Contas a pagar como paga"))),
+          rodape: [botaoAcao("Registrar e emitir recibo", async () => {
+            const r = await post("/api/acertos-entregador/", { entregador_id: x.entregador_id, pago_centavos: centavos(valor.value) || 0,
+              observacao: obs.value, gerar_despesa: despesa.checked });
+            m.fechar();
+            aviso("Acerto registrado.", "ok");
+            mostrarCupom(r.linhas, { titulo: "Recibo de acerto" });
+            carregar();
+          }, "botao botao-primario")],
+        });
+      }
+      await carregar();
+    },
+  };
+}
+
+export function garcons() {
+  return paginaRelatorio("Taxa de serviço por garçom", async (area, q) => {
+    const r = await get(`/api/relatorios/garcons/?${q}`);
+    trocar(area,
+      h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+        kpi("Taxa de serviço no período", dinheiro(r.total_taxa_centavos), `${r.comandas} comanda(s) fechada(s)`)),
+      h("p", { class: "muted" }, "A taxa de cada comanda é dividida entre quem lançou os pedidos, na proporção do valor que cada um lançou. "
+        + "Pedidos feitos pelo QR da mesa ficam em “Autoatendimento”."),
+      tabela([
+        { rotulo: "Garçom", valor: (g) => h("strong", null, g.garcom) },
+        { rotulo: "Comandas", classe: "num", campo: "comandas" },
+        { rotulo: "Vendas lançadas", classe: "num", valor: (g) => dinheiro(g.vendas_centavos) },
+        { rotulo: "Taxa de serviço", classe: "num", valor: (g) => h("strong", null, dinheiro(g.taxa_centavos)) },
+      ], r.garcons, { vazio: "Nenhuma comanda fechada no período." }));
+  });
+}
+
+export function rede() {
+  return paginaRelatorio("Visão da rede", async (area, q) => {
+    const r = await get(`/api/rede/?${q}`, { semLoja: true });
+    const t = r.total;
+    trocar(area,
+      h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+        kpi("Faturamento da rede", dinheiro(t.faturamento_centavos), `${r.lojas.length} loja(s)`),
+        kpi("Pedidos", String(t.pedidos)), kpi("Ticket médio", dinheiro(t.ticket_medio_centavos)), kpi("Cancelados", String(t.cancelados))),
+      h("div", { class: "cartao", style: { marginBottom: "16px" } }, h("h2", null, "Por loja"),
+        tabela([
+          { rotulo: "Loja", valor: (l) => h("div", null, h("strong", null, l.loja), l.cidade ? h("div", { class: "muted" }, l.cidade) : null) },
+          { rotulo: "Faturamento", classe: "num", valor: (l) => h("strong", null, dinheiro(l.faturamento_centavos)) },
+          { rotulo: "% da rede", classe: "num", valor: (l) => h("div", { class: "barra-rede" },
+            h("div", { class: "cheio", style: { width: `${l.participacao}%` } }), h("span", null, `${String(l.participacao).replace(".", ",")}%`)) },
+          { rotulo: "Pedidos", classe: "num", campo: "pedidos" },
+          { rotulo: "Ticket", classe: "num", valor: (l) => dinheiro(l.ticket_medio_centavos) },
+          { rotulo: "Entregas", classe: "num", campo: "entregas" },
+          { rotulo: "Online", classe: "num", campo: "online" },
+          { rotulo: "Cancelados", classe: "num", campo: "cancelados" },
+          { rotulo: "Nota", classe: "num", valor: (l) => (l.nota_media ? `${String(l.nota_media).replace(".", ",")} ★` : "—") },
+        ], r.lojas, { vazio: "Nenhuma loja." })),
+      r.lojas.length > 1 ? cartaoReplicar(r.lojas) : h("p", { class: "muted" }, "Cadastre mais lojas em Configurações → Lojas para comparar e replicar o cardápio."));
+  });
+}
+
+function cartaoReplicar(lojas) {
+  const origem = h("select", null, lojas.map((l) => h("option", { value: l.loja_id }, l.loja)));
+  const destinos = h("div", { class: "grade", style: { gap: "6px" } });
+  const somente = h("input", { type: "checkbox" });
+  const desenhar = () => trocar(destinos, lojas.filter((l) => l.loja_id !== origem.value).map((l) =>
+    h("label", { class: "check" }, h("input", { type: "checkbox", value: l.loja_id, checked: true }), h("span", null, l.loja))));
+  origem.addEventListener("change", desenhar);
+  desenhar();
+  return h("div", { class: "cartao" }, h("h2", null, "Replicar cardápio entre lojas"),
+    h("p", { class: "muted" }, "Copia categorias, produtos, tamanhos e adicionais da loja de origem (casando pelo nome). "
+      + "Produtos que já existem no destino têm o preço atualizado. Ficha técnica e estoque não são copiados."),
+    h("div", { class: "form-grade" },
+      h("label", { class: "campo" }, h("span", null, "Loja de origem"), origem),
+      h("div", { class: "campo" }, h("span", null, "Para as lojas"), destinos),
+      h("label", { class: "check largo" }, somente, h("span", null, "Só atualizar preços (não criar itens novos)"))),
+    h("div", { class: "acoes", style: { marginTop: "12px" } }, botaoAcao("Replicar", async () => {
+      const ids = [...destinos.querySelectorAll("input:checked")].map((i) => i.value);
+      if (!ids.length) { aviso("Escolha pelo menos uma loja de destino.", "erro"); return; }
+      if (!(await confirmar(`Replicar o cardápio de ${origem.selectedOptions[0].textContent} para ${ids.length} loja(s)?`))) return;
+      const r = await post("/api/rede/replicar/", { origem: origem.value, destinos: ids, somente_precos: somente.checked }, { semLoja: true });
+      modal({ titulo: "Cardápio replicado", tamanho: "modal-pequeno", corpo: h("ul", { class: "lista-simples" },
+        Object.entries(r.resultado).map(([loja, c]) => h("li", null, h("strong", null, loja),
+          h("span", { class: "muted" }, `${c.produtos_novos} novo(s), ${c.produtos_atualizados} atualizado(s), ${c.categorias} categoria(s)`)))) });
+    }, "botao botao-primario")));
+}
+
 export function avaliacoes() {
   return paginaRelatorio("Avaliações dos clientes", async (area, q) => {
     const r = await get(`/api/relatorios/avaliacoes/?${q}`);
@@ -178,7 +313,8 @@ export function fechamentos() {
     const r = await get(`/api/relatorios/fechamentos/?${q}`);
     const dif = (v) => h("span", { class: v ? (v > 0 ? "etiqueta e-info" : "etiqueta e-erro") : "etiqueta e-ok" }, v ? dinheiro(v) : "ok");
     trocar(area, 
-      h("h2", null, "Por operador"),
+      cartaoDelivery(r.delivery),
+      h("h2", { style: { marginTop: "16px" } }, "Por operador"),
       tabela([
         { rotulo: "Operador", campo: "operador" },
         { rotulo: "Caixas", classe: "num", campo: "turnos" },

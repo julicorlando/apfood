@@ -295,7 +295,8 @@ export async function abrirPedido(id, { aoMudar } = {}) {
         etiquetaStatus("StatusPedido", p.status), h("span", { class: "etiqueta" }, rotulo("CanalVenda", p.canal)),
         h("span", { class: "etiqueta" }, rotulo("TipoAtendimento", p.tipo_atendimento)),
         p.marketplace ? h("span", { class: "etiqueta e-cor" }, rotulo("Marketplace", p.marketplace)) : null,
-        h("span", { class: "muted" }, dataHora(p.criado_em))),
+        h("span", { class: "muted" }, dataHora(p.criado_em)),
+        p.agendado_para ? h("span", { class: "etiqueta e-info" }, `📅 Agendado para ${dataHora(p.agendado_para)}`) : null),
       h("div", { class: "grade grade-2" },
         h("div", null,
           h("h3", null, "Itens"),
@@ -448,6 +449,30 @@ export async function abrirPedido(id, { aoMudar } = {}) {
     atualizarChamada().then(acompanhar).catch(() => {});
   }
   return m;
+}
+
+// Delivery no fechamento de caixa (gerente/administrador): pago online × na entrega × a receber, por entregador
+export function cartaoDelivery(d, titulo = "Delivery no período") {
+  if (!d || !d.pedidos) return h("div", { class: "cartao" }, h("h2", null, titulo), h("p", { class: "muted" }, "Nenhuma entrega concluída no período."));
+  const linhas = (obj) => Object.entries(obj).map(([f, v]) => h("li", null, rotulo("FormaPagamento", f), h("span", { class: "num" }, dinheiro(v))));
+  return h("div", { class: "cartao" }, h("h2", null, `🛵 ${titulo}`),
+    h("div", { class: "grade grade-kpi", style: { marginBottom: "12px" } },
+      h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Entregas"), h("div", { class: "kpi-valor" }, String(d.pedidos)),
+        h("div", { class: "kpi-detalhe" }, `${dinheiro(d.total_centavos)} · taxas ${dinheiro(d.taxas_centavos)}`)),
+      h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Pago online"), h("div", { class: "kpi-valor" }, dinheiro(d.online_centavos))),
+      h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "Recebido na entrega"), h("div", { class: "kpi-valor" }, dinheiro(d.na_entrega_centavos))),
+      h("div", { class: "kpi" }, h("div", { class: "kpi-rotulo" }, "A receber"),
+        h("div", { class: "kpi-valor", style: { color: d.a_receber_centavos ? "var(--erro)" : "" } }, dinheiro(d.a_receber_centavos)),
+        h("div", { class: "kpi-detalhe" }, "entregue sem pagamento registrado"))),
+    h("div", { class: "grade grade-2" },
+      h("div", null, h("h3", null, "Por forma de pagamento"),
+        h("ul", { class: "lista-simples" }, ...linhas(d.online).map((li) => { li.firstChild.textContent = `Online · ${li.firstChild.textContent}`; return li; }),
+          ...linhas(d.na_entrega).map((li) => { li.firstChild.textContent = `Na entrega · ${li.firstChild.textContent}`; return li; }))),
+      h("div", null, h("h3", null, "Por entregador"),
+        h("ul", { class: "lista-simples" }, d.por_entregador.map((e) => h("li", null,
+          h("span", null, `${e.entregador} (${e.entregas})`, e.dinheiro_centavos ? h("span", { class: "muted" }, ` · dinheiro ${dinheiro(e.dinheiro_centavos)}`) : null,
+            e.a_receber_centavos ? h("span", { class: "etiqueta e-erro", style: { marginLeft: "6px" } }, `falta ${dinheiro(e.a_receber_centavos)}`) : null),
+          h("span", { class: "num" }, dinheiro(e.total_centavos))))))));
 }
 
 export { opcoes, sessao };

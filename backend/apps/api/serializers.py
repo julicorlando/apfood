@@ -355,6 +355,8 @@ class PedidoIn(serializers.Serializer):
 class PedidoOnlineIn(PedidoIn):
     """Cardápio público: canal fixo ONLINE, sem desconto/taxa manual."""
 
+    agendado_para = serializers.DateTimeField(required=False, allow_null=True)
+
     canal = serializers.HiddenField(default=CanalVenda.ONLINE)
     tipo_atendimento = serializers.ChoiceField([TipoAtendimento.ENTREGA.value, TipoAtendimento.RETIRADA.value])
     nome_cliente = serializers.CharField(max_length=120)

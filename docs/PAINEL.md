@@ -156,6 +156,20 @@ Limite atual: o alerta toca com o app aberto (tela acesa enquanto disponível). 
 
 Depois de concluído, o cliente vê **“Como foi seu pedido?”** (1 a 5 estrelas + comentário, opcional, uma vez) na tela de acompanhamento; a mensagem de WhatsApp de pedido entregue traz o link. O painel avisa a cada avaliação e **Relatórios → Avaliações** mostra média, distribuição, % de clientes que avaliaram e os comentários.
 
+## Recursos para as lojas (pacote 2)
+
+- **Push (Firebase)** — com o app fechado: *pedido novo* (feito pelo cliente), *ninguém aceitou a entrega*, *lembrete de agendado* e *reserva nova* no app Empresa; *chamada de entrega* no app Entregador. Liga com dois segredos: `ANDROID_GOOGLE_SERVICES_B64` (GitHub, `google-services.json` em base64 — os APKs passam a incluir o Firebase) e `APFOOD_FCM_CREDENCIAIS` (servidor, JSON da conta de serviço em base64). Sem eles, tudo segue funcionando sem push.
+- **Entregador com a tela bloqueada** — o app aparece por cima do bloqueio e acende a tela; a chamada vira notificação de prioridade máxima, visível no bloqueio, com **Aceitar** (abre o app e confirma) e **Recusar** (responde sem abrir). Com o Firebase, chega mesmo com o app fechado.
+- **Acerto de entregadores** (Financeiro) — entregas ainda não acertadas por entregador: ganhos (regra do cadastro), dinheiro dos clientes que ficou com ele e saldo. *Registrar acerto* vincula as entregas, lança em Contas a pagar (opcional) e emite recibo. O entregador vê “a receber” e os acertos no app.
+- **Delivery no fechamento de caixa** — gerente/administrador vê, na tela do caixa, no cupom de fechamento e em Relatórios → Fechamentos: entregas concluídas no período, pago online × recebido na entrega (por forma), **a receber** e o total por entregador.
+- **Cartão online no cardápio** — “Cartão agora (crédito/débito)” abre o Checkout do Mercado Pago da loja; o webhook confirma e o acompanhamento mostra “Pagar com cartão” enquanto estiver pendente.
+- **Pedido agendado / encomenda** — Configurações da loja → Agendamento: o cliente escolhe dia e horário (dentro do funcionamento, com antecedência mínima, até N dias), inclusive com a loja fechada. O pedido chega com a etiqueta 📅 e um lembrete toca na hora de preparar.
+- **Reconquista** — WhatsApp automático (10h–20h) para quem não pede há N dias e para aniversariantes, com cupom opcional (só clientes que aceitaram ofertas). **Indicação**: cada cliente tem um código; o amigo ganha desconto no 1º pedido e quem indicou ganha cashback quando o amigo recebe.
+- **Reservas** (Operação → Reservas) — pelo link da loja (“Reservar mesa”) ou no painel; confirmar, mesa, chegou (abre a comanda), não veio, cancelar — com WhatsApp ao cliente.
+- **Taxa de serviço por garçom** (Relatórios) — os 10% de cada comanda fechada divididos pelo que cada um lançou.
+- **Visão da rede** (Relatórios, administrador com 2+ lojas) — faturamento, pedidos, ticket, entregas, cancelados e nota por loja; **replicar cardápio** (ou só preços) de uma loja para outras.
+- **Totem de autoatendimento** — Configurações da loja → Totem: link secreto para um tablet no balcão. Tela de início, comer aqui/para levar, pagar no caixa ou Pix, senha grande no final e reinício automático.
+
 ## Faturamento por operador
 
 Relatórios → **Por operador** (gerente/admin): para cada usuário no período, pedidos lançados e concluídos (valor), cancelados, ticket médio e quanto **recebeu** (pagamentos confirmados por ele, por forma de pagamento). Base em `GET /api/relatorios/operadores/?inicio=&fim=`.

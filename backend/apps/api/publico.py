@@ -1,5 +1,6 @@
 """API pública do cardápio digital (sem login). Escopo pela `slug` da loja."""
 
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -54,10 +55,19 @@ def dados_loja_publica(loja, request) -> dict:
         "entrega": ZonaEntrega.objects.ativos().filter(loja=loja, ativa=True).exists(),
         "retirada": True,
         "pix_online": Integracao.ativa(loja, "PAGAMENTO", "mercadopago") is not None,
+        "agendamento": _agendamento(loja),
+        "reservas": loja.aceita_reservas,
         "fidelidade": {"selos": loja.fidelidade_selos, "premio": loja.fidelidade_premio_descricao
                        or (f"R$ {loja.fidelidade_premio_centavos / 100:.2f} de crédito".replace(".", ",")
                            if loja.fidelidade_premio_centavos else "")} if loja.fidelidade_selos else None,
     }
+
+
+def _agendamento(loja):
+    from apps.pedidos import agendados
+
+    dias = agendados.horarios_disponiveis(loja)
+    return {"dias": dias} if dias else None
 
 
 def dados_cardapio(loja, request) -> dict:
@@ -164,6 +174,9 @@ class PedidoPublicoView(Publica):
             if Integracao.ativa(loja, "PAGAMENTO", "mercadopago"):
                 pg = pedidos_srv.cobrar_pix(pedido=pedido)
                 resposta["pix"] = {"valor_centavos": pg.valor_centavos, **pg.dados_externos}
+        if request.data.get("pagar_cartao_agora"):
+            pg = pedidos_srv.cobrar_cartao(pedido=pedido)
+            resposta["cartao_url"] = pg.dados_externos.get("checkout_url", "")
         return Response(resposta, status=status.HTTP_201_CREATED)
 
 
@@ -221,6 +234,10 @@ class AcompanharPedidoView(Publica):
             and p.status in ("RECEBIDO", "EM_PREPARO", "PRONTO", "SAIU_PARA_ENTREGA") else None,
             "entregador": p.entregador.nome.split()[0] if p.entregador_id and p.entregador.nome else None,
             "avaliacao": _avaliacao(p),
+            "cartao_url": next((x.dados_externos.get("checkout_url") for x in p.pagamentos.filter(status="PENDENTE")
+                                if (x.dados_externos or {}).get("checkout_url")), None),
+            "agendado_para": p.agendado_para,
+            "indicacao": _indicacao(p),
             "pode_avaliar": p.status == "CONCLUIDO" and _avaliacao(p) is None,
         })
 
@@ -246,6 +263,16 @@ class AcompanharPedidoView(Publica):
 
         publicar(grupo_pdv(p.loja_id), "pedido.avaliado", {"numero": p.numero, "nota": nota})
         return Response({"nota": a.nota, "comentario": a.comentario}, status=201)
+
+
+def _indicacao(p):
+    if not (p.cliente_id and p.loja.indicacao_ativa and p.status == "CONCLUIDO"):
+        return None
+    from apps.marketing.reconquista import codigo_indicacao
+
+    return {"codigo": codigo_indicacao(p.cliente), "desconto_centavos": p.loja.indicacao_desconto_centavos,
+            "premio_centavos": p.loja.indicacao_premio_centavos,
+            "link": settings.APFOOD["URL_PUBLICA"].rstrip("/") + f"/{p.loja.slug}/"}
 
 
 def _avaliacao(p):
@@ -402,3 +429,69 @@ class LojasPublicasView(Publica):
             "entrega": lj.id in com_entrega, "pedido_minimo_centavos": lj.pedido_minimo_centavos,
             "promocoes": promos.get(lj.id, [])[:2],
         }
+
+
+class ReservaPublicaView(Publica):
+    """POST /api/publico/lojas/<slug>/reservas/ {nome, telefone, pessoas, data_hora, observacao}"""
+
+    throttle_scope = "publico_pedido"
+
+    def post(self, request, slug):
+        from django.utils.dateparse import parse_datetime
+
+        from apps.salao import reservas
+
+        loja = loja_publica(slug)
+        quando = parse_datetime(str(request.data.get("data_hora", "")))
+        if quando is None:
+            return Response({"data_hora": ["escolha dia e horário"]}, status=400)
+        try:
+            pessoas = int(request.data.get("pessoas") or 0)
+        except (TypeError, ValueError):
+            pessoas = 0
+        r = reservas.criar_publica(loja, nome=str(request.data.get("nome", "")), telefone=str(request.data.get("telefone", "")),
+                                   pessoas=pessoas, data_hora=quando, observacao=str(request.data.get("observacao", "")))
+        return Response({"id": str(r.id), "status": r.status,
+                         "quando": timezone.localtime(r.data_hora).strftime("%d/%m às %H:%M")}, status=201)
+
+
+class TotemPedidoView(Publica):
+    """POST /api/publico/lojas/<slug>/totem/<token>/pedidos/
+    {tipo_atendimento: CONSUMO_LOCAL|RETIRADA, nome_cliente, observacao, itens, pagar_pix}
+    Pedido de balcão feito no totem: recebe a senha (ex.: 0124) e paga no caixa ou no Pix."""
+
+    throttle_scope = "publico_pedido"
+
+    def post(self, request, slug, token):
+        import secrets
+
+        from apfood_core.enums import CanalVenda, TipoAtendimento
+
+        loja = loja_publica(slug)
+        if not loja.token_totem or not secrets.compare_digest(loja.token_totem, token):
+            return Response({"detail": "Totem desativado. Chame um atendente."}, status=404)
+        tipo = request.data.get("tipo_atendimento")
+        if tipo not in ("CONSUMO_LOCAL", "RETIRADA"):
+            return Response({"detail": "Escolha comer aqui ou para levar."}, status=400)
+        from .views import pedido_in
+
+        if not (loja.ativa and loja.empresa.liberada):
+            return Response({"detail": "Totem indisponível. Chame um atendente."}, status=400)
+        entrada = s.ItemIn(many=True, data=request.data.get("itens") or [])
+        entrada.is_valid(raise_exception=True)
+        if not entrada.validated_data:
+            return Response({"detail": "Escolha pelo menos um item."}, status=400)
+        dados = {"canal": CanalVenda.BALCAO, "tipo_atendimento": TipoAtendimento(tipo), "itens": entrada.validated_data,
+                 "nome_cliente": str(request.data.get("nome_cliente") or "")[:120],
+                 "observacao": ("[Totem] " + str(request.data.get("observacao") or "")).strip()[:500],
+                 "forma_pagamento_prevista": "PIX" if request.data.get("pagar_pix") else ""}
+        pedido = pedidos_srv.criar_pedido(loja, pedido_in(dados, loja))
+        resposta = {"numero": pedido.numero, "senha": pedido.senha or f"{pedido.numero:04d}",
+                    "total_centavos": pedido.total_centavos, "token": pedido.token_rastreio}
+        if request.data.get("pagar_pix"):
+            from apps.integracoes.models import Integracao
+
+            if Integracao.ativa(loja, "PAGAMENTO", "mercadopago"):
+                pg = pedidos_srv.cobrar_pix(pedido=pedido)
+                resposta["pix"] = {"valor_centavos": pg.valor_centavos, **pg.dados_externos}
+        return Response(resposta, status=status.HTTP_201_CREATED)

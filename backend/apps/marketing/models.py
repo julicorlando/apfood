@@ -22,6 +22,9 @@ class Cupom(DaLoja, ModeloSincronizavel):
     usos_por_cliente = models.PositiveSmallIntegerField(null=True, blank=True)
     usos = models.PositiveIntegerField(default=0)
     somente_primeira_compra = models.BooleanField(default=False)
+    indicacao_de = models.ForeignKey("clientes.Cliente", on_delete=models.CASCADE, null=True, blank=True,
+                                     related_name="cupons_indicacao", editable=False,
+                                     help_text="cupom de indicação: quem indicou ganha cashback quando o amigo recebe")
     canais = models.JSONField(default=list, blank=True, help_text='vazio = todos; ou ["ONLINE", "DELIVERY"]')
     ativo = models.BooleanField(default=True)
 

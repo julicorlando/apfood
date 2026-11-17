@@ -70,7 +70,7 @@
       erro.textContent = ""; botao.disabled = true;
       try {
         const r = await req("POST", "entrar/", { telefone: tel.value, pin: pin.value });
-        token = r.token; gravar(CHAVE, token); gravar("apfood_entregador_tel", tel.value);
+        token = r.token; gravar(CHAVE, token); gravar("apfood_entregador_tel", tel.value); sincronizarNativo();
         await carregar(); iniciar();
       } catch (e) { erro.textContent = e.message; botao.disabled = false; }
     } }, [
@@ -87,7 +87,7 @@
 
   function sair(expirou) {
     pararTudo();
-    token = null; gravar(CHAVE, null); estado = null;
+    token = null; gravar(CHAVE, null); estado = null; sincronizarNativo();
     telaEntrar(expirou ? "Sua sessão terminou. Entre de novo." : "");
   }
 
@@ -108,7 +108,58 @@
     }, ms);
   }
 
+  // ---------------------------------------------------------- integração nativa (APK)
+  // o código nativo lê a sessão para responder Aceitar/Recusar direto da notificação
+  function sincronizarNativo() {
+    const P = CAP.Preferences;
+    if (!P) return;
+    if (token) {
+      P.set({ key: "apfood_entregador_token", value: token }).catch(function () {});
+      P.set({ key: "apfood_base", value: location.origin }).catch(function () {});
+    } else {
+      P.remove({ key: "apfood_entregador_token" }).catch(function () {});
+    }
+  }
+
+  async function registrarPush() {
+    const P = CAP.Preferences;
+    if (!P || registrarPush.feito) return;
+    try {
+      const r = await P.get({ key: "apfood_push_token" });
+      if (r && r.value) { await req("POST", "push/", { token: r.value }); registrarPush.feito = true; }
+      else setTimeout(registrarPush, 15000);  // o Firebase entrega o token alguns segundos depois
+    } catch (e) { /* sem Firebase neste APK */ }
+  }
+
+  function idNotificacao(chamada) {  // igual ao Ofertas.idDa() do Android: a mesma notificação, sem duplicar
+    let h = 0;
+    for (let i = 0; i < chamada.length; i++) h = (Math.imul(31, h) + chamada.charCodeAt(i)) | 0;
+    return Math.abs(h % 1000000);
+  }
+
+  let acoesProntas = false;
+  function prepararNotificacoes() {
+    const LN = CAP.LocalNotifications;
+    if (!LN || acoesProntas) return;
+    acoesProntas = true;
+    LN.registerActionTypes({ types: [{ id: "OFERTA", actions: [
+      { id: "aceitar", title: "✅ Aceitar", foreground: true },
+      { id: "recusar", title: "Recusar", destructive: true, foreground: false },
+    ] }] }).catch(function () {});
+    if (LN.createChannel) LN.createChannel({ id: "ofertas", name: "Chamadas de entrega", importance: 5, visibility: 1, vibration: true }).catch(function () {});
+    LN.addListener("localNotificationActionPerformed", function (a) {
+      const chamada = a.notification && a.notification.extra && a.notification.extra.chamada;
+      if (!chamada || (a.actionId !== "aceitar" && a.actionId !== "recusar")) return;
+      pararSom();
+      req("POST", "ofertas/" + chamada + "/" + a.actionId + "/").catch(function (e) { alert(e.message); })
+        .then(function () { aba = "entregas"; return carregar(); }).catch(function () {});
+    });
+  }
+
   function iniciar() {
+    sincronizarNativo();
+    prepararNotificacoes();
+    registrarPush();
     agendar();
     if (estado && estado.online) ligarSinais();
   }
@@ -181,11 +232,14 @@
     else if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(function () {});
   }
   function notificar(o) {
-    const titulo = "Nova entrega — " + o.loja;
-    const corpo = "Para " + (o.bairro || "o cliente") + ". Toque para aceitar (" + o.segundos + " s).";
+    const titulo = "🛵 Nova entrega — " + o.loja;
+    const corpo = "Para " + (o.bairro || "o cliente") + (o.ganho_centavos ? " · você recebe " + reais(o.ganho_centavos) : "") +
+      ". Aceite em " + o.segundos + " s.";
     const LN = CAP.LocalNotifications;
     if (LN && LN.schedule) {
-      LN.schedule({ notifications: [{ id: Math.floor(Math.random() * 100000), title: titulo, body: corpo }] }).catch(function () {});
+      prepararNotificacoes();
+      LN.schedule({ notifications: [{ id: idNotificacao(o.chamada), title: titulo, body: corpo, channelId: "ofertas",
+        actionTypeId: "OFERTA", extra: { chamada: o.chamada }, autoCancel: true }] }).catch(function () {});
     } else if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
       try { new Notification(titulo, { body: corpo, icon: "/static/marca/icone-192.png", tag: "oferta" }); } catch (e) { /* ok */ }
     }
@@ -193,7 +247,10 @@
 
   function tratarOferta() {
     const o = estado && estado.oferta;
-    if (!o) { ofertaVista = null; pararSom(); clearInterval(tique); return; }
+    if (!o) {
+      if (ofertaVista && CAP.LocalNotifications) CAP.LocalNotifications.cancel({ notifications: [{ id: idNotificacao(ofertaVista) }] }).catch(function () {});
+      ofertaVista = null; pararSom(); clearInterval(tique); return;
+    }
     if (ofertaVista !== o.chamada) {
       ofertaVista = o.chamada;
       o.recebida = Date.now();
@@ -353,6 +410,13 @@
         el("div", { class: "numero destaque" }, [el("small", { text: "Projeção do mês" }), el("b", { text: valor(g.projecao_mes_centavos) }),
           el("span", { text: "≈ " + g.projecao_entregas_mes + " entregas no ritmo atual" })]),
       ]),
+      el("div", { class: "cartao" }, [el("h2", { text: "Pagamentos da loja" }),
+        el("div", { class: "aviso amarelo", style: "margin-bottom:8px" }, [el("b", { text: "A receber: " + valor(g.pendente_centavos) }),
+          el("div", { text: g.pendente_entregas + " entrega(s) ainda não acertada(s)" })]),
+        (g.acertos || []).length ? el("ul", { class: "lista" }, g.acertos.map(function (a) {
+          return el("li", {}, [el("span", { text: new Date(a.em).toLocaleDateString("pt-BR") + " · " + a.loja + " · " + a.entregas + " entrega(s)" }),
+            el("b", { text: reais(a.pago_centavos) })]);
+        })) : el("p", { class: "muted", style: "margin:0", text: "Nenhum acerto registrado ainda." })]),
       el("div", { class: "cartao" }, [el("h2", { text: "Total: " + g.total_entregas + " entrega(s) feitas" }),
         el("p", { class: "muted", text: "Os valores são uma estimativa pelo combinado com cada loja. O pagamento é feito pela loja, como vocês acertaram." }),
         el("ul", { class: "lista" }, g.acordo.map(function (a) {
@@ -375,7 +439,7 @@
       botao.disabled = true;
       try {
         const r = await req("POST", "pin/", { atual: atual.value, novo: novo.value });
-        token = r.token; gravar(CHAVE, token);
+        token = r.token; gravar(CHAVE, token); sincronizarNativo();
         atual.value = novo.value = conf.value = "";
         msg.style.color = "var(--ok)"; msg.textContent = "PIN alterado!";
         await carregar();

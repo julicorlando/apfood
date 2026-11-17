@@ -1,10 +1,10 @@
 // Operação do dia: início, pedidos em tempo real, mesas, cozinha e caixa.
-import { ehGerente, ehMaster, get, lista, post, sessao } from "../api.js";
+import { ehGerente, ehMaster, get, lista, post, sessao, put } from "../api.js";
 import { aoMudarConexao, ouvir } from "../realtime.js";
 import {
   aviso, barras, botaoAcao, centavos, confirmar, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, hora, kpi, limpar, minutosDesde, modal, pedirTexto, reais, rotulo, tabela, trocar, uuid,
 } from "../ui.js";
-import { abrirPedido, imprimirLinhas, imprimirPedido, itensTexto, mostrarCupom, pago, receber } from "./comum.js";
+import { abrirPedido, cartaoDelivery, imprimirLinhas, imprimirPedido, itensTexto, mostrarCupom, pago, receber } from "./comum.js";
 import { aplicarPromocoes, carregarCardapio, montarItem, precoProduto } from "./pdv.js";
 
 function atualizarAoVivo(fn, ms = 20000) {
@@ -152,6 +152,7 @@ export function pedidos() {
             h("span", { class: "pedido-numero" }, `#${p.numero}`),
             h("span", { class: min > 40 ? "etiqueta e-erro" : min > 20 ? "etiqueta e-alerta" : "etiqueta" }, `${min} min`)),
           h("div", null, p.nome_cliente || p.mesa && `Mesa ${p.mesa}` || rotulo("TipoAtendimento", p.tipo_atendimento)),
+          p.agendado_para ? h("div", { class: "etiqueta e-info", style: { justifySelf: "start" } }, `📅 Agendado ${dataHora(p.agendado_para)}`) : null,
           h("div", { class: "pedido-itens" }, itensTexto(p)),
           h("div", { class: "acoes" },
             h("span", { class: "etiqueta" }, p.marketplace ? rotulo("Marketplace", p.marketplace) : rotulo("CanalVenda", p.canal)),
@@ -517,6 +518,7 @@ function painelTurno(t, recarregar, meu) {
     r.esperado ? h("div", { class: "cartao" }, h("h2", null, "Esperado em caixa"),
       h("ul", { class: "lista-simples" }, Object.entries(r.esperado).map(([f, v]) => h("li", null, rotulo("FormaPagamento", f), h("span", { class: "num" }, dinheiro(v))))))
       : h("p", { class: "muted" }, "Conferência cega: os valores esperados aparecem depois do fechamento."),
+    r.delivery ? cartaoDelivery(r.delivery, "Delivery neste caixa") : null,
     h("div", { class: "acoes" },
       botaoAcao("Sangria (retirada)", () => movimento(t, "SANGRIA", recarregar)),
       botaoAcao("Suprimento (reforço)", () => movimento(t, "SUPRIMENTO", recarregar)),
@@ -589,4 +591,69 @@ function fechar(t, recarregar) {
       return resultado;
     }, "botao botao-primario")],
   });
+}
+
+
+// =============================================================================
+// Reservas de mesa
+// =============================================================================
+export function reservas() {
+  return {
+    titulo: "Reservas",
+    async render(raiz) {
+      const dataSel = h("input", { type: "date", value: hojeISO() });
+      const area = h("div");
+      trocar(raiz, h("div", { class: "barra-ferramentas" }, dataSel,
+        h("span", { class: "espaco" }), botaoAcao("+ Nova reserva", nova, "botao botao-primario")), area);
+      dataSel.addEventListener("change", carregar);
+      const COR = { PENDENTE: "e-alerta", CONFIRMADA: "e-ok", CANCELADA: "e-erro", CHEGOU: "e-info", NAO_VEIO: "e-erro" };
+      async function carregar() {
+        const rs = await lista("/api/reservas/", { data: dataSel.value });
+        const pessoas = rs.filter((r) => ["PENDENTE", "CONFIRMADA", "CHEGOU"].includes(r.status)).reduce((s, r) => s + r.pessoas, 0);
+        trocar(area,
+          h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+            kpi("Reservas no dia", String(rs.filter((r) => r.status !== "CANCELADA").length)),
+            kpi("Pessoas esperadas", String(pessoas)),
+            kpi("Aguardando confirmação", String(rs.filter((r) => r.status === "PENDENTE").length))),
+          rs.length ? h("div", { class: "grade", style: { gap: "10px" } }, rs.map(cartao))
+            : h("div", { class: "cartao vazio" }, "Nenhuma reserva neste dia."));
+      }
+      function cartao(r) {
+        const st = async (status) => { await post(`/api/reservas/${r.id}/status/`, { status }); aviso("Reserva atualizada.", "ok"); carregar(); };
+        return h("div", { class: "cartao" },
+          h("div", { class: "acoes" }, h("strong", { style: { fontSize: "18px" } }, hora(r.data_hora)),
+            h("span", { class: `etiqueta ${COR[r.status] || ""}` }, r.status_rotulo), h("span", { class: "espaco", style: { flex: 1 } }),
+            h("span", { class: "muted" }, r.origem === "SITE" ? "pelo site" : "no painel")),
+          h("div", { style: { margin: "6px 0" } }, h("strong", null, r.nome), ` · ${r.pessoas} pessoa(s) · `,
+            h("a", { href: `https://wa.me/55${r.telefone}`, target: "_blank", rel: "noopener" }, r.telefone),
+            r.mesa_nome ? ` · ${r.mesa_nome}` : ""),
+          r.observacao ? h("div", { class: "muted" }, `Obs.: ${r.observacao}`) : null,
+          h("div", { class: "acoes", style: { marginTop: "8px" } },
+            r.status === "PENDENTE" ? botaoAcao("Confirmar", () => st("CONFIRMADA"), "botao botao-ok botao-pequeno") : null,
+            ["PENDENTE", "CONFIRMADA"].includes(r.status) ? botaoAcao("Mesa", () => escolherMesa(r), "botao botao-pequeno") : null,
+            ["PENDENTE", "CONFIRMADA"].includes(r.status) ? botaoAcao("Chegou", () => st("CHEGOU"), "botao botao-primario botao-pequeno") : null,
+            r.status === "CONFIRMADA" ? botaoAcao("Não veio", () => st("NAO_VEIO"), "botao botao-pequeno") : null,
+            ["PENDENTE", "CONFIRMADA"].includes(r.status) ? botaoAcao("Cancelar", () => st("CANCELADA"), "botao botao-perigo botao-pequeno") : null));
+      }
+      async function escolherMesa(r) {
+        const ms = await lista("/api/mesas/", { ativa: "true" });
+        const sel = h("select", null, h("option", { value: "" }, "Sem mesa"), ms.map((m) => h("option", { value: m.id, selected: m.id === r.mesa }, m.nome)));
+        const m = modal({ titulo: `Mesa para ${r.nome}`, tamanho: "modal-pequeno", corpo: h("label", { class: "campo" }, h("span", null, "Mesa"), sel),
+          rodape: [botaoAcao("Salvar", async () => { await put(`/api/reservas/${r.id}/`, { ...r, mesa: sel.value || null }); m.fechar(); carregar(); }, "botao botao-primario")] });
+      }
+      function nova() {
+        const f = { nome: h("input", { type: "text" }), telefone: h("input", { type: "tel" }), pessoas: h("input", { type: "number", min: 1, value: 2 }),
+          dia: h("input", { type: "date", value: dataSel.value }), hora: h("input", { type: "time", value: "20:00", step: 900 }), obs: h("input", { type: "text" }) };
+        const m = modal({ titulo: "Nova reserva", tamanho: "modal-pequeno",
+          corpo: h("div", { class: "grade" }, ...[["Nome", f.nome], ["Celular com DDD", f.telefone], ["Pessoas", f.pessoas], ["Dia", f.dia], ["Horário", f.hora], ["Observação", f.obs]]
+            .map(([r, i]) => h("label", { class: "campo" }, h("span", null, r), i))),
+          rodape: [botaoAcao("Salvar", async () => {
+            await post("/api/reservas/", { nome: f.nome.value, telefone: f.telefone.value, pessoas: parseInt(f.pessoas.value, 10) || 1,
+              data_hora: new Date(`${f.dia.value}T${f.hora.value}:00`).toISOString(), observacao: f.obs.value });
+            m.fechar(); dataSel.value = f.dia.value; carregar();
+          }, "botao botao-primario")] });
+      }
+      await carregar();
+    },
+  };
 }

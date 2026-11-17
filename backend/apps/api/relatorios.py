@@ -119,7 +119,15 @@ class FechamentosView(Relatorio):
             o = por_operador.setdefault(str(t.usuario_id), {"operador": str(t.usuario), "turnos": 0, "diferenca_centavos": 0})
             o["turnos"] += 1
             o["diferenca_centavos"] += t.diferenca_centavos or 0
-        return Response({"inicio": inicio, "fim": fim, "por_operador": list(por_operador.values()), "turnos": turnos})
+        from datetime import datetime, time, timedelta
+
+        from apps.pedidos.acertos import delivery_no_periodo
+
+        tzc = timezone.get_current_timezone()
+        delivery = delivery_no_periodo(loja, timezone.make_aware(datetime.combine(inicio, time.min), tzc),
+                                       timezone.make_aware(datetime.combine(fim + timedelta(days=1), time.min), tzc))
+        return Response({"inicio": inicio, "fim": fim, "por_operador": list(por_operador.values()), "turnos": turnos,
+                         "delivery": delivery})
 
 
 class FluxoCaixaView(Relatorio):
@@ -298,3 +306,77 @@ class AvaliacoesView(Relatorio):
                             "comentario": a.comentario, "cliente": a.pedido.nome_cliente, "em": a.criado_em}
                            for a in lista],
         })
+
+
+class AcertoEntregadoresView(Relatorio):
+    """GET: entregas ainda não acertadas por entregador + últimos acertos.
+    POST {"entregador_id", "pago_centavos", "observacao", "gerar_despesa"}: registra o acerto."""
+
+    def get(self, request):
+        from apps.pedidos import acertos
+        from apps.pedidos.models import AcertoEntregador
+
+        loja = loja_da_requisicao(request)
+        feitos = AcertoEntregador.objects.filter(loja=loja).select_related("entregador", "usuario")[:50]
+        return Response({"pendentes": acertos.resumo(loja), "acertos": [
+            {"id": str(a.id), "entregador": a.entregador.nome, "inicio": a.inicio, "fim": a.fim, "entregas": a.entregas,
+             "ganhos_centavos": a.ganhos_centavos, "em_maos_centavos": a.em_maos_centavos, "pago_centavos": a.pago_centavos,
+             "observacao": a.observacao, "em": a.criado_em, "por": str(a.usuario) if a.usuario_id else ""} for a in feitos]})
+
+    def post(self, request):
+        from apps.pedidos import acertos
+
+        loja = loja_da_requisicao(request)
+        try:
+            pago = int(request.data.get("pago_centavos") or 0)
+        except (TypeError, ValueError):
+            pago = -1
+        if pago < 0:
+            return Response({"pago_centavos": ["valor inválido"]}, status=400)
+        a = acertos.registrar(loja, request.data.get("entregador_id"), pago_centavos=pago,
+                              observacao=str(request.data.get("observacao") or ""),
+                              gerar_despesa=bool(request.data.get("gerar_despesa", True)), usuario=request.user)
+        return Response({"id": str(a.id), "linhas": acertos.recibo(a)}, status=201)
+
+
+class ReciboAcertoView(Relatorio):
+    def get(self, request, pk):
+        from apps.pedidos import acertos
+        from apps.pedidos.models import AcertoEntregador
+
+        a = AcertoEntregador.objects.select_related("loja", "entregador").filter(loja=loja_da_requisicao(request), pk=pk).first()
+        if a is None:
+            return Response({"detail": "não encontrado"}, status=404)
+        return Response({"linhas": acertos.recibo(a)})
+
+
+class GarconsView(Relatorio):
+    """Taxa de serviço (10%) por garçom: dividida entre quem lançou os pedidos de
+    cada comanda fechada, na proporção do que cada um lançou."""
+
+    def get(self, request):
+        from apps.salao.models import Comanda
+
+        loja, inicio, fim = self.base(request)
+        comandas = (Comanda.objects.filter(loja=loja, status="FECHADA", fechada_em__date__range=(inicio, fim))
+                    .select_related("garcom").prefetch_related("pedidos__atendente"))
+        por: dict = {}
+        for c in comandas:
+            partes: dict = {}
+            for p in c.pedidos.all():
+                if p.status in ("CANCELADO", "RECUSADO"):
+                    continue
+                quem = p.atendente or c.garcom
+                chave = quem.pk if quem else None
+                nome = (quem.get_full_name() or quem.username) if quem else "Autoatendimento (QR da mesa)"
+                partes.setdefault(chave, [nome, 0])[1] += p.subtotal_centavos
+            soma = sum(v for _, v in partes.values()) or 1
+            for chave, (nome, valor) in partes.items():
+                r = por.setdefault(chave, {"garcom": nome, "comandas": 0, "vendas_centavos": 0, "taxa_centavos": 0})
+                r["comandas"] += 1
+                r["vendas_centavos"] += valor
+                r["taxa_centavos"] += round(c.taxa_servico_centavos * valor / soma)
+        linhas = sorted(por.values(), key=lambda r: -r["taxa_centavos"])
+        return Response({"inicio": inicio, "fim": fim, "garcons": linhas,
+                         "total_taxa_centavos": sum(r["taxa_centavos"] for r in linhas),
+                         "comandas": comandas.count()})

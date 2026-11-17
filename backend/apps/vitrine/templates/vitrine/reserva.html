@@ -1,0 +1,48 @@
+{% extends "vitrine/base.html" %}
+{% block titulo %}Reservar mesa — {{ loja.nome }}{% endblock %}
+{% block conteudo %}
+  <header class="topo"><div class="topo-linha"><div><h1>Reservar mesa</h1><div class="info">{{ loja.nome }}</div></div></div></header>
+  <main style="max-width:560px;margin:0 auto;padding:14px">
+    <form id="form" class="cartao" novalidate style="display:grid;gap:12px">
+      <label class="campo"><span>Seu nome</span><input name="nome" maxlength="120" autocomplete="name" required></label>
+      <label class="campo"><span>Celular com DDD (WhatsApp)</span><input name="telefone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="(81) 99999-0000"></label>
+      <label class="campo"><span>Pessoas</span><input name="pessoas" type="number" min="1" max="40" value="2" required></label>
+      <div class="agendar-quando">
+        <label class="campo"><span>Dia</span><input name="dia" type="date" required></label>
+        <label class="campo"><span>Horário</span><input name="hora" type="time" step="900" value="20:00" required></label>
+      </div>
+      <label class="campo"><span>Observação (opcional)</span><input name="observacao" maxlength="255" placeholder="Ex.: aniversário, cadeira de bebê"></label>
+      <p class="erros" id="erros" role="alert"></p>
+      <button class="btn" type="submit" style="justify-content:center">Pedir reserva</button>
+      <a class="btn secundario" href="/{{ loja.slug }}/">Ver o cardápio</a>
+    </form>
+    <div id="ok" class="cartao oculto" style="text-align:center;display:grid;gap:8px">
+      <p class="grande">✅ Pedido de reserva enviado!</p>
+      <p id="ok-txt"></p>
+      <a class="btn secundario" href="/{{ loja.slug }}/">Ver o cardápio</a>
+    </div>
+  </main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var f = document.getElementById("form"), erros = document.getElementById("erros");
+  var hoje = new Date(); f.dia.min = hoje.toISOString().slice(0, 10); f.dia.value = f.dia.min;
+  f.addEventListener("submit", async function (ev) {
+    ev.preventDefault(); erros.textContent = "";
+    var botao = f.querySelector("button"); botao.disabled = true;
+    try {
+      var r = await fetch("/api/publico/lojas/{{ loja.slug }}/reservas/", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ nome: f.nome.value, telefone: f.telefone.value, pessoas: parseInt(f.pessoas.value, 10) || 0,
+          data_hora: f.dia.value + "T" + f.hora.value + ":00-03:00", observacao: f.observacao.value }) });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok) { erros.textContent = d.detail || Object.values(d).flat()[0] || "Não foi possível enviar."; botao.disabled = false; return; }
+      f.classList.add("oculto");
+      document.getElementById("ok-txt").textContent = "Para " + f.pessoas.value + " pessoa(s) em " + d.quando + ". A loja vai confirmar pelo WhatsApp.";
+      document.getElementById("ok").classList.remove("oculto");
+    } catch (e) { erros.textContent = "Sem conexão. Tente de novo."; botao.disabled = false; }
+  });
+})();
+</script>
+{% endblock %}

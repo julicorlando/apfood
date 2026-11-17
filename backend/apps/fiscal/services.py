@@ -129,7 +129,42 @@ def cupom_fechamento(turno, largura=48):
              "conferencia": [{"forma": c.forma_pagamento, "esperado_centavos": c.valor_esperado_centavos,
                               "informado_centavos": c.valor_informado_centavos, "diferenca_centavos": c.diferenca_centavos}
                              for c in turno.conferencias.all()]}
-    return cupom.fechamento_caixa(dados, dados_loja(turno.loja), largura)
+    linhas = cupom.fechamento_caixa(dados, dados_loja(turno.loja), largura)
+    linhas = [*linhas[:-1], *_linhas_delivery(turno, largura), linhas[-1]] if linhas else linhas
+    return linhas
+
+
+def _linhas_delivery(turno, largura):
+    """Delivery do período do caixa no cupom de fechamento."""
+    from apfood_core.cupom import Linha
+    from apfood_core.dinheiro import formatar
+    from apfood_core.enums import FormaPagamento
+
+    from apps.pedidos.acertos import delivery_no_periodo
+
+    d = delivery_no_periodo(turno.loja, turno.aberto_em, turno.fechado_em or timezone.now())
+    if not d["pedidos"]:
+        return []
+
+    def par(a, b):
+        return Linha(a + " " * max(1, largura - len(a) - len(b)) + b)
+
+    def rot(f):
+        try:
+            return FormaPagamento(f).rotulo
+        except ValueError:
+            return f
+
+    out = [Linha("-" * largura), Linha("DELIVERY NO PERÍODO", negrito=True),
+           par(f"Pedidos entregues: {d['pedidos']}", formatar(d["total_centavos"])),
+           par("Taxas de entrega", formatar(d["taxas_centavos"]))]
+    out += [par(f"Online - {rot(f)}", formatar(v)) for f, v in d["online"].items()]
+    out += [par(f"Na entrega - {rot(f)}", formatar(v)) for f, v in d["na_entrega"].items()]
+    if d["a_receber_centavos"]:
+        out.append(par("A RECEBER (sem pagamento)", formatar(d["a_receber_centavos"])))
+    for e in d["por_entregador"]:
+        out.append(par(f"{e['entregador'][:24]} ({e['entregas']})", formatar(e["total_centavos"])))
+    return out
 
 
 # --- emissão fiscal -----------------------------------------------------------

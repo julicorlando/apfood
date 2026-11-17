@@ -88,6 +88,7 @@ class PedidoIn:
     codigo_externo: str = ""
     codigo_local: str = ""
     dispositivo: object = None
+    agendado_para: object = None  # datetime: pedido agendado / encomenda (cardápio online)
 
 
 # =============================================================================
@@ -242,9 +243,15 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
         return existente
 
     online = dados.canal == CanalVenda.ONLINE
-    if online and not (loja.aberta_para_pedidos and loja.empresa.liberada and loja.ativa):
+    if online and dados.agendado_para:
+        from . import agendados
+
+        if not (loja.empresa.liberada and loja.ativa):
+            raise ErroNegocio("a loja não está recebendo pedidos agora")
+        dados.agendado_para = agendados.validar(loja, dados.agendado_para)  # pode agendar com a loja fechada agora
+    elif online and not (loja.aberta_para_pedidos and loja.empresa.liberada and loja.ativa):
         raise ErroNegocio("a loja não está recebendo pedidos agora")
-    if online:
+    elif online:
         from apfood_core.horarios import aberta_em
 
         if not aberta_em(loja.horarios, timezone.localtime()):
@@ -336,6 +343,7 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
         observacao=dados.observacao, atendente=usuario if usuario and not online else None,
         turno=caixa.turno_aberto(usuario, loja) if usuario and not online else None,
         dispositivo=dados.dispositivo, aceito_em=agora if status == S.RECEBIDO else None,
+        agendado_para=dados.agendado_para,
     )
     for l in linhas:
         p = l["produto"]
@@ -381,6 +389,10 @@ def criar_pedido(loja, dados: PedidoIn, usuario=None) -> Pedido:
 
         recalcular(pedido.comanda)
     eventos.pedido_novo(pedido)
+    if pedido.agendado_para:
+        from . import agendados
+
+        agendados.agendar_lembrete(pedido)
     return pedido
 
 
@@ -458,6 +470,9 @@ def _cashback_na_transicao(p, para) -> None:
             saldo_cashback_centavos=F("saldo_cashback_centavos") + p.cashback_usado_centavos)
     if para == S.CONCLUIDO:
         _selo_fidelidade(p)
+        from apps.marketing.reconquista import premiar_indicacao
+
+        premiar_indicacao(p)
 
 
 def _selo_fidelidade(p) -> None:
@@ -712,6 +727,40 @@ def cobrar_pix(*, pedido=None, comanda=None, valor_centavos: int | None = None, 
         raise ErroNegocio(f"falha ao gerar o Pix: {exc}") from exc
     pg.referencia_externa = cobranca["id"]
     pg.dados_externos = {k: cobranca[k] for k in ("qr_code", "qr_code_base64", "ticket_url")}
+    pg.save(update_fields=["referencia_externa", "dados_externos", "atualizado_em"])
+    return pg
+
+
+def cobrar_cartao(*, pedido) -> Pagamento:
+    """Cartão online no cardápio: Checkout do Mercado Pago da loja (crédito/débito).
+    O pagamento fica PENDENTE até o webhook confirmar; o cliente volta para o acompanhamento."""
+    from django.conf import settings
+
+    from apps.integracoes.models import Integracao
+    from apps.integracoes.provedores.base import ErroProvedor
+    from apps.integracoes.provedores.mercadopago import MercadoPago
+
+    integ = Integracao.ativa(pedido.loja, "PAGAMENTO", "mercadopago")
+    if integ is None:
+        raise ErroNegocio("pagamento com cartão online não configurado nesta loja")
+    restante = pedido.total_centavos - total_pago(pedido=pedido)
+    if restante <= 0:
+        raise ErroNegocio("pedido já está pago")
+    pedido.pagamentos.filter(status=StatusPagamento.PENDENTE).delete()
+    pg = Pagamento.objects.create(pedido=pedido, forma=FormaPagamento.CARTAO_CREDITO, valor_centavos=restante,
+                                  status=StatusPagamento.PENDENTE, pago_online=True)
+    base = settings.APFOOD["URL_PUBLICA"].rstrip("/")
+    try:
+        pref = MercadoPago(integ.obter_credenciais()["access_token"]).criar_preferencia(
+            titulo=f"{pedido.loja.nome} — pedido #{pedido.numero}", valor_centavos=restante, referencia=str(pg.id),
+            notification_url=f"{base}/api/webhooks/mercadopago/{pedido.loja_id}/" if base.startswith("https://") else "",
+            voltar_para=f"{base}/pedido/{pedido.token_rastreio}/",
+        )
+    except (ErroProvedor, KeyError) as exc:
+        integ.registrar_erro(str(exc))
+        raise ErroNegocio(f"falha ao abrir o pagamento com cartão: {exc}") from exc
+    pg.referencia_externa = f"pref:{pref['id']}"
+    pg.dados_externos = {"checkout_url": pref["init_point"]}
     pg.save(update_fields=["referencia_externa", "dados_externos", "atualizado_em"])
     return pg
 

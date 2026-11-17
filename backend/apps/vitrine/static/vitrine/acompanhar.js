@@ -128,6 +128,19 @@
     return cartao;
   }
 
+  function blocoIndicacao(p) {
+    const i = p.indicacao;
+    if (!i) return null;
+    const texto = "Peça na " + p.loja + " com o meu código " + i.codigo + " e ganhe " + C.reais(i.desconto_centavos) + " de desconto no primeiro pedido: " + i.link;
+    return el("div", { class: "cartao", style: "display:grid;gap:6px;text-align:center" }, [
+      el("b", { text: "🎁 Indique e ganhe" }),
+      el("small", { text: "Seu amigo ganha " + C.reais(i.desconto_centavos) + " no 1º pedido e você ganha " + C.reais(i.premio_centavos) + " de crédito quando ele receber." }),
+      el("div", { class: "codigo", style: "font-size:28px;font-weight:800;letter-spacing:4px", text: i.codigo }),
+      el("a", { class: "btn", style: "justify-content:center", target: "_blank", rel: "noopener",
+        href: "https://wa.me/?text=" + encodeURIComponent(texto), text: "Compartilhar no WhatsApp" }),
+    ]);
+  }
+
   function render(p) {
     document.documentElement.style.setProperty("--cor", p.cor_primaria || "#e4572e");
     document.title = "Pedido #" + (p.numero || "") + " — " + p.loja;
@@ -150,6 +163,12 @@
         el("div", { text: "Pedido #" + (p.numero || "") }),
         cancelado && p.motivo_cancelamento ? el("p", { class: "erros", text: "Motivo: " + p.motivo_cancelamento }) : null,
         cancelado ? null : etapas(p)]),
+      p.agendado_para && !cancelado && p.status !== "CONCLUIDO" ? el("div", { class: "cartao agendado", text: "📅 Agendado para " +
+        new Date(p.agendado_para).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" }) + " às " +
+        new Date(p.agendado_para).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }) : null,
+      p.cartao_url && !p.pago && !cancelado ? el("div", { class: "cartao", style: "display:grid;gap:8px" }, [
+        el("b", { text: "Pagamento com cartão pendente" }),
+        el("a", { class: "btn", style: "justify-content:center", href: p.cartao_url, text: "💳 Pagar com cartão agora" })]) : null,
       blocoAvaliacao(p),
       blocoCodigo(p),
       blocoPix(p),
@@ -161,6 +180,7 @@
           : el("span", { text: "Pagamento: " + (FORMAS[p.forma_prevista] || "na entrega") + (p.troco_para_centavos ? " · troco para " + C.reais(p.troco_para_centavos) : "") })])])
         .concat(p.endereco ? [el("div", { style: "margin-top:6px" }, el("small", { text: "📍 " + p.endereco }))] : [])),
       blocoFidelidade(p),
+      blocoIndicacao(p),
       el("div", { class: "cartao", style: "display:grid;gap:8px" }, [
         zap ? el("a", { class: "btn secundario", href: zap, target: "_blank", rel: "noopener", text: "Falar com a loja no WhatsApp" }) : null,
         el("a", { class: "btn secundario", href: "/" + p.loja_slug + "/", text: "Voltar ao cardápio" })]),

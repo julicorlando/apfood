@@ -1,5 +1,5 @@
 // Painel ApFood: roteamento por hash, menu por perfil e seletor de loja.
-import { definirLoja, ehAdmin, ehGerente, ehMaster, get, lojaSalva, sessao } from "./api.js";
+import { definirLoja, ehAdmin, ehGerente, ehMaster, get, lojaSalva, post, sessao } from "./api.js";
 import { bipe, conectar, ouvir } from "./realtime.js";
 import { aviso, data, definirRotulos, dinheiro, erro, h, limpar, trocar } from "./ui.js";
 
@@ -11,6 +11,7 @@ const ROTAS = [
   ["/pdv", "PDV (vender)", "🧾", "Operação", temLoja, "pdv", "pdv"],
   ["/pedidos", "Pedidos", "🛎️", "Operação", temLoja, "operacao", "pedidos"],
   ["/mesas", "Mesas e comandas", "🍽️", "Operação", temLoja, "operacao", "mesas"],
+  ["/reservas", "Reservas", "📅", "Operação", temLoja, "operacao", "reservas"],
   ["/cozinha", "Cozinha", "👨‍🍳", "Operação", temLoja, "operacao", "cozinha"],
   ["/caixa", "Caixa", "💵", "Operação", temLoja, "operacao", "caixa"],
 
@@ -36,12 +37,15 @@ const ROTAS = [
   ["/fluxo-de-caixa", "Fluxo de caixa", "📈", "Financeiro", () => temLoja() && ehGerente(), "gestao", "fluxoCaixa"],
   ["/categorias-despesa", "Categorias de despesa", "🧮", "Financeiro", () => temLoja() && ehGerente(), "cadastros", "categoriasDespesa"],
   ["/taxas", "Taxas de pagamento", "💳", "Financeiro", () => temLoja() && ehGerente(), "cadastros", "taxas"],
+  ["/acerto-entregadores", "Acerto de entregadores", "🛵", "Financeiro", () => temLoja() && ehGerente(), "gestao", "acertoEntregadores"],
 
   ["/relatorios", "Vendas", "📊", "Relatórios", () => temLoja() && ehGerente(), "gestao", "vendas"],
   ["/curva-abc", "Curva ABC", "🔤", "Relatórios", () => temLoja() && ehGerente(), "gestao", "curvaAbc"],
   ["/cmv", "CMV e margem", "📉", "Relatórios", () => temLoja() && ehGerente(), "gestao", "cmv"],
   ["/operadores", "Por operador", "🧑‍💼", "Relatórios", () => temLoja() && ehGerente(), "gestao", "operadores"],
   ["/avaliacoes", "Avaliações", "⭐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "avaliacoes"],
+  ["/rede", "Visão da rede", "🏬", "Relatórios", () => ehAdmin() && !ehMaster() && sessao.lojas.length > 1, "gestao", "rede"],
+  ["/garcons", "Taxa de serviço por garçom", "🧾", "Relatórios", () => temLoja() && ehGerente(), "gestao", "garcons"],
   ["/fechamentos", "Fechamentos de caixa", "🔐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "fechamentos"],
   ["/notas", "Notas fiscais", "🧾", "Relatórios", temLoja, "gestao", "notas"],
 
@@ -204,11 +208,28 @@ export async function mostrarAssinatura() {
   $("conteudo").before(faixa);
 }
 
+// Push (Firebase): só existe no APK gerado com o google-services.json
+async function registrarPush() {
+  const PN = window.Capacitor?.Plugins?.PushNotifications;
+  if (!PN) return;
+  try {
+    const perm = await PN.requestPermissions();
+    if (perm.receive !== "granted") return;
+    await PN.createChannel?.({ id: "pedidos", name: "Pedidos", importance: 5, sound: "default", vibration: true }).catch(() => {});
+    PN.addListener("registration", (t) => post("/api/push/", { token: t.value }, { semLoja: true }).catch(() => {}));
+    PN.addListener("pushNotificationActionPerformed", (a) => {
+      if (a.notification?.data?.pedido) location.hash = "#/pedidos";
+    });
+    await PN.register();
+  } catch (e) { console.warn("push", e); }
+}
+
 async function iniciar() {
   const medirTopo = () => document.documentElement.style.setProperty("--topo", `${document.querySelector(".topo")?.offsetHeight || 0}px`);
   medirTopo();
   window.addEventListener("resize", medirTopo);
   if (MODO_APP) {
+    registrarPush();
     document.body.classList.add("modo-app");
     $("usuario").after(h("button", { type: "button", class: "botao botao-pequeno", onclick: () => document.querySelector(".menu-sair").requestSubmit() }, "Sair"));
   }
@@ -237,6 +258,8 @@ async function iniciar() {
       bipe();
       aviso(`Ninguém aceitou a entrega do pedido #${ev.numero}: abra o pedido para chamar de novo ou escolher outra forma.`, "erro");
     }
+    if (ev.tipo === "pedido.lembrete") { bipe(); aviso(`⏰ Pedido agendado #${ev.numero} para as ${ev.hora}: hora de começar o preparo.`, "ok"); }
+    if (ev.tipo === "reserva.nova") { bipe(); aviso(`📅 Nova reserva: ${ev.nome}, ${ev.pessoas} pessoa(s) — ${ev.quando}.`, "ok"); }
     if (ev.tipo === "pedido.avaliado") aviso(`⭐ Pedido #${ev.numero} avaliado com ${ev.nota} estrela${ev.nota > 1 ? "s" : ""}.`, "ok");
   });
   window.addEventListener("hashchange", navegar);

@@ -183,6 +183,7 @@ jobs:
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+          ANDROID_GOOGLE_SERVICES_B64: ${{ secrets.ANDROID_GOOGLE_SERVICES_B64 }}
         run: |
           chmod +x mobile/construir.sh
           mobile/construir.sh cliente

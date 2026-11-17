@@ -48,6 +48,12 @@ def resumo_pedido(pedido) -> dict:
 
 def pedido_novo(pedido) -> None:
     publicar(grupo_pdv(pedido.loja_id), "pedido.novo", {"pedido": resumo_pedido(pedido)})
+    if not pedido.atendente_id:  # feito pelo cliente (cardápio, mesa, totem, marketplace): avisa o celular da equipe
+        from apps.integracoes import push
+
+        quem = f" — {pedido.nome_cliente}" if pedido.nome_cliente else ""
+        push.para_loja(pedido.loja, f"Novo pedido #{pedido.numero}", f"{pedido.loja.nome}{quem}",
+                       {"tipo": "pedido.novo", "pedido": str(pedido.id)}, chave=f"push-novo-{pedido.id}")
 
 
 def pedido_status(pedido) -> None:

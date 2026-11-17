@@ -15,4 +15,6 @@ urlpatterns = [
     path("entregador/manifest.webmanifest", views.app_entregador_manifest, name="app_entregador_manifest"),
     path("<slug:slug>/", views.cardapio, name="cardapio"),
     path("<slug:slug>/mesa/<str:token>/", views.cardapio_mesa, name="cardapio_mesa"),
+    path("<slug:slug>/reservar/", views.reservar, name="reservar"),
+    path("<slug:slug>/totem/<str:token>/", views.totem, name="totem"),
 ]

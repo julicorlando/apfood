@@ -112,3 +112,25 @@ class Comanda(DaLoja, ModeloBase):
     def __str__(self):
         alvo = self.mesa or self.numero or self.nome_cliente or str(self.id)[:8]
         return f"Comanda {alvo}"
+
+
+class Reserva(DaLoja, ModeloBase):
+    """Reserva de mesa (pelo link da loja ou lançada no painel)."""
+
+    PENDENTE, CONFIRMADA, CANCELADA, CHEGOU, NAO_VEIO = "PENDENTE", "CONFIRMADA", "CANCELADA", "CHEGOU", "NAO_VEIO"
+    STATUS = [(PENDENTE, "Aguardando confirmação"), (CONFIRMADA, "Confirmada"), (CANCELADA, "Cancelada"),
+              (CHEGOU, "Chegou"), (NAO_VEIO, "Não veio")]
+
+    nome = models.CharField(max_length=120)
+    telefone = models.CharField(max_length=13)
+    pessoas = models.PositiveSmallIntegerField(default=2)
+    data_hora = models.DateTimeField(db_index=True)
+    observacao = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS, default=PENDENTE)
+    mesa = models.ForeignKey(Mesa, on_delete=models.SET_NULL, null=True, blank=True, related_name="reservas")
+    origem = models.CharField(max_length=10, default="SITE")
+    comanda = models.ForeignKey(Comanda, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        db_table = "reservas"
+        ordering = ["data_hora"]

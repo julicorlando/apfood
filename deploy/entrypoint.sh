@@ -38,7 +38,14 @@ case "$PAPEL" in
   tarefas) exec python manage.py processar_tarefas ;;
   ifood)   exec python manage.py ifood_polling ;;
   cobranca)
-    while true; do python manage.py cobranca_diaria || true; sleep 86400; done
+    # cobrança da plataforma: uma vez por dia; rotinas das lojas (reconquista/aniversário): de hora em hora
+    ultimo=""
+    while true; do
+      hoje=$(date +%F)
+      if [ "$hoje" != "$ultimo" ]; then python manage.py cobranca_diaria || true; ultimo="$hoje"; fi
+      python manage.py rotinas_diarias || true
+      sleep 3600
+    done
     ;;
   *) exec "$@" ;;
 esac

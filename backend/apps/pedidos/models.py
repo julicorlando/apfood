@@ -95,6 +95,9 @@ class Pedido(DaLoja, ModeloBase):
     # o de recebimento (o cliente informa) ao entregar.
     codigo_retirada = models.CharField(max_length=4, default=gerar_codigo, editable=False)
     codigo_entrega = models.CharField(max_length=4, default=gerar_codigo, editable=False)
+    agendado_para = models.DateTimeField(null=True, blank=True, db_index=True, help_text="pedido agendado / encomenda")
+    acerto_entregador = models.ForeignKey("pedidos.AcertoEntregador", on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name="pedidos", editable=False)
 
     # Valores (centavos) — calculados por apfood_core.totais
     subtotal_centavos = models.PositiveIntegerField(default=0)
@@ -347,3 +350,22 @@ class ChamadaEntrega(DaLoja, ModeloBase):
         db_table = "chamadas_entrega"
         ordering = ["-criado_em"]
         indexes = [models.Index(fields=["status", "loja"], name="chamadas_en_status_9f3a21_idx")]
+
+
+class AcertoEntregador(DaLoja, ModeloBase):
+    """Pagamento da loja ao entregador pelas entregas de um período (o valor é combinado entre eles)."""
+
+    entregador = models.ForeignKey("clientes.Entregador", on_delete=models.PROTECT, related_name="acertos")
+    inicio = models.DateField()
+    fim = models.DateField()
+    entregas = models.PositiveIntegerField(default=0)
+    ganhos_centavos = models.PositiveIntegerField(default=0, help_text="pela regra do cadastro (taxa ou valor fixo)")
+    em_maos_centavos = models.PositiveIntegerField(default=0, help_text="dinheiro dos clientes que ficou com ele")
+    pago_centavos = models.PositiveIntegerField(default=0)
+    observacao = models.CharField(max_length=255, blank=True)
+    usuario = models.ForeignKey("contas.Usuario", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    despesa = models.ForeignKey("financeiro.Despesa", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        db_table = "acertos_entregador"
+        ordering = ["-criado_em"]

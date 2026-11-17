@@ -13,7 +13,7 @@ for prefixo, vs in [
     ("categorias-despesa", views.CategoriaDespesaViewSet), ("taxas-pagamento", views.TaxaFormaPagamentoViewSet),
     ("despesas", views.DespesaViewSet), ("pedidos", views.PedidoViewSet), ("cozinha", views.CozinhaViewSet),
     ("turnos", views.TurnoViewSet), ("comandas", views.ComandaViewSet), ("estoque", views.EstoqueViewSet),
-    ("compras", views.CompraViewSet), ("notas-fiscais", views.NotaFiscalViewSet),
+    ("compras", views.CompraViewSet), ("notas-fiscais", views.NotaFiscalViewSet), ("reservas", views.ReservaViewSet),
 ]:
     r.register(prefixo, vs, basename=prefixo)
 for prefixo, vs in [
@@ -40,10 +40,17 @@ urlpatterns = [
     path("relatorios/cmv/", relatorios.CMVView.as_view()),
     path("relatorios/operadores/", relatorios.OperadoresView.as_view()),
     path("relatorios/avaliacoes/", relatorios.AvaliacoesView.as_view()),
+    path("relatorios/garcons/", relatorios.GarconsView.as_view()),
+    path("acertos-entregador/", relatorios.AcertoEntregadoresView.as_view()),
+    path("acertos-entregador/<uuid:pk>/recibo/", relatorios.ReciboAcertoView.as_view()),
     # app ApFood Entregador
     path("entregador/entrar/", entregador.EntrarView.as_view()),
     path("entregador/pin/", entregador.PinView.as_view()),
     path("entregador/online/", entregador.OnlineView.as_view()),
+    path("entregador/push/", entregador.PushView.as_view()),
+    path("push/", gestao.PushView.as_view()),
+    path("rede/", gestao.RedeView.as_view()),
+    path("rede/replicar/", gestao.RedeReplicarView.as_view()),
     path("entregador/estado/", entregador.EstadoView.as_view()),
     path("entregador/historico/", entregador.HistoricoView.as_view()),
     path("entregador/ofertas/<uuid:chamada>/<str:acao>/", entregador.OfertaView.as_view()),
@@ -57,6 +64,8 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/pedidos/", publico.PedidoPublicoView.as_view()),
     path("publico/lojas/<slug:slug>/cupom/", publico.CupomPublicoView.as_view()),
     path("publico/pedidos/<str:token>/", publico.AcompanharPedidoView.as_view()),
+    path("publico/lojas/<slug:slug>/reservas/", publico.ReservaPublicaView.as_view()),
+    path("publico/lojas/<slug:slug>/totem/<str:token>/pedidos/", publico.TotemPedidoView.as_view()),
     path("publico/lojas/", publico.LojasPublicasView.as_view()),
     path("publico/lojas/<slug:slug>/mesa/<str:token>/", publico.MesaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/mesa/<str:token>/pedidos/", publico.PedidoMesaView.as_view()),

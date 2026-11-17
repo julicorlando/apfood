@@ -169,3 +169,34 @@ textarea { min-height: 64px; resize: vertical; }
 .avaliacao .acoes-avaliacao { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .avaliacao .acoes-avaliacao .btn { justify-content: center; }
 .estrelas-lidas { color: #e8a317; font-size: 26px; letter-spacing: 3px; }
+.agendar-quando { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; margin-top: 8px; }
+.agendar-quando select { width: 100%; padding: 12px; border: 1px solid var(--borda); border-radius: 10px; font: inherit; background: #fff; }
+.agendado { background: #eef4ff; color: #1d4ed8; border-radius: 10px; padding: 10px 12px; font-weight: 700; }
+.reservar-link { display: inline-block; margin-top: 10px; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.92); color: #1d1d1f; font-weight: 700; text-decoration: none; }
+
+/* ---------- totem de autoatendimento (tablet no balcão) ---------- */
+.modo-totem { font-size: 18px; }
+.modo-totem .topo h1 { font-size: 30px; }
+.modo-totem .produto { padding: 16px; }
+.modo-totem .produto strong { font-size: 19px; }
+.modo-totem .categorias .trilho button, .modo-totem .categorias .trilho a { font-size: 17px; padding: 12px 18px; }
+.modo-totem .btn { min-height: 62px; font-size: 19px; }
+.totem-capa { position: fixed; inset: 0; z-index: 90; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center;
+  background: var(--cor); color: var(--cor-texto, #fff); cursor: pointer; padding: 24px; }
+.totem-capa img { width: min(220px, 40vw); height: auto; border-radius: 24px; background: #fff; padding: 12px; }
+.totem-capa h1 { margin: 0; font-size: clamp(32px, 6vw, 64px); }
+.totem-capa p { margin: 0; font-size: clamp(20px, 3vw, 30px); opacity: .95; }
+.totem-dedo { font-size: 64px; animation: totem-pulo 1.2s infinite; }
+@keyframes totem-pulo { 50% { transform: translateY(-14px); } }
+.totem-opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.totem-opcao { display: grid; justify-items: center; gap: 6px; padding: 22px 10px; border: 2px solid var(--borda); border-radius: 18px; background: var(--cartao);
+  font: inherit; font-size: 20px; font-weight: 700; cursor: pointer; color: inherit; }
+.totem-opcao .ico { font-size: 44px; }
+.totem-opcao.marcada { border-color: var(--cor); box-shadow: 0 0 0 3px var(--cor) inset; }
+.totem-senha { position: fixed; inset: 0; z-index: 95; background: var(--cartao); display: grid; place-content: center; justify-items: center;
+  gap: 10px; text-align: center; padding: 24px; overflow-y: auto; }
+.totem-senha .ok { font-size: 28px; font-weight: 800; }
+.totem-senha .numero { font-size: clamp(90px, 22vw, 200px); font-weight: 900; line-height: 1; letter-spacing: 4px; color: var(--cor); }
+.totem-senha .btn { max-width: 420px; justify-content: center; }
+.totem-pix { display: grid; justify-items: center; gap: 8px; }
+.totem-pix img { width: min(260px, 60vw); height: auto; }
