@@ -36,6 +36,7 @@
   </div>
   <div id="avisos" class="avisos" aria-live="polite"></div>
   <noscript><p style="padding:16px">Ative o JavaScript para usar o painel.</p></noscript>
+  <script type="importmap">{{ mapa_modulos|safe }}</script>
   <script src="{% static 'vitrine/carrinho.js' %}"></script>
   <script type="module" src="{% static 'painel/js/app.js' %}"></script>
 </body>

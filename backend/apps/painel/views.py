@@ -4,6 +4,8 @@ Toda regra de negócio continua nos services/API — o painel é só a tela, a
 mesma que o PDV desktop usa, autenticada pela sessão do navegador.
 """
 
+import functools
+
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
@@ -80,7 +82,34 @@ def app(request):
     if request.user.acesso().bloqueado:
         logout(request)
         return redirect("painel:entrar")
-    return render(request, "painel/app.html")
+    return render(request, "painel/app.html", {"mapa_modulos": mapa_modulos()})
+
+
+@functools.lru_cache(maxsize=1)
+def mapa_modulos() -> str:
+    """Import map: cada módulo do painel ("/static/painel/js/api.js") aponta para o
+    arquivo com hash da versão ("api.3f2a….js"). Sem isso o navegador (e o
+    Cloudflare) guardam os módulos antigos por horas depois de uma atualização,
+    e o app.js ainda rodaria duas vezes (com e sem hash)."""
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+    from django.templatetags.static import static
+
+    raiz = Path(__file__).resolve().parent / "static"
+    mapa = {}
+    for arq in sorted((raiz / "painel" / "js").rglob("*.js")):
+        rel = arq.relative_to(raiz).as_posix()
+        try:
+            com_hash = static(rel)
+        except ValueError:  # manifesto sem o arquivo (collectstatic antigo)
+            continue
+        prefixo = settings.STATIC_URL if settings.STATIC_URL.startswith(("/", "http")) else "/" + settings.STATIC_URL
+        sem_hash = prefixo + rel
+        if com_hash != sem_hash:
+            mapa[sem_hash] = com_hash
+    return json.dumps({"imports": mapa}, separators=(",", ":"))
 
 
 @login_required
