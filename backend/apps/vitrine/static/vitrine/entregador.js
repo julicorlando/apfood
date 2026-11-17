@@ -1,3 +1,18 @@
+/* Peças opcionais da tela (null/undefined/false) não viram o texto "null" ao montar a página. */
+(function () {
+  if (typeof Element === "undefined") return;  // fora do navegador (testes)
+  [Element.prototype, DocumentFragment.prototype].forEach(function (proto) {
+    ["append", "prepend", "replaceChildren"].forEach(function (m) {
+      const original = proto[m];
+      if (!original || original.semNulos) return;
+      const f = function () {
+        return original.apply(this, Array.prototype.filter.call(arguments, function (x) { return x !== null && x !== undefined && x !== false; }));
+      };
+      f.semNulos = true;
+      proto[m] = f;
+    });
+  });
+})();
 /* ApFood Entregador: login com telefone + PIN, disponível/indisponível, chamadas
    (30 s para aceitar), retirada e entrega com códigos, ganhos e troca de PIN. */
 (function () {
@@ -103,6 +118,7 @@
   // ------------------------------------------------------------------ ciclo
   async function carregar() {
     estado = await req("GET", "estado/");
+    marcarPlantao(estado.online);
     tratarOferta();
     vigiarPix();
     desenhar();
@@ -150,8 +166,21 @@
       P.set({ key: "apfood_base", value: location.origin }).catch(function () {});
     } else {
       P.remove({ key: "apfood_entregador_token" }).catch(function () {});
+      P.set({ key: "apfood_disponivel", value: "0" }).catch(function () {});
+      plantaoMarcado = "0";
     }
   }
+
+  // APK: o serviço nativo de plantão lê esta marca e segue recebendo chamadas com a tela bloqueada
+  let plantaoMarcado = null;
+  function marcarPlantao(online) {
+    const P = CAP.Preferences;
+    const v = token && online ? "1" : "0";
+    if (!P || v === plantaoMarcado) return;
+    plantaoMarcado = v;
+    P.set({ key: "apfood_disponivel", value: v }).catch(function () { plantaoMarcado = null; });
+  }
+  function ehApk() { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
 
   async function registrarPush() {
     const P = CAP.Preferences;
@@ -221,6 +250,7 @@
     const novo = !(estado && estado.online);
     try {
       await req("POST", "online/", Object.assign({ online: novo }, posicao || {}));
+      marcarPlantao(novo);
       if (novo) ligarSinais(); else { clearInterval(batimento); soltarTela(); if (vigia !== null) { navigator.geolocation.clearWatch(vigia); vigia = null; } }
       await carregar();
       agendar();
@@ -228,6 +258,7 @@
   }
 
   async function segurarTela() {
+    if (ehApk()) return;  // no APK o plantão nativo recebe as chamadas com a tela apagada
     try { if ("wakeLock" in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { wakeLock = null; }
   }
   function soltarTela() { try { if (wakeLock) wakeLock.release(); } catch (e) { /* ok */ } wakeLock = null; }
@@ -366,7 +397,9 @@
     } else if (!estado.entregas.length) {
       itens.push(el("div", { class: "cartao vazio" }, [el("span", { class: "grande", text: "📡" }),
         el("b", {}, [el("span", { class: "pulso" }), "Aguardando chamadas…"]),
-        el("p", { text: "Deixe o app aberto: quando uma loja chamar, toca um alerta e você tem 30 segundos para aceitar." })]));
+        el("p", { text: ehApk()
+          ? "Pode bloquear o celular ou sair do app: enquanto estiver “Disponível”, a chamada toca e aparece na tela. Você tem 30 segundos para aceitar."
+          : "Deixe esta página aberta: quando uma loja chamar, toca um alerta e você tem 30 segundos para aceitar. No app ApFood Entregador as chamadas chegam até com o celular bloqueado." })]));
     }
     estado.entregas.forEach(function (e) { itens.push(cartaoEntrega(e)); });
     const emMaos = ((estado.repasses && estado.repasses.lojas) || []).reduce(function (t, l) { return t + l.em_maos_centavos; }, 0);
@@ -622,7 +655,8 @@
       el("div", { class: "cartao" }, [el("h2", { text: estado.nome }), el("p", { class: "muted", text: "Lojas: " + estado.lojas.join(", ") })]),
       form,
       el("div", { class: "cartao", style: "display:grid;gap:10px" }, [
-        el("p", { class: "muted", style: "margin:0", text: "Para receber as chamadas, deixe o app aberto e “Disponível”. A tela fica acesa enquanto você estiver disponível." }),
+        el("p", { class: "muted", style: "margin:0", text: ehApk() ? "Enquanto estiver “Disponível”, as chamadas tocam mesmo com o celular bloqueado ou o app fechado (fica uma notificação “Você está disponível”). Para parar, toque em “Indisponível”."
+          : "Para receber as chamadas nesta página, deixe-a aberta e “Disponível”." }),
         el("button", { class: "btn perigo bloco", type: "button", text: "Sair da conta", onclick: async function () {
           try { await req("POST", "online/", { online: false }); } catch (e) { /* ok */ }
           sair(false);

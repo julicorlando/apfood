@@ -75,7 +75,37 @@ public final class Ofertas {
             b.addAction(0, "✅ Aceitar", PendingIntent.getActivity(c, id + 1, aceitar, flags()));
             b.addAction(0, "Recusar", PendingIntent.getBroadcast(c, id + 2, recusar, flags()));
         }
-        ((NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE)).notify(id, b.build());
+        Notification n = b.build();
+        if (chamada != null) n.flags |= Notification.FLAG_INSISTENT;  // toca até aceitar, recusar ou acabar o tempo
+        ((NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE)).notify(id, n);
+    }
+
+    /** "Ficar indisponível" na notificação do plantão. */
+    static void ficarIndisponivel(Context c) {
+        SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        p.edit().putString(PlantaoService.CHAVE_DISPONIVEL, "0").apply();
+        PlantaoService.parar(c);
+        String token = p.getString("apfood_entregador_token", null);
+        String base = p.getString("apfood_base", "https://apfood.axionwebdigital.com.br");
+        if (token == null) return;
+        HttpURLConnection con = null;
+        try {
+            con = (HttpURLConnection) new URL(base + "/api/entregador/online/").openConnection();
+            con.setRequestMethod("POST");
+            con.setConnectTimeout(10000);
+            con.setReadTimeout(10000);
+            con.setDoOutput(true);
+            con.setRequestProperty("Authorization", "Entregador " + token);
+            con.setRequestProperty("Content-Type", "application/json");
+            OutputStream o = con.getOutputStream();
+            o.write("{\"online\":false}".getBytes("UTF-8"));
+            o.close();
+            con.getResponseCode();
+        } catch (Exception e) {
+            // sem rede: o servidor considera indisponível depois de 90 s sem sinal
+        } finally {
+            if (con != null) con.disconnect();
+        }
     }
 
     /** Responde a oferta direto no servidor (sem depender da tela do app). */

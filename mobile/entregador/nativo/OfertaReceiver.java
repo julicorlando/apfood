@@ -13,6 +13,7 @@ public class OfertaReceiver extends BroadcastReceiver {
         final PendingResult r = goAsync();
         new Thread(() -> {
             try {
+                if ("indisponivel".equals(acao)) { Ofertas.ficarIndisponivel(c.getApplicationContext()); return; }
                 Ofertas.responder(c.getApplicationContext(), chamada, acao == null ? "recusar" : acao);
             } finally {
                 r.finish();
