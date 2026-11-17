@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import entregador, gestao, publico, relatorios, sync, views, webhooks
+from . import entregador, gestao, novidades, publico, relatorios, sync, views, webhooks
 
 r = DefaultRouter()
 for prefixo, vs in [
@@ -44,6 +44,13 @@ urlpatterns = [
     path("acertos-entregador/", relatorios.AcertoEntregadoresView.as_view()),
     path("acertos-entregador/<uuid:pk>/recibo/", relatorios.ReciboAcertoView.as_view()),
     path("repasses-entregador/", relatorios.RepassesEntregadorView.as_view()),
+    path("combos/", novidades.CombosView.as_view()),
+    path("combos/<uuid:pk>/", novidades.ComboView.as_view()),
+    path("estoque/lista-compras/", novidades.ListaComprasView.as_view()),
+    path("cardapio/importar/", novidades.ImportarCardapioView.as_view()),
+    path("cardapio/importar/confirmar/", novidades.ImportarConfirmarView.as_view()),
+    path("resumo-diario/", novidades.ResumoDiarioView.as_view()),
+    path("relatorios/tempos/", novidades.TemposView.as_view()),
     # app ApFood Entregador
     path("entregador/entrar/", entregador.EntrarView.as_view()),
     path("entregador/pin/", entregador.PinView.as_view()),
@@ -55,6 +62,7 @@ urlpatterns = [
     path("entregador/estado/", entregador.EstadoView.as_view()),
     path("entregador/historico/", entregador.HistoricoView.as_view()),
     path("entregador/ofertas/<uuid:chamada>/<str:acao>/", entregador.OfertaView.as_view()),
+    path("entregador/entregas/<uuid:pedido>/foto/", entregador.FotoEntregaView.as_view()),
     path("entregador/entregas/<uuid:pedido>/<str:acao>/", entregador.EntregaView.as_view()),
     path("entregador/repasses/", entregador.RepasseView.as_view()),
     path("entregador/plantao/", entregador.PlantaoView.as_view()),
@@ -66,6 +74,7 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/taxa-entrega/", publico.TaxaEntregaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/pedidos/", publico.PedidoPublicoView.as_view()),
     path("publico/lojas/<slug:slug>/cupom/", publico.CupomPublicoView.as_view()),
+    path("publico/lojas/<slug:slug>/carrinho/", publico.CarrinhoAbertoView.as_view()),
     path("publico/pedidos/<str:token>/", publico.AcompanharPedidoView.as_view()),
     path("publico/lojas/<slug:slug>/reservas/", publico.ReservaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/totem/<str:token>/pedidos/", publico.TotemPedidoView.as_view()),

@@ -69,6 +69,29 @@
       el("small", { text: "Posição de " + quando + " · atualiza sozinho" })]);
   }
 
+  function blocoPrevisao(p) {
+    const v = p.previsao;
+    if (!v) return null;
+    const chegada = v.tipo === "chegada";
+    const titulo = v.minutos <= 2 ? (chegada ? "Chegando! 🛵" : "Quase pronto!") : (chegada ? "Chega em ~" : "Fica pronto em ~") + v.minutos + " min";
+    return el("div", { class: "cartao previsao" }, [
+      el("small", { text: chegada ? "Previsão de chegada" : "Previsão" }),
+      el("div", { class: "previsao-min", text: titulo }),
+      el("small", { class: "muted", text: "por volta das " + v.ate + (v.base === "entregador" ? " · pela posição do entregador" : " · estimativa da loja") })]);
+  }
+
+  function blocoFoto(p) {
+    if (!p.foto_entrega) return null;
+    return el("div", { class: "cartao" }, [el("b", { text: "📷 Foto da entrega" }),
+      el("small", { class: "muted", text: "O entregador deixou o pedido e registrou esta foto." }),
+      el("a", { href: p.foto_entrega, target: "_blank", rel: "noopener" }, el("img", { class: "foto-entrega", src: p.foto_entrega, alt: "Foto do pedido entregue" }))]);
+  }
+
+  function blocoRepetir(p) {
+    if (p.status !== "CONCLUIDO" || !(p.repetir || []).length || !p.loja_slug) return null;
+    return el("a", { class: "btn", style: "justify-content:center", href: "/" + p.loja_slug + "/?repetir=" + encodeURIComponent(TOKEN), text: "🔁 Pedir de novo" });
+  }
+
   function blocoFidelidade(p) {
     const f = p.fidelidade;
     if (!f || !f.meta) return null;
@@ -169,6 +192,8 @@
       p.cartao_url && !p.pago && !cancelado ? el("div", { class: "cartao", style: "display:grid;gap:8px" }, [
         el("b", { text: "Pagamento com cartão pendente" }),
         el("a", { class: "btn", style: "justify-content:center", href: p.cartao_url, text: "💳 Pagar com cartão agora" })]) : null,
+      blocoPrevisao(p),
+      blocoFoto(p),
       blocoAvaliacao(p),
       blocoCodigo(p),
       blocoPix(p),
@@ -182,6 +207,7 @@
       blocoFidelidade(p),
       blocoIndicacao(p),
       el("div", { class: "cartao", style: "display:grid;gap:8px" }, [
+        blocoRepetir(p),
         zap ? el("a", { class: "btn secundario", href: zap, target: "_blank", rel: "noopener", text: "Falar com a loja no WhatsApp" }) : null,
         el("a", { class: "btn secundario", href: "/" + p.loja_slug + "/", text: "Voltar ao cardápio" })]),
       el("p", { class: "status-ws", id: "status-ws" }),

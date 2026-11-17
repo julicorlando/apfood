@@ -15,3 +15,4 @@ httpx>=0.27
 cryptography>=43
 segno>=1.6  # QR Code (SVG) do cupom impresso pelo navegador
 -e ../core
+pypdf>=4.3  # texto de cardápio em PDF (importação)

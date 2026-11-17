@@ -152,12 +152,18 @@
       chips.push(el("button", { class: "chip", "data-alvo": id, text: c.nome, onclick: function () {
         document.getElementById(id).scrollIntoView({ behavior: "smooth" });
       } }));
-      main.appendChild(el("section", { class: "secao" }, [
+      const fora = c.disponivel === false && !MESA;  // cardápio por horário (a mesa pede o que a cozinha tiver)
+      main.appendChild(el("section", { class: "secao" + (fora ? " fora-horario" : "") }, [
         el("h2", { id: id, text: c.nome }), c.descricao ? el("p", { class: "desc", text: c.descricao }) : null,
+        fora ? el("p", { class: "horario-cat", text: "🕒 " + (c.horario || "Fora do horário") }) : null,
       ].concat(produtos.map(function (p) {
-        return el("button", { class: "produto", disabled: p.esgotado, onclick: function () { abrirProduto(p); } }, [
+        const bloqueado = p.esgotado || fora;
+        return el("button", { class: "produto", disabled: bloqueado, onclick: function () { abrirProduto(p); } }, [
           el("div", { class: "txt" }, [el("strong", { text: p.nome }), p.descricao ? el("div", { class: "d", text: p.descricao }) : null,
-            p.esgotado ? el("span", { class: "etiqueta", text: "Esgotado" }) : el("span", { class: "preco" }, [precoExibicao(p)])]),
+            p.combo ? el("div", { class: "combo-itens", text: p.combo.itens.join(" + ") }) : null,
+            p.esgotado ? el("span", { class: "etiqueta", text: "Esgotado" })
+              : el("span", { class: "preco" }, [p.combo && p.combo.de_centavos > p.preco_centavos ? el("span", { class: "preco-de", text: C.reais(p.combo.de_centavos) }) : null, precoExibicao(p)]),
+            p.combo && p.combo.economia_centavos && !p.esgotado ? el("div", {}, el("span", { class: "combo-economia", text: "Economize " + C.reais(p.combo.economia_centavos) })) : null]),
           p.imagem ? el("img", { src: p.imagem, alt: "", loading: "lazy" }) : null,
         ]);
       }))));
@@ -296,9 +302,65 @@
       carrinho.adicionar(JSON.parse(JSON.stringify(item)));
       fecharFolha();
       renderBarra();
+      sugerirCombo(p);
     });
     montar();
     abrirFolha(p.nome, corpo, [el("div", { class: "rodape-linha" }, [passoQtd, btn]), erros]);
+  }
+
+  // "Transforme em combo": o cliente escolheu um item que faz parte de um combo mais em conta
+  let sugestaoTimer = null;
+  function sugerirCombo(p) {
+    if (MESA || TOTEM || p.combo) return;
+    const noCarrinho = new Set(carrinho.itens.map(function (i) { return i.produto_id; }));
+    let melhor = null;
+    DADOS.categorias.forEach(function (c) {
+      if (c.disponivel === false) return;
+      c.produtos.forEach(function (x) {
+        if (!x.combo || x.esgotado || noCarrinho.has(x.id) || x.combo.produtos.indexOf(p.id) < 0 || !x.combo.economia_centavos) return;
+        if (!melhor || x.combo.economia_centavos > melhor.combo.economia_centavos) melhor = x;
+      });
+    });
+    const antiga = document.querySelector(".sugestao-combo");
+    if (antiga) antiga.remove();
+    if (!melhor) return;
+    const caixa = el("div", { class: "sugestao-combo", role: "status" }, [
+      el("div", { class: "txt" }, [el("b", { text: "🍱 Leve o " + melhor.nome }), el("div", { text: melhor.combo.itens.join(" + ") + " por " + C.reais(melhor.preco_centavos) + " · economize " + C.reais(melhor.combo.economia_centavos) })]),
+      el("button", { class: "btn", type: "button", text: "Ver", onclick: function () { caixa.remove(); abrirProduto(melhor); } }),
+      el("button", { class: "btn secundario", type: "button", "aria-label": "Fechar", text: "✕", onclick: function () { caixa.remove(); } })]);
+    document.body.appendChild(caixa);
+    clearTimeout(sugestaoTimer);
+    sugestaoTimer = setTimeout(function () { caixa.remove(); }, 10000);
+  }
+
+  // "Peça de novo": monta o carrinho com os itens de um pedido anterior (preço e disponibilidade de agora)
+  async function repetir(token) {
+    try {
+      const r = await fetch("/api/publico/pedidos/" + encodeURIComponent(token) + "/", { headers: { Accept: "application/json" } });
+      if (!r.ok) throw new Error();
+      const ped = await r.json();
+      let ok = 0, fora = 0;
+      (ped.repetir || []).forEach(function (it) {
+        const prod = idx.produtos[it.produto_id];
+        const cat = idx.categoriaDe[it.produto_id] || {};
+        if (!prod || prod.esgotado || cat.disponivel === false || C.validar(idx, it).length) { fora++; return; }
+        carrinho.adicionar(it); ok++;
+      });
+      renderBarra();
+      if (ok) abrirCarrinho();
+      if (fora) $("#topo").appendChild(el("div", { class: "aviso", text: fora + " item(ns) do pedido anterior não estão disponíveis agora." }));
+      if (!ok && !fora) $("#topo").appendChild(el("div", { class: "aviso", text: "Não encontramos os itens desse pedido." }));
+    } catch (e) {
+      $("#topo").appendChild(el("div", { class: "aviso", text: "Não foi possível repetir o pedido agora." }));
+    }
+  }
+
+  function faixaRepetir(meus) {
+    const ultimo = meus.find(function (p) { return (p.resumo || []).length; });
+    if (!ultimo) return;
+    $("#topo").appendChild(el("div", { class: "aviso repetir" }, [
+      el("div", { class: "txt" }, [el("b", { text: "🔁 Pedir de novo?" }), el("small", { text: ultimo.resumo.join(", ") })]),
+      el("button", { class: "btn", type: "button", text: "Repetir", onclick: function (ev) { ev.currentTarget.closest(".repetir").remove(); repetir(ultimo.token); } })]));
   }
 
   // ---------------------------------------------------------------- carrinho
@@ -579,6 +641,23 @@
     corpo.appendChild(campo("cpf", "CPF na nota (opcional)", { inputmode: "numeric", maxlength: "14" }));
     corpo.appendChild(resumo);
 
+    // carrinho abandonado: com o telefone informado, a loja pode lembrar pelo WhatsApp se não finalizar
+    let avisoCarrinho = null;
+    function avisarCarrinho() {
+      if (!LOJA.recuperar_carrinho || !carrinho.itens.length || !C.telefoneValido(f.telefone.value)) return;
+      clearTimeout(avisoCarrinho);
+      avisoCarrinho = setTimeout(function () {
+        const t = C.totais(idx, carrinho.itens, 0, 0);
+        post("carrinho/", { telefone: f.telefone.value, nome: f.nome.value.trim(), total_centavos: t.subtotal,
+          itens: carrinho.itens.map(function (i) { return i.quantidade + "x " + C.descrever(idx, i).titulo; }) }).catch(function () {});
+      }, 1500);
+    }
+    if (LOJA.recuperar_carrinho) {
+      f.telefone.addEventListener("input", avisarCarrinho);
+      f.nome.addEventListener("change", avisarCarrinho);
+      avisarCarrinho();
+    }
+
     function atualizar() {
       const taxa = estado.tipo === "ENTREGA" ? (estado.taxa || 0) : 0;
       const t = C.totais(idx, carrinho.itens, taxa, estado.cupom ? estado.cupom.desconto : 0);
@@ -625,12 +704,13 @@
           bairro: f.bairro.value.trim(), complemento: f.complemento.value.trim(), referencia: f.referencia.value.trim(),
           cep: f.cep.value, cidade: f.cidade ? f.cidade.value : "" }, estado.coords || {});
       }
+      const resumoCarrinho = carrinho.itens.map(function (i) { return i.quantidade + "x " + C.descrever(idx, i).titulo; }).slice(0, 6);
       try {
         const r = await post("pedidos/", corpoPedido);
         carrinho.limpar();
         try {
           const meus = JSON.parse(localStorage.getItem("apfood_pedidos") || "[]");
-          meus.unshift({ token: r.token, numero: r.numero, loja: LOJA.nome, slug: LOJA.slug, em: new Date().toISOString() });
+          meus.unshift({ token: r.token, numero: r.numero, loja: LOJA.nome, slug: LOJA.slug, em: new Date().toISOString(), resumo: resumoCarrinho });
           localStorage.setItem("apfood_pedidos", JSON.stringify(meus.slice(0, 20)));
           if (r.pix) sessionStorage.setItem("apfood_pix_" + r.token, JSON.stringify(r.pix));
         } catch (e) { /* ok */ }
@@ -656,6 +736,11 @@
       $("#topo").appendChild(el("a", { class: "aviso", style: "display:block;text-decoration:none", href: "/pedido/" + recente.token + "/",
         text: "Acompanhar seu pedido #" + (recente.numero || "") + " →" }));
     }
+    const pedirDe = new URLSearchParams(location.search).get("repetir");
+    if (pedirDe) {
+      history.replaceState(null, "", location.pathname);
+      repetir(pedirDe);
+    } else if (!carrinho.itens.length && !recente) faixaRepetir(meus);
   }
 
   // ------------------------------------------------------------- totem (balcão)

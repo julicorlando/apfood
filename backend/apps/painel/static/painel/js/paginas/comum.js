@@ -374,6 +374,7 @@ export async function abrirPedido(id, { aoMudar } = {}) {
   // ---- entrega pelo app ApFood Entregador: chamada em fila e códigos
   let chamada = null;
   let disponiveis = null;
+  let juntar = [];
   let espera = null;
   const ativo = () => document.body.contains(m.el);
   const podeChamar = () => p.tipo_atendimento === "ENTREGA" && !p.entregador && ["RECEBIDO", "EM_PREPARO", "PRONTO"].includes(p.status);
@@ -387,6 +388,10 @@ export async function abrirPedido(id, { aoMudar } = {}) {
         h("span", null, "Código de retirada"), h("b", null, p.codigo_retirada),
         h("small", null, "Informe ao entregador: ele digita no app ao pegar o pedido.")));
     }
+    if (p.foto_entrega) {
+      linhas.push(h("div", null, h("div", { class: "muted" }, "📷 Entregue com foto (cliente ausente):"),
+        h("a", { href: p.foto_entrega, target: "_blank", rel: "noopener" }, h("img", { class: "foto-entrega-painel", src: p.foto_entrega, alt: "Foto da entrega" }))));
+    }
     if (chamada) linhas.push(blocoChamada());
     else if (podeChamar()) linhas.push(h("p", { class: "muted" }, "Sem entregador. Use “Chamar entregador” para oferecer aos entregadores do app."));
     return h("div", null, linhas);
@@ -397,13 +402,14 @@ export async function abrirPedido(id, { aoMudar } = {}) {
     if (c.status === "PROCURANDO") {
       return h("div", { class: "alerta alerta-aviso chamada" },
         h("div", { class: "negrito" }, "Procurando entregador…"),
+        c.juntos?.length ? h("div", null, `📦 Na mesma viagem: #${c.juntos.join(", #")}`) : null,
         c.entregador_atual ? h("div", null, `Oferecendo para ${c.entregador_atual} · ${c.segundos_oferta}s para aceitar`)
           : h("div", null, disponiveis ? "Passando para o próximo…" : "Nenhum entregador disponível no app agora — esperando alguém ficar online."),
         h("div", { class: "muted" }, `Tentativas: ${c.tentativas}${c.recusas ? ` · recusas: ${c.recusas}` : ""} · tempo restante ${mmss(c.segundos_total)}`),
         h("div", { class: "acoes", style: { marginTop: "6px" } },
           botaoAcao("Cancelar chamada", async () => { await post(`/api/pedidos/${p.id}/chamada/cancelar/`); await atualizarChamada(); }, "botao botao-pequeno")));
     }
-    if (c.status === "ACEITA") return h("div", { class: "alerta alerta-ok" }, `✓ ${c.aceita_por} aceitou a entrega.`);
+    if (c.status === "ACEITA") return h("div", { class: "alerta alerta-ok" }, `✓ ${c.aceita_por} aceitou a entrega${c.juntos?.length ? ` (junto com #${c.juntos.join(", #")})` : ""}.`);
     if (c.status === "SEM_RESPOSTA" && podeChamar()) {
       return h("div", { class: "alerta alerta-erro chamada" },
         h("div", { class: "negrito" }, "Ninguém aceitou."),
@@ -416,10 +422,39 @@ export async function abrirPedido(id, { aoMudar } = {}) {
   }
 
   async function chamar() {
-    const r = await post(`/api/pedidos/${p.id}/chamada/`);
+    let extras = [];
+    if (juntar.length) {
+      extras = await escolherJuntos();
+      if (extras === null) return;
+    }
+    const r = await post(`/api/pedidos/${p.id}/chamada/`, { juntar: extras });
     chamada = r.chamada; disponiveis = r.disponiveis;
     desenhar();
     acompanhar();
+  }
+
+  // Mais de uma entrega por viagem: outros pedidos sem entregador, do destino mais perto ao mais longe
+  function escolherJuntos() {
+    return new Promise((resolve) => {
+      const marcados = new Set();
+      let resposta = null;
+      const linhas = juntar.map((o) => {
+        const cx = h("input", { type: "checkbox", onchange: () => { if (cx.checked) marcados.add(o.id); else marcados.delete(o.id); } });
+        if (o.mesmo_bairro || (o.distancia_km !== null && o.distancia_km <= 2)) { cx.checked = true; marcados.add(o.id); }
+        return h("label", { class: "check" }, cx, h("span", null, h("b", null, `#${o.numero}`), ` · ${o.bairro || "—"}`,
+          o.distancia_km !== null ? h("span", { class: "muted" }, ` · ${String(o.distancia_km).replace(".", ",")} km deste`) : null,
+          o.mesmo_bairro ? h("span", { class: "etiqueta e-ok", style: { marginLeft: "6px" } }, "mesmo bairro") : null,
+          h("span", { class: "muted" }, ` · ${rotulo("StatusPedido", o.status)}`)));
+      });
+      const mm = modal({
+        titulo: "Levar outros pedidos na mesma viagem?", tamanho: "modal-pequeno",
+        corpo: h("div", { class: "grade" }, h("p", { class: "muted" }, "Um entregador leva todos: a chamada mostra as entregas juntas e o app dele ordena as paradas."), ...linhas),
+        rodape: [
+          botaoAcao("Chamar só este", () => { resposta = []; mm.fechar(); }),
+          botaoAcao("Chamar com os marcados", () => { resposta = [...marcados]; mm.fechar(); }, "botao botao-primario")],
+        aoFechar: () => resolve(resposta),
+      });
+    });
   }
 
   async function outraForma() {
@@ -436,7 +471,7 @@ export async function abrirPedido(id, { aoMudar } = {}) {
   async function atualizarChamada() {
     const r = await get(`/api/pedidos/${p.id}/chamada/`);
     const antes = chamada?.status;
-    chamada = r.chamada; disponiveis = r.disponiveis;
+    chamada = r.chamada; disponiveis = r.disponiveis; juntar = r.juntar || [];
     if (chamada?.status === "ACEITA" && antes === "PROCURANDO") { aviso(`${chamada.aceita_por} aceitou o pedido #${p.numero}.`, "ok"); await recarregar(); return; }
     desenhar();
   }

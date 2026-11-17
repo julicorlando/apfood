@@ -1,5 +1,7 @@
 """API pública do cardápio digital (sem login). Escopo pela `slug` da loja."""
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -36,6 +38,12 @@ def _url(request, arquivo):
     return request.build_absolute_uri(arquivo.url) if arquivo else None
 
 
+def _whatsapp_ativo(loja) -> bool:
+    from apps.integracoes.models import Integracao
+
+    return Integracao.ativa(loja, "WHATSAPP", "whatsapp") is not None
+
+
 def dados_loja_publica(loja, request) -> dict:
     from apfood_core.horarios import aberta_em, proxima_abertura
 
@@ -58,6 +66,7 @@ def dados_loja_publica(loja, request) -> dict:
         "agendamento": _agendamento(loja),
         "reservas": loja.aceita_reservas,
         # bairros com taxa cadastrada: sugestões no campo Bairro (o cliente ainda pode digitar outro)
+        "recuperar_carrinho": bool(loja.carrinho_ativo and _whatsapp_ativo(loja)),
         "bairros": sorted({z.nome.strip() for z in ZonaEntrega.objects.ativos().filter(loja=loja, ativa=True, tipo="BAIRRO")}),
         "fidelidade": {"selos": loja.fidelidade_selos, "premio": loja.fidelidade_premio_descricao
                        or (f"R$ {loja.fidelidade_premio_centavos / 100:.2f} de crédito".replace(".", ",")
@@ -79,7 +88,13 @@ def dados_cardapio(loja, request) -> dict:
     agora = timezone.now()
     promo_online = promocoes_agora(loja, canais=("ONLINE",))["ONLINE"]
     categorias = []
+    componentes = {}
+    from apps.cardapio.models import ComboItem
+
+    for ci in ComboItem.objects.filter(combo__loja=loja).select_related("produto").order_by("ordem", "id"):
+        componentes.setdefault(ci.combo_id, []).append(ci)
     for c in Categoria.objects.ativos().filter(loja=loja, ativa=True).order_by("ordem", "nome"):
+        disponivel = c.disponivel_em(agora)
         produtos = []
         for p in c.produtos.ativos().filter(ativo=True, disponivel_online=True, tipo="VENDA").order_by("ordem", "nome"):
             pausado = p.pausado and (p.pausado_ate is None or p.pausado_ate > agora)
@@ -101,9 +116,11 @@ def dados_cardapio(loja, request) -> dict:
                               for v in p.variacoes.ativos().filter(ativo=True)],
                 "grupos": grupos,
                 "promocao": promo_online.get(str(p.id)),
+                "combo": _combo(componentes.get(p.id), p.preco_centavos),
             })
         if produtos:
             categorias.append({"id": str(c.id), "nome": c.nome, "descricao": c.descricao,
+                               "disponivel": disponivel, "horario": c.texto_horario(agora),
                                "max_sabores": c.max_sabores, "regra_preco_sabores": c.regra_preco_sabores,
                                "produtos": produtos})
     # promoções do dia (para a faixa no topo do cardápio), mesmo as que começam mais tarde
@@ -118,6 +135,16 @@ def dados_cardapio(loja, request) -> dict:
             continue
         do_dia.append({"nome": promo.nome, "descricao": promo.descricao, "resumo": r.descricao()})
     return {"loja": dados_loja_publica(loja, request), "categorias": categorias, "promocoes": do_dia}
+
+
+def _combo(itens, preco) -> dict | None:
+    """Combo: o que vem nele e quanto o cliente economiza em relação aos itens separados."""
+    if not itens:
+        return None
+    de = sum(ci.produto.preco_centavos * ci.quantidade for ci in itens)
+    return {"itens": [f"{ci.quantidade}x {ci.produto.nome}" for ci in itens],
+            "produtos": [str(ci.produto_id) for ci in itens],
+            "de_centavos": de, "economia_centavos": max(0, de - preco)}
 
 
 class CardapioPublicoView(Publica):
@@ -158,6 +185,33 @@ class TaxaEntregaPublicaView(Publica):
                          "latitude": endereco.get("latitude"), "longitude": endereco.get("longitude")})
 
 
+def conferir_horarios(loja, itens, quando) -> None:
+    """Cardápio por horário: produto de categoria fora do horário não entra no pedido online."""
+    from apps.cardapio.models import Produto
+    from apps.core.excecoes import ErroNegocio
+
+    ids = [str(i.get("produto_id")) for i in itens if i.get("produto_id")]
+    for p in Produto.objects.filter(loja=loja, pk__in=ids).select_related("categoria"):
+        c = p.categoria
+        if c is not None and not c.disponivel_em(quando):
+            raise ErroNegocio(f"{p.nome}: {c.texto_horario(quando).lower() or 'fora do horário'}. Tire do carrinho para continuar.")
+
+
+class CarrinhoAbertoView(Publica):
+    """O cardápio avisa o carrinho de quem já informou o telefone; se não finalizar em
+    `carrinho_minutos`, a loja manda um lembrete pelo WhatsApp (uma vez por dia)."""
+
+    throttle_scope = "publico"
+
+    def post(self, request, slug):
+        from apps.marketing import carrinho
+
+        loja = loja_publica(slug)
+        carrinho.registrar(loja, telefone=str(request.data.get("telefone") or ""), nome=str(request.data.get("nome") or ""),
+                           itens=request.data.get("itens") or [], total=request.data.get("total_centavos") or 0)
+        return Response({"ok": True})
+
+
 class PedidoPublicoView(Publica):
     throttle_scope = "publico_pedido"
 
@@ -165,7 +219,14 @@ class PedidoPublicoView(Publica):
         loja = loja_publica(slug)
         entrada = s.PedidoOnlineIn(data=request.data)
         entrada.is_valid(raise_exception=True)
+        conferir_horarios(loja, entrada.validated_data.get("itens") or [],
+                          entrada.validated_data.get("agendado_para") or timezone.now())
         pedido = pedidos_srv.criar_pedido(loja, pedido_in(entrada.validated_data, loja))
+        if pedido.telefone_cliente:  # finalizou: não manda lembrete de carrinho abandonado
+            from apps.marketing.models import CarrinhoAberto
+
+            CarrinhoAberto.objects.filter(loja=loja, telefone=pedido.telefone_cliente, convertido_em__isnull=True) \
+                .update(convertido_em=timezone.now())
         resposta = {
             "token": pedido.token_rastreio, "numero": pedido.numero, "status": pedido.status,
             "total_centavos": pedido.total_centavos, "acompanhar": f"/pedido/{pedido.token_rastreio}/",
@@ -185,8 +246,6 @@ class PedidoPublicoView(Publica):
 def rastreio_entrega(p) -> dict | None:
     """Onde está o entregador (só enquanto o pedido está "saiu para entrega" e a
     posição tem menos de 10 minutos)."""
-    from datetime import timedelta
-
     from apfood_core.entrega import distancia_km
 
     e = p.entregador if p.entregador_id else None
@@ -199,8 +258,57 @@ def rastreio_entrega(p) -> dict | None:
     if p.entrega_latitude is not None and p.entrega_longitude is not None:
         km = distancia_km(float(e.latitude), float(e.longitude), float(p.entrega_latitude), float(p.entrega_longitude))
         r.update(destino={"latitude": float(p.entrega_latitude), "longitude": float(p.entrega_longitude)},
-                 distancia_km=round(km, 1), minutos=max(1, round(km / 20 * 60)))  # ~20 km/h na cidade
+                 distancia_km=round(km, 1), minutos=_minutos_trajeto(km))
     return r
+
+
+VELOCIDADE_KMH = 20  # moto/carro na cidade
+FATOR_RUA = 1.3      # distância em linha reta → pelas ruas
+SEM_COORDENADAS_MIN = 20
+
+
+def _minutos_trajeto(km: float) -> int:
+    return max(3, round(km * FATOR_RUA / VELOCIDADE_KMH * 60) + 2)
+
+
+def previsao(p) -> dict | None:
+    """Quando o pedido chega (entrega) ou fica pronto (retirada/balcão): "chega em ~12 min".
+    Saiu para entrega: pela posição do entregador; antes disso: preparo da loja + trajeto loja → cliente."""
+    from apfood_core.entrega import distancia_km
+
+    if p.status in ("CONCLUIDO", "CANCELADO", "RECUSADO") or (p.agendado_para and p.status == "PENDENTE"):
+        return None
+    agora = timezone.now()
+    entrega = p.tipo_atendimento == "ENTREGA"
+    tem_destino = p.entrega_latitude is not None and p.entrega_longitude is not None
+    base = "estimativa"
+    if p.status == "SAIU_PARA_ENTREGA":
+        r = rastreio_entrega(p)
+        if r and r.get("distancia_km") is not None:
+            minutos, base = _minutos_trajeto(r["distancia_km"]), "entregador"
+        else:
+            l = p.loja
+            km = (distancia_km(float(l.latitude), float(l.longitude), float(p.entrega_latitude), float(p.entrega_longitude))
+                  if tem_destino and l.latitude is not None and l.longitude is not None else None)
+            total = _minutos_trajeto(km) if km is not None else SEM_COORDENADAS_MIN
+            andou = (agora - p.saiu_entrega_em).total_seconds() / 60 if p.saiu_entrega_em else 0
+            minutos = max(2, round(total - andou))
+    else:
+        inicio = p.agendado_para if p.agendado_para and p.agendado_para > agora else (p.aceito_em or p.criado_em)
+        pronto_em = inicio + timedelta(minutes=p.loja.tempo_preparo_min or 30)
+        if p.status == "PRONTO":
+            pronto_em = agora
+        trajeto = 0
+        if entrega:
+            l = p.loja
+            km = (distancia_km(float(l.latitude), float(l.longitude), float(p.entrega_latitude), float(p.entrega_longitude))
+                  if tem_destino and l.latitude is not None and l.longitude is not None else None)
+            trajeto = _minutos_trajeto(km) if km is not None else SEM_COORDENADAS_MIN
+        chega = max(pronto_em, agora) + timedelta(minutes=trajeto)
+        minutos = max(1, round((chega - agora).total_seconds() / 60))
+    quando = agora + timedelta(minutes=minutos)
+    return {"minutos": minutos, "ate": timezone.localtime(quando).strftime("%H:%M"), "base": base,
+            "tipo": "chegada" if entrega else "pronto"}
 
 
 class AcompanharPedidoView(Publica):
@@ -229,6 +337,9 @@ class AcompanharPedidoView(Publica):
                            "saldo_centavos": p.cliente.saldo_cashback_centavos}
             if p.cliente_id and p.loja.fidelidade_selos else None,
             "rastreio": rastreio_entrega(p),
+            "previsao": previsao(p),
+            "foto_entrega": request.build_absolute_uri(p.foto_entrega.url) if p.foto_entrega else None,
+            "repetir": _repetir(p) if p.status in ("CONCLUIDO", "SAIU_PARA_ENTREGA", "PRONTO") else None,
             "pix": next(({"valor_centavos": x.valor_centavos, **x.dados_externos}
                          for x in p.pagamentos.filter(status="PENDENTE", forma="PIX") if x.dados_externos), None),
             # o cliente informa ao entregador na porta (o app do entregador pede para concluir)
@@ -265,6 +376,22 @@ class AcompanharPedidoView(Publica):
 
         publicar(grupo_pdv(p.loja_id), "pedido.avaliado", {"numero": p.numero, "nota": nota})
         return Response({"nota": a.nota, "comentario": a.comentario}, status=201)
+
+
+def _repetir(p) -> list[dict]:
+    """Itens do pedido no formato do carrinho do cardápio ("Peça de novo"): preços e disponibilidade
+    são conferidos de novo pelo cardápio na hora."""
+    itens = []
+    for i in p.itens.prefetch_related("adicionais", "sabores"):
+        if not i.produto_id:
+            continue
+        itens.append({"produto_id": str(i.produto_id), "quantidade": i.quantidade,
+                      "variacao_id": str(i.variacao_id) if i.variacao_id else None,
+                      "sabores": [str(x.produto_id) for x in i.sabores.all() if x.produto_id],
+                      "adicionais": [{"adicional_id": str(a.adicional_id), "quantidade": a.quantidade}
+                                     for a in i.adicionais.all() if a.adicional_id],
+                      "observacao": i.observacao})
+    return itens
 
 
 def _indicacao(p):

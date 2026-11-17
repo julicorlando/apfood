@@ -295,7 +295,7 @@
     else if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(function () {});
   }
   function notificar(o) {
-    const titulo = "🛵 Nova entrega — " + o.loja;
+    const titulo = (o.entregas > 1 ? "🛵 " + o.entregas + " entregas — " : "🛵 Nova entrega — ") + o.loja;
     const corpo = "Para " + (o.bairro || "o cliente") + (o.ganho_centavos ? " · você recebe " + reais(o.ganho_centavos) : "") +
       ". Aceite em " + o.segundos + " s.";
     const LN = CAP.LocalNotifications;
@@ -354,6 +354,8 @@
           el("div", {}, [el("small", { text: "Entrega" }), el("b", { text: km(o.entrega_km) })]),
           el("div", { class: o.ganho_centavos === null ? "largo" : "" }, [el("small", { text: "Destino" }), el("b", { text: o.bairro || "—" })]),
           o.ganho_centavos === null ? null : el("div", {}, [el("small", { text: "Você recebe" }), el("b", { text: reais(o.ganho_centavos) })]),
+          o.entregas > 1 ? el("div", { class: "largo" }, [el("small", { text: "Na mesma viagem" }),
+            el("b", { text: "📦 " + o.entregas + " entregas: #" + (o.numeros || []).join(", #") })]) : null,
         ]),
         el("div", { class: "botoes" }, [recusar, aceitar]),
       ]));
@@ -522,11 +524,55 @@
     return el("div", { class: "bloco-cobranca" }, [topo, opcoes, corpo]);
   }
 
+  // Cliente não está: deixa o pedido e conclui com uma foto (fica no pedido para a loja e o cliente)
+  function reduzirFoto(arquivo) {
+    return new Promise(function (ok) {
+      const url = URL.createObjectURL(arquivo);
+      const img = new Image();
+      img.onload = function () {
+        const max = 1600, esc = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { ok(b || arquivo); }, "image/jpeg", 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); ok(arquivo); };
+      img.src = url;
+    });
+  }
+
+  function botaoFoto(e) {
+    const erro = el("p", { class: "erro" });
+    const entrada = el("input", { type: "file", accept: "image/*", capture: "environment", style: "display:none", onchange: async function () {
+      const f = entrada.files && entrada.files[0];
+      if (!f) return;
+      const obs = prompt("Onde você deixou o pedido? (opcional)", "") || "";
+      botao.disabled = true; erro.textContent = ""; ocupado = true; botao.textContent = "Enviando foto…";
+      try {
+        const corpo = new FormData();
+        corpo.append("foto", await reduzirFoto(f), "entrega.jpg");
+        corpo.append("observacao", obs);
+        const r = await fetch(API + "entregas/" + e.id + "/foto/", { method: "POST", headers: { Accept: "application/json", Authorization: "Entregador " + token }, body: corpo });
+        const d = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(d.detail || Object.values(d).flat()[0] || "Não foi possível enviar a foto.");
+        if (navigator.vibrate) navigator.vibrate(200);
+        ocupado = false;
+        await carregar();
+      } catch (err) { ocupado = false; erro.textContent = err.message; botao.disabled = false; botao.textContent = "📷 Cliente não está? Concluir com foto"; }
+      entrada.value = "";
+    } });
+    const botao = el("button", { class: "btn claro bloco", type: "button", text: "📷 Cliente não está? Concluir com foto",
+      onclick: function () { entrada.click(); } });
+    return el("div", { class: "foto-entrega" }, [botao, entrada, erro]);
+  }
+
   function cartaoEntrega(e) {
     const etapa = e.saiu ? el("span", { class: "etiqueta caminho", text: "A caminho do cliente" })
       : e.pronto ? el("span", { class: "etiqueta pronto", text: "Pronto para retirar" })
       : el("span", { class: "etiqueta", text: "Em preparo na loja" });
     const filhos = [el("div", { class: "cab" }, [el("b", { text: "#" + e.numero + " · " + e.loja }), etapa])];
+    if (e.parada) filhos.push(el("div", { class: "parada", text: "📍 Parada " + e.parada + " de " + e.paradas + (e.parada === 1 ? " — vá nesta primeiro" : "") }));
     if (!e.saiu) {
       filhos.push(el("div", { class: "linha" }, "🏪 " + (e.loja_endereco || e.loja)));
       filhos.push(el("div", { class: "botoes" }, [
@@ -551,6 +597,7 @@
       else {
         if (!((e.cobranca && e.cobranca.feitos) || []).length) filhos.push(el("div", { class: "aviso verde", text: "✓ Já está pago" }));
         filhos.push(campoCodigo(e, "entregar", "Código de recebimento", "O cliente tem este código no acompanhamento do pedido e no WhatsApp."));
+        filhos.push(botaoFoto(e));
       }
     }
     if (e.ganho_centavos !== null && e.ganho_centavos !== undefined) filhos.push(el("div", { class: "muted", style: "margin-top:6px", text: "Você recebe: " + reais(e.ganho_centavos) }));

@@ -139,14 +139,17 @@ export function produtos() {
       { rotulo: "Produto", valor: (p) => h("div", null, h("div", { class: "negrito" }, p.nome),
         p.variacoes?.length ? h("small", { class: "muted" }, p.variacoes.map((v) => `${v.nome} ${dinheiro(v.preco_centavos)}`).join(" · ")) : null) },
       { rotulo: "Preço", classe: "num", valor: (p) => (p.variacoes?.length ? "—" : dinheiro(p.preco_centavos)) },
-      { rotulo: "Situação", valor: (p) => !p.ativo ? etiqueta("Inativo") : p.pausado ? etiqueta("Esgotado", "e-alerta") : etiqueta("À venda", "e-ok") },
+      { rotulo: "Situação", valor: (p) => !p.ativo ? etiqueta("Inativo") : pausadoAgora(p)
+        ? etiqueta(p.pausado_ate ? `Esgotado até ${new Date(p.pausado_ate).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : "Esgotado", "e-alerta")
+        : etiqueta("À venda", "e-ok") },
       { rotulo: "Estoque", classe: "num", valor: (p) => p.controla_estoque ? h("span", { class: p.abaixo_do_minimo ? "etiqueta e-erro" : "" }, `${Number(p.estoque_atual)} ${p.unidade}`) : "—" },
     ],
     campos: () => camposProduto("VENDA"),
     antesDeSalvar: (d) => ({ ...d, tipo: "VENDA" }),
     podeExcluir: excluirGerente,
-    acoes: (p, recarregar) => ehGerente() ? botaoAcao(p.pausado ? "Reativar" : "Esgotar", async () => {
-      await patch(`/api/produtos/${p.id}/`, { pausado: !p.pausado }); recarregar();
+    acoes: (p, recarregar) => ehGerente() ? botaoAcao(pausadoAgora(p) ? "Reativar" : "Esgotar", async () => {
+      if (pausadoAgora(p)) { await patch(`/api/produtos/${p.id}/`, { pausado: false, pausado_ate: null }); recarregar(); return; }
+      esgotar(p, recarregar);
     }, "botao botao-pequeno") : null,
     extras: (p, recarregar) => [secaoVariacoes(p, recarregar), secaoGrupos(p), secaoFicha(p)],
   });
@@ -188,8 +191,9 @@ export function categorias() {
       { secao: "Pizzas e meio a meio" },
       { nome: "max_sabores", rotulo: "Máximo de sabores por item", tipo: "numero" },
       { nome: "regra_preco_sabores", rotulo: "Preço com vários sabores", tipo: "select", enum: "RegraPrecoSabores", obrigatorio: true },
-      { nome: "disponibilidade", rotulo: "Disponibilidade por horário (avançado)", tipo: "json", padraoJson: [],
-        ajuda: 'Vazio = sempre. Ex.: [{"dia_semana": 0, "inicio": "11:00", "fim": "15:00"}] (0 = segunda)' },
+      { secao: "Cardápio por horário" },
+      { nome: "disponibilidade", rotulo: "Horários em que a categoria aparece para pedir", tipo: "faixas",
+        ajuda: "Sem horários = o dia todo. Ex.: Café da manhã das 06:00 às 11:00; Almoço das 11:00 às 15:00. Fora do horário, o cardápio online mostra a categoria apagada com o horário. Passa da meia-noite? Use, por exemplo, das 18:00 às 02:00." },
     ],
     podeExcluir: excluirGerente,
   });
@@ -727,5 +731,33 @@ export function promocoes() {
       };
     },
     podeExcluir: excluirGerente,
+  });
+}
+
+
+// "Esgotar": some do cardápio agora e volta sozinho no horário escolhido
+export function pausadoAgora(p) {
+  return !!p.pausado && (!p.pausado_ate || new Date(p.pausado_ate) > new Date());
+}
+
+function esgotar(p, recarregar) {
+  const agora = new Date();
+  const fimDoDia = new Date(agora); fimDoDia.setHours(23, 59, 0, 0);
+  const amanha = new Date(agora); amanha.setDate(amanha.getDate() + 1); amanha.setHours(6, 0, 0, 0);
+  const opcoes = [
+    ["Por 1 hora", new Date(agora.getTime() + 3600e3)],
+    ["Por 2 horas", new Date(agora.getTime() + 7200e3)],
+    ["Até o fim do dia", fimDoDia],
+    ["Até amanhã (06:00)", amanha],
+    ["Até eu reativar", null],
+  ];
+  const m = modal({
+    titulo: `Esgotar “${p.nome}”`, tamanho: "modal-pequeno",
+    corpo: h("div", { class: "grade" }, h("p", { class: "muted" }, "Some do cardápio online e do PDV agora e volta sozinho no horário escolhido."),
+      ...opcoes.map(([rot, ate]) => botaoAcao(rot, async () => {
+        await patch(`/api/produtos/${p.id}/`, { pausado: true, pausado_ate: ate ? ate.toISOString() : null });
+        m.fechar(); aviso(`${p.nome} esgotado${ate ? " até " + ate.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}.`, "ok");
+        recarregar();
+      }, "botao botao-bloco"))),
   });
 }

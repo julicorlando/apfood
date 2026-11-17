@@ -17,6 +17,8 @@ const ROTAS = [
 
   ["/produtos", "Produtos", "🍔", "Cardápio", temLoja, "cadastros", "produtos"],
   ["/categorias", "Categorias", "🗂️", "Cardápio", temLoja, "cadastros", "categorias"],
+  ["/combos", "Combos", "🍱", "Cardápio", () => temLoja() && ehGerente(), "novidades", "combos"],
+  ["/importar-cardapio", "Importar cardápio", "📷", "Cardápio", () => temLoja() && ehGerente(), "novidades", "importarCardapio"],
   ["/adicionais", "Adicionais", "➕", "Cardápio", temLoja, "cadastros", "adicionais"],
   ["/setores", "Setores de produção", "🔥", "Cardápio", temLoja, "cadastros", "setores"],
   ["/insumos", "Insumos", "🥬", "Cardápio", temLoja, "cadastros", "insumos"],
@@ -30,6 +32,7 @@ const ROTAS = [
   ["/mesas-cadastro", "Cadastro de mesas", "🪑", "Clientes e entrega", temLoja, "cadastros", "mesasCadastro"],
 
   ["/estoque", "Estoque", "📦", "Estoque e compras", () => temLoja() && ehGerente(), "gestao", "estoque"],
+  ["/lista-compras", "Lista de compras", "📝", "Estoque e compras", () => temLoja() && ehGerente(), "novidades", "listaCompras"],
   ["/compras", "Compras", "🛒", "Estoque e compras", () => temLoja() && ehGerente(), "gestao", "compras"],
   ["/fornecedores", "Fornecedores", "🚚", "Estoque e compras", temLoja, "cadastros", "fornecedores"],
 
@@ -44,6 +47,7 @@ const ROTAS = [
   ["/cmv", "CMV e margem", "📉", "Relatórios", () => temLoja() && ehGerente(), "gestao", "cmv"],
   ["/operadores", "Por operador", "🧑‍💼", "Relatórios", () => temLoja() && ehGerente(), "gestao", "operadores"],
   ["/avaliacoes", "Avaliações", "⭐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "avaliacoes"],
+  ["/tempos", "Tempo por etapa", "⏱️", "Relatórios", () => temLoja() && ehGerente(), "novidades", "tempos"],
   ["/rede", "Visão da rede", "🏬", "Relatórios", () => ehAdmin() && !ehMaster() && sessao.lojas.length > 1, "gestao", "rede"],
   ["/garcons", "Taxa de serviço por garçom", "🧾", "Relatórios", () => temLoja() && ehGerente(), "gestao", "garcons"],
   ["/fechamentos", "Fechamentos de caixa", "🔐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "fechamentos"],
@@ -101,6 +105,7 @@ const modulos = {
   gestao: () => import("./paginas/gestao.js"),
   config: () => import("./paginas/config.js"),
   plataforma: () => import("./paginas/plataforma.js"),
+  novidades: () => import("./paginas/novidades.js"),
 };
 
 const $ = (id) => document.getElementById(id);

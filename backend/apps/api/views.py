@@ -417,8 +417,12 @@ class PedidoViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModel
         from apps.pedidos import chamadas
 
         p = self.get_object()
-        ch = chamadas.iniciar(p, request.user) if request.method == "POST" else chamadas.ultima(p)
-        return Response({"chamada": chamadas.resumo(ch), "disponiveis": chamadas.disponiveis(p.loja).count()})
+        juntar = request.data.get("juntar") if request.method == "POST" else None
+        ch = chamadas.iniciar(p, request.user, juntar=juntar if isinstance(juntar, list) else None) \
+            if request.method == "POST" else chamadas.ultima(p)
+        return Response({"chamada": chamadas.resumo(ch), "disponiveis": chamadas.disponiveis(p.loja).count(),
+                         "juntar": chamadas.sugestoes_juntar(p) if p.status in chamadas.PODE_CHAMAR
+                         and not p.entregador_id else []})
 
     @action(detail=True, methods=["post"], url_path="chamada/cancelar")
     def cancelar_chamada(self, request, pk=None):
@@ -468,9 +472,32 @@ class CozinhaViewSet(EscopoLojaMixin, mixins.ListModelMixin, viewsets.GenericVie
             {**s.ItemOut(i).data, "pedido": {"id": str(i.pedido_id), "numero": i.pedido.numero,
                                              "mesa": i.pedido.mesa, "nome_cliente": i.pedido.nome_cliente,
                                              "tipo_atendimento": i.pedido.tipo_atendimento,
-                                             "criado_em": i.pedido.criado_em}}
+                                             "canal": i.pedido.canal, "observacao": i.pedido.observacao,
+                                             "senha": i.pedido.senha, "agendado_para": i.pedido.agendado_para,
+                                             "aceito_em": i.pedido.aceito_em, "criado_em": i.pedido.criado_em}}
             for i in itens
         ])
+
+    @action(detail=False, methods=["post"], url_path=r"pedido/(?P<pedido_id>[0-9a-f-]+)/pronto")
+    def pedido_pronto(self, request, pedido_id=None):
+        """Tela da cozinha: o pedido inteiro ficou pronto (todos os itens do setor escolhido ou de todos)."""
+        pedido = get_object_or_404(Pedido.objects.filter(loja__in=request.user.lojas_permitidas()), pk=pedido_id)
+        agora = timezone.now()
+        itens = pedido.itens.filter(status_producao__in=[StatusProducao.AGUARDANDO, StatusProducao.EM_PREPARO])
+        if setor := request.data.get("setor") or request.query_params.get("setor"):
+            itens = itens.filter(setor_id=setor)
+        for item in itens:
+            if item.producao_iniciada_em is None:
+                item.producao_iniciada_em = agora
+            item.status_producao, item.pronto_em = StatusProducao.PRONTO, agora
+            item.save(update_fields=["status_producao", "producao_iniciada_em", "pronto_em", "atualizado_em"])
+        pedido.refresh_from_db()
+        if pedido.status == StatusPedido.RECEBIDO:
+            pedido = pedidos_srv.transicionar(pedido, StatusPedido.EM_PREPARO, request.user)
+        if not pedido.itens.exclude(status_producao__in=[StatusProducao.PRONTO, StatusProducao.ENTREGUE]).exists():
+            if pedido.status in (StatusPedido.RECEBIDO, StatusPedido.EM_PREPARO):
+                pedidos_srv.transicionar(pedido, StatusPedido.PRONTO, request.user)
+        return Response({"ok": True})
 
     @action(detail=True, methods=["post"])
     def avancar(self, request, pk=None):

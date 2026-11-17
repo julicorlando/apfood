@@ -205,7 +205,9 @@ public class PlantaoService extends Service {
             String texto = "Para " + (bairro.isEmpty() || "null".equals(bairro) ? "o cliente" : bairro)
                     + (ganho > 0 ? String.format(Locale.forLanguageTag("pt-BR"), " · você recebe R$ %.2f", ganho / 100.0).replace('.', ',') : "")
                     + ". Aceite em " + oferta.optInt("segundos", 30) + " s.";
-            Ofertas.mostrar(this, "🛵 Nova entrega — " + oferta.optString("loja", "ApFood"), texto, chamada, oferta.optInt("segundos", 30));
+            int n = oferta.optInt("entregas", 1);
+            Ofertas.mostrar(this, (n > 1 ? "🛵 " + n + " entregas — " : "🛵 Nova entrega — ") + oferta.optString("loja", "ApFood"),
+                    texto, chamada, oferta.optInt("segundos", 30));
         } catch (Exception e) {
             falhas++;  // sem rede: tenta de novo no próximo tique
         } finally {

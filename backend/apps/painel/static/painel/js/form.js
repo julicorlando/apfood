@@ -67,6 +67,39 @@ function criarEntrada(c, valor) {
       else preencher(c.enum ? opcoesEnum(c.enum) : c.opcoes || []);
       return sel;
     }
+    case "faixas": {  // cardápio por horário: [{dia_semana, inicio, fim}]
+      const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+      const caixa = h("div", { class: "grade", style: { gap: "6px" } });
+      const linhas = h("div", { class: "grade", style: { gap: "6px" } });
+      const lidas = [];
+      const add = (f = { dia_semana: "todos", inicio: "11:00", fim: "15:00" }) => {
+        const dia = h("select", null, h("option", { value: "todos" }, "Todos os dias"),
+          DIAS.map((d, i) => h("option", { value: i }, d)));
+        dia.value = String(f.dia_semana);
+        const ini = h("input", { type: "time", value: f.inicio || "11:00" });
+        const fim = h("input", { type: "time", value: f.fim || "15:00" });
+        const l = { dia, ini, fim };
+        const el = h("div", { class: "horarios-grade" }, dia, ini, fim,
+          h("button", { type: "button", class: "botao botao-pequeno botao-perigo", onclick: () => { lidas.splice(lidas.indexOf(l), 1); el.remove(); } }, "Tirar"));
+        lidas.push(l);
+        linhas.append(el);
+      };
+      // agrupa o que veio salvo: o mesmo horário nos 7 dias vira "Todos os dias"
+      const salvo = Array.isArray(valor) ? valor : [];
+      const chave = (f) => `${f.inicio}-${f.fim}`;
+      const porHorario = {};
+      salvo.forEach((f) => { (porHorario[chave(f)] = porHorario[chave(f)] || []).push(f); });
+      Object.values(porHorario).forEach((fs) => {
+        const dias = new Set(fs.map((f) => Number(f.dia_semana)));
+        if (dias.size === 7) add({ ...fs[0], dia_semana: "todos" }); else fs.forEach((f) => add(f));
+      });
+      caixa._lidas = lidas;
+      caixa.append(
+        h("div", { class: "horarios-grade muted" }, h("small", null, "Dia"), h("small", null, "Das"), h("small", null, "Até"), h("span")),
+        linhas,
+        h("div", { class: "acoes" }, h("button", { type: "button", class: "botao botao-pequeno", onclick: () => add() }, "+ Horário")));
+      return caixa;
+    }
     case "multi": {
       const marcados = new Set((valor || []).map(String));
       const caixa = h("div", { class: "chips" });
@@ -106,6 +139,8 @@ function lerEntrada(c, el) {
     case "datahora": return el.value ? new Date(el.value).toISOString() : null;
     case "imagem": return el.querySelector("input[type=file]").files[0] || undefined;
     case "multi": return [...el._marcados];
+    case "faixas": return el._lidas.flatMap((l) => (l.dia.value === "todos" ? [0, 1, 2, 3, 4, 5, 6] : [Number(l.dia.value)])
+      .map((d) => ({ dia_semana: d, inicio: l.ini.value, fim: l.fim.value }))).filter((f) => f.inicio && f.fim);
     case "fk": case "select": return el.value === "" ? null : el.value;
     case "senha": return el.value;
     default: return el.value.trim();
@@ -132,7 +167,7 @@ export function formulario(campos, valores = {}, { aoEnviar } = {}) {
         h("label", { class: "check" }, entrada, h("span", null, c.rotulo)),
         c.ajuda ? h("small", null, c.ajuda) : null, erroEl);
     } else {
-      bloco = h("label", { class: `campo ${c.largo || ["textarea", "json", "multi"].includes(c.tipo) ? "largo" : ""}` },
+      bloco = h("label", { class: `campo ${c.largo || ["textarea", "json", "multi", "faixas"].includes(c.tipo) ? "largo" : ""}` },
         h("span", null, c.rotulo, c.obrigatorio ? " *" : ""), entrada, c.ajuda ? h("small", null, c.ajuda) : null, erroEl);
     }
     bloco._erro = erroEl;

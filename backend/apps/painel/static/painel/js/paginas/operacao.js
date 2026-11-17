@@ -1,6 +1,6 @@
 // Operação do dia: início, pedidos em tempo real, mesas, cozinha e caixa.
 import { ehGerente, ehMaster, get, lista, post, sessao, put } from "../api.js";
-import { aoMudarConexao, ouvir } from "../realtime.js";
+import { aoMudarConexao, bipe, ouvir } from "../realtime.js";
 import {
   aviso, barras, botaoAcao, centavos, confirmar, dataHora, dinheiro, erro, etiqueta, etiquetaStatus, h, hojeISO, hora, kpi, limpar, minutosDesde, modal, pedirTexto, reais, rotulo, tabela, trocar, uuid,
 } from "../ui.js";
@@ -411,36 +411,87 @@ export function cozinha() {
   return {
     titulo: "Cozinha",
     async render(raiz) {
-      const setores = await lista("/api/setores/");
-      const sel = h("select", { "aria-label": "Setor" }, h("option", { value: "" }, "Todos os setores"), setores.map((s) => h("option", { value: s.id }, s.nome)));
+      const [setores, lojaInfo] = await Promise.all([lista("/api/setores/"), get(`/api/lojas/${sessao.loja.id}/`).catch(() => ({}))]);
+      const meta = Number(lojaInfo.tempo_preparo_min) || 30;
+      let setorSalvo = "";
+      try { setorSalvo = localStorage.getItem("apfood_kds_setor") || ""; } catch { /* ok */ }
+      const sel = h("select", { "aria-label": "Setor" }, h("option", { value: "" }, "Todos os setores"), setores.map((s) => h("option", { value: s.id, selected: s.id === setorSalvo }, s.nome)));
       const area = h("div");
       const ao = indicadorAoVivo();
-      sel.addEventListener("change", carregar);
-      trocar(raiz, h("div", { class: "barra-ferramentas" }, sel, h("span", { class: "espaco" }), ao.el), area);
+      const resumo = h("span", { class: "muted" });
+      const tv = h("button", { type: "button", class: "botao", onclick: alternarTv }, "📺 Modo TV");
+      sel.addEventListener("change", () => { try { localStorage.setItem("apfood_kds_setor", sel.value); } catch { /* ok */ } carregar(); });
+      trocar(raiz, h("div", { class: "barra-ferramentas kds-barra" }, sel, resumo, h("span", { class: "espaco" }), ao.el, tv), area);
+      let conhecidos = null;
+      let itensAtuais = [];
 
+      function alternarTv() {
+        const ligado = document.body.classList.toggle("kds-tv");
+        tv.textContent = ligado ? "Sair do modo TV" : "📺 Modo TV";
+        try { if (ligado) document.documentElement.requestFullscreen?.(); else if (document.fullscreenElement) document.exitFullscreen(); } catch { /* ok */ }
+      }
+      const sairTela = () => { if (!document.fullscreenElement && document.body.classList.contains("kds-tv")) alternarTv(); };
+      document.addEventListener("fullscreenchange", sairTela);
+
+      function cor(min) { return min >= meta ? "atrasado" : min >= meta * 0.7 ? "atencao" : "no-prazo"; }
+      function tipoTxt(p) {
+        if (p.mesa) return `🍽️ Mesa ${p.mesa}`;
+        return { ENTREGA: "🛵 Entrega", RETIRADA: "🛍️ Retirada", CONSUMO_LOCAL: "🍽️ Balcão" }[p.tipo_atendimento] || "";
+      }
+      function desenhar() {
+        const porPedido = new Map();
+        for (const i of itensAtuais) {
+          if (!porPedido.has(i.pedido.id)) porPedido.set(i.pedido.id, { pedido: i.pedido, itens: [] });
+          porPedido.get(i.pedido.id).itens.push(i);
+        }
+        const pedidos = [...porPedido.values()];
+        resumo.textContent = pedidos.length ? `${pedidos.length} pedido(s) na fila · meta ${meta} min` : "";
+        trocar(area, pedidos.length ? h("div", { class: "kds" }, pedidos.map(({ pedido: p, itens }) => {
+          const min = minutosDesde(p.aceito_em || p.criado_em);
+          const emPreparo = itens.some((i) => i.status_producao === "EM_PREPARO");
+          return h("div", { class: `kds-comanda ${cor(min)}` },
+            h("div", { class: "kds-cab" },
+              h("span", { class: "kds-num" }, `#${p.numero ?? ""}${p.senha ? ` · senha ${p.senha}` : ""}`),
+              h("span", { class: "kds-tempo" }, `${min} min`)),
+            h("div", { class: "kds-tipo" }, tipoTxt(p), p.nome_cliente ? ` · ${p.nome_cliente}` : ""),
+            p.observacao ? h("div", { class: "kds-obs" }, `⚠️ ${p.observacao}`) : null,
+            h("ul", { class: "kds-itens" }, itens.map((i) => h("li", { class: i.status_producao },
+              h("button", { type: "button", class: "kds-item-btn", title: i.status_producao === "AGUARDANDO" ? "Começar este item" : "Item pronto",
+                onclick: async () => { await post(`/api/cozinha/${i.id}/avancar/`); carregar(); } },
+                h("span", { class: "kds-qtd" }, `${i.quantidade}×`),
+                h("span", null, h("strong", null, `${i.nome_produto}${i.nome_variacao ? ` (${i.nome_variacao})` : ""}`),
+                  i.sabores?.length ? h("div", null, i.sabores.map((s) => s.nome).join(" / ")) : null,
+                  i.adicionais?.length ? h("div", { class: "kds-ad" }, i.adicionais.map((a) => `+ ${a.quantidade > 1 ? `${a.quantidade}× ` : ""}${a.nome}`).join(", ")) : null,
+                  i.observacao ? h("div", { class: "kds-obs-item" }, i.observacao) : null),
+                h("span", { class: "kds-st" }, i.status_producao === "EM_PREPARO" ? "🔥" : ""))))),
+            h("div", { class: "kds-acoes" },
+              emPreparo ? null : botaoAcao("Começar", async () => {
+                for (const i of itens.filter((x) => x.status_producao === "AGUARDANDO")) await post(`/api/cozinha/${i.id}/avancar/`);
+                carregar();
+              }, "botao"),
+              botaoAcao("✓ Pronto", async () => {
+                await post(`/api/cozinha/pedido/${p.id}/pronto/`, { setor: sel.value || null });
+                carregar();
+              }, "botao botao-ok")));
+        })) : h("div", { class: "cartao vazio kds-vazio" }, "Nenhum pedido na fila. 🎉"));
+      }
       async function carregar() {
         try {
-          const itens = await get(`/api/cozinha/${sel.value ? `?setor=${sel.value}` : ""}`);
-          trocar(area, itens.length ? h("div", { class: "kds" }, itens.map((i) => {
-            const min = minutosDesde(i.pedido?.criado_em || new Date().toISOString());
-            return h("div", { class: `kds-item ${i.status_producao}` },
-              h("div", { class: "pedido-topo" }, h("span", { class: "pedido-numero" }, `#${i.pedido.numero}`),
-                h("span", { class: min > 20 ? "etiqueta e-erro" : "etiqueta" }, `${min} min · ${rotulo("StatusProducao", i.status_producao)}`)),
-              h("div", { class: "muted" }, i.pedido.mesa ? `Mesa ${i.pedido.mesa}` : i.pedido.nome_cliente || rotulo("TipoAtendimento", i.pedido.tipo_atendimento)),
-              h("div", { class: "nome", style: { margin: "8px 0" } }, `${i.quantidade}× ${i.nome_produto}${i.nome_variacao ? ` (${i.nome_variacao})` : ""}`),
-              i.sabores?.length ? h("div", null, `Sabores: ${i.sabores.map((s) => s.nome).join(" / ")}`) : null,
-              i.adicionais?.length ? h("div", null, i.adicionais.map((a) => `+ ${a.quantidade > 1 ? `${a.quantidade}× ` : ""}${a.nome}`).join(", ")) : null,
-              i.observacao ? h("div", { class: "alerta alerta-aviso", style: { marginTop: "6px" } }, i.observacao) : null,
-              h("div", { style: { marginTop: "10px" } }, botaoAcao(i.status_producao === "AGUARDANDO" ? "Iniciar preparo" : "Pronto ✓", async () => {
-                await post(`/api/cozinha/${i.id}/avancar/`);
-                carregar();
-              }, `botao botao-bloco ${i.status_producao === "AGUARDANDO" ? "" : "botao-ok"}`)));
-          })) : h("div", { class: "cartao vazio" }, "Nenhum item na fila. 🎉"));
+          itensAtuais = await get(`/api/cozinha/${sel.value ? `?setor=${sel.value}` : ""}`);
+          const ids = new Set(itensAtuais.map((i) => i.pedido.id));
+          if (conhecidos && [...ids].some((id) => !conhecidos.has(id))) bipe();  // chegou pedido novo na fila
+          conhecidos = ids;
+          desenhar();
         } catch (e) { erro(e); }
       }
       await carregar();
-      const parar = atualizarAoVivo(carregar, 15000);
-      return () => { parar(); ao.parar(); };
+      const parar = atualizarAoVivo(carregar, 10000);
+      const relogio = setInterval(desenhar, 30000);  // os minutos andam mesmo sem mudança
+      return () => {
+        parar(); ao.parar(); clearInterval(relogio);
+        document.removeEventListener("fullscreenchange", sairTela);
+        document.body.classList.remove("kds-tv");
+      };
     },
   };
 }

@@ -19,7 +19,7 @@ export async function carregarCardapio() {
     opcoes: (g.adicionais || []).map((a) => ({ id: a.id, nome: a.nome, preco_centavos: a.preco_centavos, max_por_item: a.max_por_item })),
   }]));
   const conv = (p) => ({
-    id: p.id, nome: p.nome, preco_centavos: p.preco_centavos, variacoes: p.variacoes || [], esgotado: p.pausado,
+    id: p.id, nome: p.nome, preco_centavos: p.preco_centavos, variacoes: p.variacoes || [], esgotado: !!p.pausado && (!p.pausado_ate || new Date(p.pausado_ate) > new Date()),
     codigo: p.codigo, imagem: p.imagem, grupos: (p.grupos_adicionais || []).map((id) => gruposPorId[id]).filter(Boolean),
   });
   const ordem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.nome.localeCompare(b.nome);

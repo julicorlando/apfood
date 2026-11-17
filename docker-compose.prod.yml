@@ -24,6 +24,9 @@ services:
       APFOOD_PDV_VERSAO: ${APFOOD_PDV_VERSAO:-}
       APFOOD_PDV_URL: ${APFOOD_PDV_URL:-}
       APFOOD_PDV_SHA256: ${APFOOD_PDV_SHA256:-}
+      APFOOD_ANTHROPIC_KEY: ${APFOOD_ANTHROPIC_KEY:-}
+      APFOOD_FCM_CREDENCIAIS: ${APFOOD_FCM_CREDENCIAIS:-}
+      APFOOD_IA_MODELO: ${APFOOD_IA_MODELO:-claude-sonnet-5-5}
       APFOOD_PDV_OBRIGATORIA_ATE: ${APFOOD_PDV_OBRIGATORIA_ATE:-}
       # E-mail (senha, cobrança, alertas de erro). Ex.: smtp+tls://usuario:senha@smtp.gmail.com:587
       EMAIL_URL: ${EMAIL_URL:-consolemail://}
