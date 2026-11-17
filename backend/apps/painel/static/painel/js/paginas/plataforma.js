@@ -110,6 +110,14 @@ export function empresas() {
       { nome: "observacoes", rotulo: "Observações internas", tipo: "textarea" },
     ],
     antesDeSalvar: (d) => ({ ...d, cnpj: d.cnpj || null }),
+    acoes: (e) => botaoAcao("Demonstração", async () => {
+      if (!(await confirmar(`Preencher a loja de "${e.nome}" com dados de demonstração? Cria cardápio, estoque, mesas, `
+        + "clientes, promoções e um mês de pedidos de exemplo. Não apaga nada que já existe.", { ok: "Preencher" }))) return;
+      try {
+        const r = await post(`/api/empresas/${e.id}/demonstracao/`, {});
+        aviso(`Preenchendo "${r.loja}"… leva cerca de 1 a 2 minutos.`, "ok");
+      } catch (err) { erro(err); }
+    }, "botao botao-pequeno"),
   });
 }
 

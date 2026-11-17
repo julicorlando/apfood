@@ -165,6 +165,21 @@ class EmpresaViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("somente o MASTER cadastra empresas")
         return super().create(request, *args, **kwargs)
 
+    @action(detail=True, methods=["post"])
+    def demonstracao(self, request, pk=None):
+        """MASTER: preenche a primeira loja da empresa com dados de demonstração
+        (cardápio, estoque, mesas, clientes, promoções e um mês de pedidos). Roda na fila."""
+        from apps.integracoes.tarefas import enfileirar
+
+        if not request.user.eh_master:
+            raise PermissionDenied("somente o MASTER")
+        empresa = self.get_object()
+        loja = empresa.lojas.order_by("criado_em").first()
+        if loja is None:
+            raise ValidationError({"detail": "a empresa não tem loja"})
+        enfileirar("plataforma.demonstracao", {"loja_id": str(loja.id), "dias": 30}, chave=f"demo-{loja.id}")
+        return Response({"loja": loja.nome, "status": "em andamento"}, status=status.HTTP_202_ACCEPTED)
+
     @action(detail=False, methods=["post"])
     def onboarding(self, request):
         """MASTER cria empresa + primeira loja + usuário ADMIN de uma vez.

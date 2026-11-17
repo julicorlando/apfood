@@ -84,5 +84,6 @@ def _carregar_executores():
     from apps.integracoes.provedores import ifood as _i  # noqa: F401
     from apps.marketing import campanhas as _m  # noqa: F401
     from apps.plataforma import cobranca as _c  # noqa: F401
+    from apps.plataforma import demonstracao as _d  # noqa: F401
 
     EXECUTORES["_carregado"] = True
