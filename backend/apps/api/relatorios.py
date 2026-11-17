@@ -232,3 +232,47 @@ class CMVView(Relatorio):
             "faturamento_sem_custo_centavos": fat_sem_custo,
             "itens": linhas, "cardapio": cardapio,
         })
+
+
+class OperadoresView(Relatorio):
+    """Quanto cada operador faturou: pedidos efetivados (lançados por ele e
+    concluídos) e valores recebidos por ele no caixa, por forma de pagamento."""
+
+    def get(self, request):
+        from apps.contas.models import Usuario
+        from apps.pedidos.models import Pagamento
+
+        loja, inicio, fim = self.base(request)
+        ops: dict[str, dict] = {}
+
+        def op(uid, nome):
+            return ops.setdefault(str(uid), {"usuario": str(uid), "operador": nome, "pedidos": 0,
+                                             "pedidos_centavos": 0, "cancelados": 0, "recebido_centavos": 0,
+                                             "recebimentos": 0, "por_forma": {}})
+
+        pedidos = list(Pedido.objects.filter(loja=loja, data_referencia__range=(inicio, fim), atendente__isnull=False)
+                       .values("atendente", "status").annotate(n=Count("id"), v=Sum("total_centavos")))
+        pags = list(Pagamento.objects.filter(status="CONFIRMADO", recebido_por__isnull=False,
+                                             confirmado_em__date__range=(inicio, fim))
+                    .filter(Q(pedido__loja=loja) | Q(comanda__loja=loja))
+                    .values("recebido_por", "forma").annotate(n=Count("id"), v=Sum("valor_centavos")))
+        ids = {p["atendente"] for p in pedidos} | {pg["recebido_por"] for pg in pags}
+        nomes = {str(u.pk): (u.get_full_name() or u.username) for u in Usuario.objects.filter(pk__in=ids)}
+        for p in pedidos:
+            o = op(p["atendente"], nomes.get(str(p["atendente"]), "?"))
+            if p["status"] == "CONCLUIDO":
+                o["pedidos"] += p["n"]
+                o["pedidos_centavos"] += p["v"] or 0
+            elif p["status"] in ("CANCELADO", "RECUSADO"):
+                o["cancelados"] += p["n"]
+        for pg in pags:
+            o = op(pg["recebido_por"], nomes.get(str(pg["recebido_por"]), "?"))
+            o["recebido_centavos"] += pg["v"] or 0
+            o["recebimentos"] += pg["n"]
+            o["por_forma"][pg["forma"]] = o["por_forma"].get(pg["forma"], 0) + (pg["v"] or 0)
+        linhas = sorted(ops.values(), key=lambda o: -(o["recebido_centavos"] + o["pedidos_centavos"]))
+        for o in linhas:
+            o["ticket_medio_centavos"] = o["pedidos_centavos"] // o["pedidos"] if o["pedidos"] else 0
+        return Response({"inicio": inicio, "fim": fim, "operadores": linhas,
+                         "total_recebido_centavos": sum(o["recebido_centavos"] for o in linhas),
+                         "total_pedidos_centavos": sum(o["pedidos_centavos"] for o in linhas)})

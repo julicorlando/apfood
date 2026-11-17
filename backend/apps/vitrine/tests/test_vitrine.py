@@ -102,3 +102,45 @@ def test_pagina_inicial_leva_ao_painel(client):
 def test_admin_tem_nome_apfood(client):
     resposta = client.get("/admin/login/")
     assert "ApFood" in resposta.content.decode()
+
+
+def test_app_cliente_lista_lojas_da_regiao(loja):
+    from apps.lojas.models import Empresa, Loja
+
+    loja.cidade = "São Paulo"
+    loja.save()
+    longe = Empresa.objects.create(nome="Longe")
+    Loja.objects.create(empresa=longe, nome="Rio Burger", slug="rio-burger", cidade="Rio de Janeiro",
+                        latitude=Decimal("-22.90"), longitude=Decimal("-43.20"))
+    sem_coord = Empresa.objects.create(nome="Vizinha")
+    Loja.objects.create(empresa=sem_coord, nome="Pastel da Vila", slug="pastel-vila", cidade="são paulo")
+    oculta = Empresa.objects.create(nome="Oculta")
+    Loja.objects.create(empresa=oculta, nome="Escondida", slug="escondida", cidade="São Paulo",
+                        latitude=Decimal("-23.55"), longitude=Decimal("-46.63"), aparecer_no_app=False)
+    bloqueada = Empresa.objects.create(nome="Bloq", ativa=False)
+    Loja.objects.create(empresa=bloqueada, nome="Bloqueada", slug="bloqueada", cidade="São Paulo",
+                        latitude=Decimal("-23.55"), longitude=Decimal("-46.63"))
+
+    api = APIClient()
+    d = api.get("/api/publico/lojas/", {"lat": "-23.56", "lng": "-46.64"}).json()
+    nomes = [x["nome"] for x in d["lojas"]]
+    assert nomes[0] == "Burger Centro" and d["lojas"][0]["distancia_km"] < 5
+    assert "Pastel da Vila" in nomes  # sem coordenadas, mas da mesma cidade
+    assert "Rio Burger" not in nomes and "Escondida" not in nomes and "Bloqueada" not in nomes
+
+    d = api.get("/api/publico/lojas/", {"cidade": "Rio de Janeiro"}).json()
+    assert [x["nome"] for x in d["lojas"]] == ["Rio Burger"]
+    assert "Rio de Janeiro" in d["cidades"] and "São Paulo" in d["cidades"]
+    assert {x["slug"] for x in api.get("/api/publico/lojas/", {"busca": "pastel"}).json()["lojas"]} == {"pastel-vila"}
+
+
+def test_paginas_do_app(loja):
+    c = Client()
+    r = c.get("/app/")
+    assert r.status_code == 200 and "vitrine/app.js" in r.content.decode()
+    assert c.get("/app/manifest.webmanifest").json()["start_url"] == "/app/"
+    r = c.get("/app/baixar/cliente/")
+    assert r.status_code == 302 and r["Location"].endswith("/ApFood-Cliente.apk")
+    assert c.get("/app/baixar/outro/").status_code == 404
+    assert "ApFood-Empresa" not in c.get("/").content.decode()  # home só tem os links /app/baixar/
+    assert "/app/baixar/empresa/" in c.get("/").content.decode()

@@ -36,9 +36,15 @@
         <a class="botao secundario" href="{% url 'cadastro:planos' %}">Testar grátis no meu restaurante</a>
         {% if url_pdv %}<a class="botao secundario" href="{{ url_pdv }}">Baixar o PDV para Windows</a>{% endif %}
       </div>
+      <div class="botoes">
+        <a class="botao secundario" href="{% url 'vitrine:app_cliente' %}">Pedir comida (app)</a>
+        <a class="botao secundario" href="{% url 'vitrine:baixar_app' 'cliente' %}">📱 App Android — cliente</a>
+        <a class="botao secundario" href="{% url 'vitrine:baixar_app' 'empresa' %}">📱 App Android — empresa</a>
+      </div>
       <ul>
         <li><strong>Painel</strong>Produtos, pedidos, caixa, estoque, financeiro e relatórios de cada loja.</li>
         <li><strong>PDV</strong>Vende pelo navegador ou pelo app para Windows (funciona offline) e imprime cupom.</li>
+        <li><strong>Apps</strong>ApFood (cliente: restaurantes da região e pedidos) e ApFood Empresa (atendentes, caixa e resultados).</li>
         <li><strong>Cardápio digital</strong>Cada loja tem o seu endereço: {{ request.get_host }}/<em>nome-da-loja</em>/</li>
       </ul>
     </div>

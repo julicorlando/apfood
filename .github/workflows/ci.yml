@@ -163,6 +163,47 @@ jobs:
           $notas = "PDV $versao`n`nSHA-256: $sha`n`nNo servidor:`nAPFOOD_PDV_VERSAO=$versao`nAPFOOD_PDV_URL=https://github.com/${{ github.repository }}/releases/download/$tag/ApFoodPDV.exe`nAPFOOD_PDV_SHA256=$sha"
           gh release create $tag dist/ApFoodPDV.exe --title "ApFood PDV $versao" --notes $notas
 
+  apps:
+    name: Apps Android (cliente e empresa)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Android SDK do runner
+        run: echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> $GITHUB_ENV && ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools"
+      - name: ImageMagick
+        run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+      - name: Gerar APKs
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+        run: |
+          chmod +x mobile/construir.sh
+          mobile/construir.sh cliente
+          mobile/construir.sh empresa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apps-android
+          path: mobile/dist/*.apk
+          retention-days: 30
+      - name: Publicar release (main) — links de download do site
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          versao=$(tr -d '[:space:]' < mobile/VERSAO)
+          tag="apps-v$versao"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "Release $tag já existe — suba mobile/VERSAO para publicar outra"; exit 0; fi
+          gh release create "$tag" mobile/dist/ApFood-Cliente.apk mobile/dist/ApFood-Empresa.apk \
+            --title "ApFood Apps $versao" \
+            --notes "Apps Android $versao. No servidor: APFOOD_APPS_VERSAO=$versao"
+
   producao:
     name: Imagem de produção (Docker / Coolify)
     runs-on: ubuntu-latest

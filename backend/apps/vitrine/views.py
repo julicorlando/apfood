@@ -6,7 +6,7 @@ pública (/api/publico/...)."""
 
 from django.conf import settings
 from django.http import Http404
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import redirect, get_object_or_404, render
 from django.views.decorators.cache import cache_control
 
 from apps.api.publico import dados_cardapio, loja_publica
@@ -52,3 +52,31 @@ def cardapio_mesa(request, slug, token):
     dados = dados_cardapio(loja, request)
     dados["mesa"] = {"token": token, "nome": mesa.nome}
     return render(request, "vitrine/cardapio.html", {"loja": loja, "dados": dados, "cor": loja.cor_primaria})
+
+
+def app_cliente(request):
+    """App do cliente (também é o que o APK "ApFood" abre): restaurantes da região."""
+    return render(request, "vitrine/app.html", {"cor": "#f26a0f"})
+
+
+def app_manifest(request):
+    from django.http import JsonResponse
+    from django.templatetags.static import static
+
+    return JsonResponse({
+        "name": "ApFood", "short_name": "ApFood", "start_url": "/app/", "scope": "/", "display": "standalone",
+        "background_color": "#ffffff", "theme_color": "#f26a0f", "lang": "pt-BR",
+        "icons": [{"src": static("marca/icone-192.png"), "sizes": "192x192", "type": "image/png"},
+                  {"src": static("marca/icone-512.png"), "sizes": "512x512", "type": "image/png"}],
+    }, content_type="application/manifest+json")
+
+
+def baixar_app(request, qual):
+    """Link fixo para o APK da versão publicada (GitHub Releases)."""
+    from django.http import Http404
+
+    arquivos = {"cliente": "ApFood-Cliente.apk", "empresa": "ApFood-Empresa.apk"}
+    if qual not in arquivos:
+        raise Http404
+    versao = settings.APFOOD.get("APPS_VERSAO") or "1.0.0"
+    return redirect(f"https://github.com/julicorlando/apfood/releases/download/apps-v{versao}/{arquivos[qual]}")

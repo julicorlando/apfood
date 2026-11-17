@@ -380,6 +380,44 @@ def _hoje(loja, card, admin):
             comanda=c, mesa=mesa.nome), None)
 
 
+OPERADORES = [("maria.caixa", "Maria", "Souza"), ("joao.atendente", "João", "Ferreira"), ("lucas.balcao", "Lucas", "Oliveira")]
+
+
+def _operadores(loja) -> int:
+    """Operadores de exemplo (sem senha utilizável: o ADMIN define se quiser usar) e
+    distribui entre eles os pedidos de balcão, mesa e telefone que estão sem atendente."""
+    from apfood_core.enums import PapelUsuario
+
+    from apps.contas.models import Usuario
+    from apps.pedidos.models import Pagamento, Pedido
+
+    ops = []
+    for login, nome, sobrenome in OPERADORES:
+        username = f"{login}.{loja.slug}"[:150]
+        u = Usuario.objects.filter(username=username).first()
+        if u is None:
+            u = Usuario(username=username, first_name=nome, last_name=sobrenome, papel=PapelUsuario.OPERADOR,
+                        empresa=loja.empresa)
+            u.set_unusable_password()
+            u.save()
+            if hasattr(u, "lojas"):
+                u.lojas.add(loja)
+        ops.append(u)
+    rnd = random.Random(f"ops-{loja.id}")
+    pesos = [5, 3, 2]
+    n = 0
+    sem = Pedido.objects.filter(loja=loja, atendente__isnull=True).exclude(canal__in=["ONLINE", "MARKETPLACE"])
+    for pid in sem.values_list("id", flat=True).iterator():
+        u = rnd.choices(ops, pesos)[0]
+        Pedido.objects.filter(pk=pid).update(atendente=u)
+        Pagamento.objects.filter(pedido_id=pid).update(recebido_por=u)
+        n += 1
+    for c_id in (Pedido.objects.filter(loja=loja, comanda__isnull=False)
+                 .values_list("comanda_id", flat=True).distinct()):
+        Pagamento.objects.filter(comanda_id=c_id).update(recebido_por=rnd.choices(ops, pesos)[0])
+    return n
+
+
 def preencher(loja, dias: int = 30, mais: bool = False) -> dict:
     """Primeira vez: `dias` de histórico até ontem. `mais=True`: mais `dias` de
     histórico ANTES do mais antigo e mais pedidos em andamento hoje."""
@@ -402,6 +440,7 @@ def preencher(loja, dias: int = 30, mais: bool = False) -> dict:
     elif passados.count() < 50:
         fim = hoje - timedelta(days=1)
     else:
+        _operadores(loja)
         return {"produtos": len(card["produtos"]), "pedidos_historico": 0}
     inicio = fim - timedelta(days=dias - 1)
     historico = _historico(loja, card, entregadores, admin, inicio, fim)
@@ -410,6 +449,7 @@ def preencher(loja, dias: int = 30, mais: bool = False) -> dict:
     except Exception:  # noqa: BLE001 — estoque é enfeite da demonstração
         log.exception("demonstração: compras")
     _hoje(loja, card, admin)
+    _operadores(loja)
     # estoque "de hoje" depois do período simulado (o Ovo fica abaixo do mínimo, para o alerta)
     from apps.cardapio.models import Produto
 

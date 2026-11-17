@@ -119,6 +119,7 @@ class Loja(ModeloBase):
     fidelidade_premio_descricao = models.CharField(max_length=120, blank=True, help_text='"1 X-Burger grátis"')
     # Autoatendimento: QR Code na mesa abre o cardápio e o pedido cai na comanda
     pedido_na_mesa = models.BooleanField(default=True, help_text="cliente pede pelo QR Code da mesa")
+    aparecer_no_app = models.BooleanField(default=True, help_text="aparece na lista de restaurantes do app ApFood")
     # Atendente automático do WhatsApp (número conectado pelo QR Code)
     whatsapp_atendente = models.BooleanField(default=False, help_text="responde sozinho no WhatsApp")
     whatsapp_boas_vindas = models.TextField(blank=True, help_text="mensagem de abertura; use {loja} e {link}")

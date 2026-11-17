@@ -40,6 +40,7 @@ const ROTAS = [
   ["/relatorios", "Vendas", "📊", "Relatórios", () => temLoja() && ehGerente(), "gestao", "vendas"],
   ["/curva-abc", "Curva ABC", "🔤", "Relatórios", () => temLoja() && ehGerente(), "gestao", "curvaAbc"],
   ["/cmv", "CMV e margem", "📉", "Relatórios", () => temLoja() && ehGerente(), "gestao", "cmv"],
+  ["/operadores", "Por operador", "🧑‍💼", "Relatórios", () => temLoja() && ehGerente(), "gestao", "operadores"],
   ["/fechamentos", "Fechamentos de caixa", "🔐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "fechamentos"],
   ["/notas", "Notas fiscais", "🧾", "Relatórios", temLoja, "gestao", "notas"],
 

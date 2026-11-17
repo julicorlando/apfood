@@ -1,5 +1,8 @@
 """Loja de demonstração."""
 
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.cardapio.models import Produto
@@ -63,3 +66,18 @@ def test_mais_movimento_vem_antes(loja):
     assert Pedido.objects.filter(loja=loja, canal="ONLINE", status="CONCLUIDO").exists()
     assert Pedido.objects.filter(loja=loja, canal="MESA", status="CONCLUIDO").exists()
     assert Pedido.objects.filter(loja=loja, status="SAIU_PARA_ENTREGA").exists()
+
+
+def test_relatorio_por_operador(loja, gerente):
+    Usuario.objects.create_user("dono", password="x", papel="ADMIN", empresa=loja.empresa)
+    demonstracao.preencher(loja, dias=2)
+    api = APIClient()
+    api.force_authenticate(gerente)
+    hoje = timezone.localdate()
+    r = api.get(f"/api/relatorios/operadores/?loja={loja.id}&inicio={hoje - timedelta(days=30)}&fim={hoje}").data
+    nomes = {o["operador"] for o in r["operadores"]}
+    assert {"Maria Souza", "João Ferreira"} <= nomes
+    maria = next(o for o in r["operadores"] if o["operador"] == "Maria Souza")
+    assert maria["pedidos"] > 0 and maria["recebido_centavos"] > 0 and maria["por_forma"]
+    api.force_authenticate(Usuario.objects.get(username=f"maria.caixa.{loja.slug}"))
+    assert api.get(f"/api/relatorios/operadores/?loja={loja.id}").status_code == 403
