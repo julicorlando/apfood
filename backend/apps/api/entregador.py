@@ -73,6 +73,9 @@ class Base(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
 
+    def get_authenticate_header(self, request):
+        return 'Entregador realm="ApFood"'  # sessão inválida responde 401 (o app volta ao login)
+
 
 # ----------------------------------------------------------------------------- login e conta
 class EntrarView(Base):
