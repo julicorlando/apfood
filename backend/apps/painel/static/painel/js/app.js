@@ -3,12 +3,11 @@ import { definirLoja, ehAdmin, ehGerente, ehMaster, get, lojaSalva, sessao } fro
 import { bipe, conectar, ouvir } from "./realtime.js";
 import { aviso, data, definirRotulos, dinheiro, erro, h, limpar, trocar } from "./ui.js";
 
-const sempre = () => true;
 const temLoja = () => !!sessao.loja;
 
 // [rota, título, ícone, grupo, permissão, módulo, função]
 const ROTAS = [
-  ["/", "Início", "📊", "Operação", sempre, "operacao", "inicio"],
+  ["/", "Início", "📊", "Operação", () => !ehMaster(), "operacao", "inicio"],
   ["/pdv", "PDV (vender)", "🧾", "Operação", temLoja, "pdv", "pdv"],
   ["/pedidos", "Pedidos", "🛎️", "Operação", temLoja, "operacao", "pedidos"],
   ["/mesas", "Mesas e comandas", "🍽️", "Operação", temLoja, "operacao", "mesas"],
@@ -45,7 +44,7 @@ const ROTAS = [
   ["/loja", "Dados da loja", "🏪", "Configurações", () => temLoja() && ehAdmin(), "config", "loja"],
   ["/fiscal", "Fiscal", "🏛️", "Configurações", () => temLoja() && ehAdmin(), "config", "fiscal"],
   ["/integracoes", "Integrações", "🔌", "Configurações", () => temLoja() && ehAdmin(), "config", "integracoes"],
-  ["/impressao", "Impressão", "🖨️", "Configurações", sempre, "config", "impressao"],
+  ["/impressao", "Impressão", "🖨️", "Configurações", () => !ehMaster(), "config", "impressao"],
   ["/usuarios", "Usuários", "🔑", "Configurações", ehGerente, "config", "usuarios"],
   ["/lojas", "Lojas", "🏬", "Configurações", ehAdmin, "config", "lojas"],
   ["/empresa", "Minha empresa", "🏢", "Configurações", () => ehAdmin() && !ehMaster(), "config", "minhaEmpresa"],
@@ -92,7 +91,9 @@ function marcarMenu(caminho) {
 async function navegar() {
   const { caminho, params } = rotaAtual();
   const minha = ++navegacao;
-  const def = ROTAS.find((r) => r[0] === caminho && r[4]()) || ROTAS[0];
+  // MASTER administra a plataforma (não opera lojas): a tela inicial dele é a Visão geral
+  const inicial = ehMaster() ? ROTAS.find((r) => r[0] === "/plataforma") : ROTAS[0];
+  const def = ROTAS.find((r) => r[0] === caminho && r[4]()) || inicial;
   const [, titulo, , , , mod, fn] = def;
   if (limpeza) { try { limpeza(); } catch (e) { console.error(e); } limpeza = null; }
   $("app").classList.remove("menu-aberto");
