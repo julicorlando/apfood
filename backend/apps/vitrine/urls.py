@@ -8,4 +8,5 @@ urlpatterns = [
     path("", views.inicio, name="inicio"),
     path("pedido/<str:token>/", views.acompanhar_pedido, name="acompanhar"),
     path("<slug:slug>/", views.cardapio, name="cardapio"),
+    path("<slug:slug>/mesa/<str:token>/", views.cardapio_mesa, name="cardapio_mesa"),
 ]

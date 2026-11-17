@@ -175,3 +175,60 @@ class PlataformaResumoView(APIView):
                           "faturamento_centavos": agg["fat"] or 0, "pedidos": agg["n"] or 0})
         return Response({"inicio": inicio, "fim": fim, "empresas": dados,
                          "total_faturamento_centavos": sum(d["faturamento_centavos"] for d in dados)})
+
+
+class CMVView(Relatorio):
+    """CMV teórico: custo pela ficha técnica × vendas concluídas do período,
+    margem por produto e o cardápio todo com preço, custo e margem."""
+
+    def get(self, request):
+        from apps.cardapio.custos import Custos, margem
+        from apps.cardapio.models import Produto
+
+        loja, inicio, fim = self.base(request)
+        custos = Custos(loja)
+        itens = (ItemPedido.objects.filter(pedido__loja=loja, pedido__status="CONCLUIDO",
+                                           pedido__data_referencia__range=(inicio, fim))
+                 .select_related("variacao").prefetch_related("sabores", "adicionais__adicional"))
+        por_produto: dict[str, dict] = {}
+        fat_total = custo_total = fat_sem_custo = 0
+        for it in itens:
+            chave = str(it.produto_id or it.nome_produto)
+            linha = por_produto.setdefault(chave, {"produto": chave, "nome": it.nome_produto, "quantidade": 0,
+                                                   "faturamento_centavos": 0, "custo_centavos": 0, "sem_custo": 0})
+            linha["quantidade"] += it.quantidade
+            linha["faturamento_centavos"] += it.total_centavos
+            fat_total += it.total_centavos
+            c = custos.item(it)
+            if c is None:
+                linha["sem_custo"] += it.quantidade
+                fat_sem_custo += it.total_centavos
+            else:
+                linha["custo_centavos"] += c * it.quantidade
+                custo_total += c * it.quantidade
+        linhas = []
+        for l in por_produto.values():
+            com_custo = l["faturamento_centavos"] if not l["sem_custo"] else None
+            l["margem_percentual"] = margem(com_custo, l["custo_centavos"]) if com_custo else None
+            l["cmv_percentual"] = round(l["custo_centavos"] * 100 / com_custo, 1) if com_custo else None
+            l["lucro_bruto_centavos"] = (com_custo - l["custo_centavos"]) if com_custo else None
+            linhas.append(l)
+        linhas.sort(key=lambda l: -l["faturamento_centavos"])
+        base_cmv = fat_total - fat_sem_custo
+        cardapio = []
+        for p in (Produto.objects.ativos().filter(loja=loja, tipo="VENDA", ativo=True)
+                  .prefetch_related("variacoes").order_by("nome")):
+            variacoes = [v for v in p.variacoes.all() if v.ativo and v.excluido_em is None]
+            opcoes = [(v.nome, v.preco_centavos, custos.produto(p.id, v.fator_insumos)) for v in variacoes] \
+                or [("", p.preco_centavos, custos.produto(p.id))]
+            for nome_v, preco, c in opcoes:
+                cardapio.append({"produto": str(p.id), "nome": p.nome + (f" ({nome_v})" if nome_v else ""),
+                                 "preco_centavos": preco, "custo_centavos": c, "margem_percentual": margem(preco, c)})
+        return Response({
+            "inicio": inicio, "fim": fim,
+            "faturamento_centavos": fat_total, "custo_centavos": custo_total,
+            "cmv_percentual": round(custo_total * 100 / base_cmv, 1) if base_cmv else None,
+            "lucro_bruto_centavos": base_cmv - custo_total,
+            "faturamento_sem_custo_centavos": fat_sem_custo,
+            "itens": linhas, "cardapio": cardapio,
+        })

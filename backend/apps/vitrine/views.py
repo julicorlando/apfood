@@ -37,3 +37,18 @@ def cardapio(request, slug):
 def acompanhar_pedido(request, token):
     pedido = get_object_or_404(Pedido.objects.select_related("loja"), token_rastreio=token)
     return render(request, "vitrine/acompanhar.html", {"pedido": pedido, "cor": pedido.loja.cor_primaria})
+
+
+@cache_control(no_store=True)
+def cardapio_mesa(request, slug, token):
+    """QR Code da mesa: o mesmo cardápio, mas o pedido vai para a comanda da mesa."""
+    from apps.api.publico import mesa_publica
+
+    try:
+        loja = loja_publica(slug)
+        mesa = mesa_publica(loja, token)
+    except Http404:
+        return render(request, "vitrine/indisponivel.html", status=404)
+    dados = dados_cardapio(loja, request)
+    dados["mesa"] = {"token": token, "nome": mesa.nome}
+    return render(request, "vitrine/cardapio.html", {"loja": loja, "dados": dados, "cor": loja.cor_primaria})

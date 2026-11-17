@@ -35,6 +35,7 @@ urlpatterns = [
     path("privacidade/", legal.privacidade, name="privacidade"),
     path("entrega/<str:token>/", entrega.painel_entregador, name="entregador"),
     path("entrega/<str:token>/<uuid:pedido>/entregue/", entrega.marcar_entregue, name="entregue"),
+    path("entrega/<str:token>/localizacao/", entrega.localizacao, name="entregador_localizacao"),
     # Cardápio digital público (Passo 4): /<slug-da-loja>/
     path("", include("apps.vitrine.urls")),
 ]

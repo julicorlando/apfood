@@ -66,6 +66,19 @@ const CAMPOS_LOJA = [
   { secao: "Fidelidade" },
   { nome: "cashback_percentual", rotulo: "Cashback (%)", tipo: "decimal", passo: "0.01",
     ajuda: "Parte do valor de cada pedido concluído que volta como saldo para o cliente (identificado pelo telefone). 0 = desligado." },
+  { nome: "fidelidade_selos", rotulo: "Cartão fidelidade: pedidos para completar", tipo: "numero",
+    ajuda: "Ex.: 10 = a cada 10 pedidos concluídos o cliente ganha o prêmio. 0 = desligado." },
+  { nome: "fidelidade_pedido_minimo_centavos", rotulo: "Valor mínimo do pedido para ganhar selo (R$)", tipo: "dinheiro" },
+  { nome: "fidelidade_premio_centavos", rotulo: "Prêmio: crédito para o cliente (R$)", tipo: "dinheiro",
+    ajuda: "Vira saldo (como o cashback) e é usado como desconto no próximo pedido." },
+  { nome: "fidelidade_premio_descricao", rotulo: "Descrição do prêmio", exemplo: "Um X-Burger por nossa conta" },
+  { secao: "Mesas e WhatsApp" },
+  { nome: "pedido_na_mesa", rotulo: "Cliente pode pedir pelo QR Code da mesa", tipo: "bool",
+    ajuda: "Imprima os QR em Clientes e entrega → Cadastro de mesas." },
+  { nome: "whatsapp_atendente", rotulo: "Atendente automático no WhatsApp", tipo: "bool",
+    ajuda: "Responde sozinho: cardápio, status do pedido, horário, endereço e pagamento. Precisa da integração Z-API e do webhook (Integrações)." },
+  { nome: "whatsapp_boas_vindas", rotulo: "Mensagem de boas-vindas (opcional)", tipo: "textarea", largo: true,
+    exemplo: "Olá! Aqui é a {loja}. Peça pelo cardápio: {link}" },
   { nome: "ativa", rotulo: "Loja ativa", tipo: "bool" },
 ];
 
@@ -137,7 +150,7 @@ export function fiscal() {
 const PROVEDORES = {
   "FISCAL:focusnfe": { titulo: "Focus NFe (NFC-e e NF-e)", cred: [["token", "Token da API"]] },
   "PAGAMENTO:mercadopago": { titulo: "Mercado Pago (Pix com QR Code)", cred: [["access_token", "Access token (APP_USR-…)"]] },
-  "WHATSAPP:zapi": { titulo: "Z-API (WhatsApp do status do pedido)", cred: [["instance", "ID da instância"], ["token", "Token"], ["client_token", "Client token (segurança)"]] },
+  "WHATSAPP:zapi": { titulo: "Z-API (WhatsApp: status do pedido e atendente)", cred: [["instance", "ID da instância"], ["token", "Token"], ["client_token", "Client token (segurança)"]] },
   "MARKETPLACE:ifood": { titulo: "iFood", cred: [["client_id", "Client ID (vazio = app da plataforma)"], ["client_secret", "Client secret"]], conf: [["merchant_id", "Merchant ID da loja no iFood"]] },
   "MAPAS:google": { titulo: "Google Maps (distância e geocodificação)", cred: [["api_key", "API key"]] },
 };
@@ -150,6 +163,7 @@ export function integracoes() {
       trocar(raiz, h("p", { class: "muted" }, "Os segredos ficam cifrados no servidor e nunca são exibidos de volta. Deixe em branco para manter os atuais."), area);
       async function carregar() {
         const atuais = await lista("/api/integracoes/");
+        const lojaAtual = sessao.loja ? await get(`/api/lojas/${sessao.loja.id}/`).catch(() => null) : null;
         trocar(area, h("div", { class: "grade grade-2" }, Object.entries(PROVEDORES).map(([chave, p]) => {
           const [tipo, provedor] = chave.split(":");
           const i = atuais.find((x) => x.tipo === tipo && x.provedor === provedor);
@@ -159,6 +173,11 @@ export function integracoes() {
             h("p", { class: "muted" }, rotulo("TipoIntegracao", tipo)),
             i?.ultimo_erro ? h("div", { class: "alerta alerta-erro" }, `Último erro: ${i.ultimo_erro.slice(0, 200)}`) : null,
             i?.ultimo_sucesso_em ? h("p", { class: "muted" }, `Funcionou pela última vez em ${dataHora(i.ultimo_sucesso_em)}`) : null,
+            chave === "WHATSAPP:zapi" && lojaAtual?.whatsapp_webhook_url ? h("div", { class: "muted", style: { margin: "8px 0" } },
+              "Atendente automático: na Z-API, em Webhooks → \"Ao receber\", cole:",
+              h("code", { style: { display: "block", wordBreak: "break-all", padding: "6px", background: "var(--fundo)", borderRadius: "6px", marginTop: "4px" } },
+                lojaAtual.whatsapp_webhook_url),
+              "Depois ligue em Dados da loja → Mesas e WhatsApp.") : null,
             h("button", { type: "button", class: "botao", onclick: () => editar(tipo, provedor, p, i) }, i ? "Configurar" : "Ativar"));
         })));
       }

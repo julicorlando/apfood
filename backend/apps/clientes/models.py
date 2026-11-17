@@ -21,6 +21,7 @@ class Cliente(DaLoja, ModeloSincronizavel):
     # LGPD
     aceita_marketing = models.BooleanField(default=False)
     saldo_cashback_centavos = models.PositiveIntegerField(default=0, editable=False)
+    selos = models.PositiveSmallIntegerField(default=0, editable=False, help_text="cartão fidelidade")
     consentimento_em = models.DateTimeField(null=True, blank=True)
     anonimizado_em = models.DateTimeField(null=True, blank=True)
 
@@ -108,6 +109,10 @@ class Entregador(DaLoja, ModeloSincronizavel):
         max_length=64, blank=True, db_index=True, editable=False,
         help_text="link do celular do entregador (/entrega/<token>/); gerar outro invalida o anterior",
     )
+    # Última posição enviada pelo celular do entregador (rastreio para o cliente)
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, editable=False)
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, editable=False)
+    localizacao_em = models.DateTimeField(null=True, blank=True, editable=False)
 
     def gerar_link(self) -> str:
         import secrets

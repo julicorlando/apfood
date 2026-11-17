@@ -52,9 +52,20 @@ def cadastro(model_cls, **extra_meta):
 
 # --- contas / lojas ---------------------------------------------------------
 class LojaSerializer(serializers.ModelSerializer):
+    whatsapp_webhook_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Loja
         exclude = ["empresa"]
+
+    def get_whatsapp_webhook_url(self, loja):
+        """URL para colar na Z-API ("Ao receber") — só para quem administra a loja."""
+        req = self.context.get("request")
+        if req is None or not getattr(req.user, "eh_gerente", False) or not loja.pk:
+            return ""
+        from apps.integracoes.atendente import url_webhook
+
+        return url_webhook(loja)
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -135,6 +146,10 @@ class EnderecoSerializer(serializers.ModelSerializer):
 
 class ClienteSerializer(BaseLoja):
     enderecos = serializers.SerializerMethodField()
+    selos_meta = serializers.SerializerMethodField()
+
+    def get_selos_meta(self, c):
+        return c.loja.fidelidade_selos
 
     class Meta(BaseLoja.Meta):
         model = Cliente
@@ -321,6 +336,20 @@ class PedidoOnlineIn(PedidoIn):
                      "marketplace", "id_externo", "codigo_externo", "codigo_local", "mesa", "senha", "origem_contato",
                      "usar_cashback_centavos"):
             campos.pop(nome, None)
+        return campos
+
+
+class PedidoMesaIn(PedidoIn):
+    """Autoatendimento pelo QR Code da mesa: só itens, nome e observação."""
+
+    canal = serializers.HiddenField(default=CanalVenda.MESA)
+    tipo_atendimento = serializers.HiddenField(default=TipoAtendimento.CONSUMO_LOCAL)
+
+    def get_fields(self):
+        campos = super().get_fields()
+        for nome in list(campos):
+            if nome not in ("canal", "tipo_atendimento", "itens", "nome_cliente", "telefone_cliente", "observacao"):
+                campos.pop(nome)
         return campos
 
 

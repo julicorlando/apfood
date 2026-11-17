@@ -109,6 +109,19 @@ class Loja(ModeloBase):
         max_digits=5, decimal_places=2, default=0,
         help_text="% do pedido concluído que volta como saldo para o cliente (0 = desligado)",
     )
+    # Cartão fidelidade: a cada N pedidos concluídos o cliente ganha um prêmio (crédito)
+    fidelidade_selos = models.PositiveSmallIntegerField(
+        default=0, help_text="pedidos para completar o cartão (0 = desligado)")
+    fidelidade_pedido_minimo_centavos = models.PositiveIntegerField(
+        default=0, help_text="valor mínimo do pedido para ganhar um selo")
+    fidelidade_premio_centavos = models.PositiveIntegerField(
+        default=0, help_text="crédito que o cliente ganha ao completar o cartão")
+    fidelidade_premio_descricao = models.CharField(max_length=120, blank=True, help_text='"1 X-Burger grátis"')
+    # Autoatendimento: QR Code na mesa abre o cardápio e o pedido cai na comanda
+    pedido_na_mesa = models.BooleanField(default=True, help_text="cliente pede pelo QR Code da mesa")
+    # Atendente automático do WhatsApp (integração Z-API)
+    whatsapp_atendente = models.BooleanField(default=False, help_text="responde sozinho no WhatsApp")
+    whatsapp_boas_vindas = models.TextField(blank=True, help_text="mensagem de abertura; use {loja} e {link}")
     momento_baixa_estoque = models.CharField(
         max_length=max_len(MomentoBaixaEstoque),
         choices=choices(MomentoBaixaEstoque),

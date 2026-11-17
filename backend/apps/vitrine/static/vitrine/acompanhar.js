@@ -54,6 +54,30 @@
       copia, btn, el("small", { text: "Assim que o banco confirmar, o pedido aparece como pago aqui." })]);
   }
 
+  // Entregador a caminho: mapa (OpenStreetMap) com a posição enviada pelo celular dele
+  function blocoRastreio(p) {
+    const r = p.rastreio;
+    if (!r) return null;
+    const d = 0.01;
+    const bbox = [r.longitude - d, r.latitude - d, r.longitude + d, r.latitude + d].join(",");
+    const mapa = el("iframe", { class: "mapa-rastreio", title: "Mapa do entregador", loading: "lazy",
+      src: "https://www.openstreetmap.org/export/embed.html?bbox=" + bbox + "&layer=mapnik&marker=" + r.latitude + "," + r.longitude });
+    const quando = new Date(r.atualizado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const dist = r.distancia_km !== undefined
+      ? (r.distancia_km < 0.3 ? "está chegando! 🛵" : "está a " + String(r.distancia_km).replace(".", ",") + " km (~" + r.minutos + " min)") : "está a caminho 🛵";
+    return el("div", { class: "cartao" }, [el("b", { text: r.entregador + " " + dist }), mapa,
+      el("small", { text: "Posição de " + quando + " · atualiza sozinho" })]);
+  }
+
+  function blocoFidelidade(p) {
+    const f = p.fidelidade;
+    if (!f || !f.meta) return null;
+    const selos = [];
+    for (let i = 0; i < f.meta; i++) selos.push(el("span", { class: "selo-fid" + (i < f.selos ? " cheio" : ""), text: i < f.selos ? "★" : "☆" }));
+    return el("div", { class: "cartao" }, [el("b", { text: "Cartão fidelidade" }), el("div", { class: "selos-fid" }, selos),
+      el("small", { text: f.selos + " de " + f.meta + " selos" + (f.saldo_centavos ? " · crédito disponível: " + C.reais(f.saldo_centavos) : "") })]);
+  }
+
   function render(p) {
     document.documentElement.style.setProperty("--cor", p.cor_primaria || "#e4572e");
     document.title = "Pedido #" + (p.numero || "") + " — " + p.loja;
@@ -77,12 +101,14 @@
         cancelado && p.motivo_cancelamento ? el("p", { class: "erros", text: "Motivo: " + p.motivo_cancelamento }) : null,
         cancelado ? null : etapas(p)]),
       blocoPix(p),
+      blocoRastreio(p),
       el("div", { class: "cartao" }, [el("b", { text: "Itens" })].concat(itens).concat([el("div", { class: "resumo" },
         linhas.map(function ([a, b]) { return el("div", {}, [el("span", { text: a }), el("span", { text: b })]); })
           .concat([el("div", { class: "total" }, [el("span", { text: "Total" }), el("span", { text: C.reais(p.total_centavos) })])]))])
         .concat([el("div", { style: "margin-top:8px" }, [p.pago ? el("span", { class: "ok", text: "✓ Pago" })
           : el("span", { text: "Pagamento: " + (FORMAS[p.forma_prevista] || "na entrega") + (p.troco_para_centavos ? " · troco para " + C.reais(p.troco_para_centavos) : "") })])])
         .concat(p.endereco ? [el("div", { style: "margin-top:6px" }, el("small", { text: "📍 " + p.endereco }))] : [])),
+      blocoFidelidade(p),
       el("div", { class: "cartao", style: "display:grid;gap:8px" }, [
         zap ? el("a", { class: "btn secundario", href: zap, target: "_blank", rel: "noopener", text: "Falar com a loja no WhatsApp" }) : null,
         el("a", { class: "btn secundario", href: "/" + p.loja_slug + "/", text: "Voltar ao cardápio" })]),

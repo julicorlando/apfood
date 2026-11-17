@@ -68,6 +68,39 @@ Na comanda, **Receber (total ou parte)** aceita só uma parte da conta: o client
 
 Pedido de balcão sem senha informada ganha o número do pedido do dia com 4 dígitos (ex.: **0124**), impresso no cupom e mostrado no PDV para chamar o cliente. Sem internet, o PDV do computador numera sozinho (sequência do dia naquele caixa). No PDV do computador, sem itens no pedido aparece **CAIXA LIVRE** (ou **CAIXA FECHADO**, se o caixa não foi aberto) com o último número chamado.
 
+## Autoatendimento pelo QR Code da mesa
+
+Em **Cadastro de mesas**, cada mesa tem um QR Code (botão **QR Code**, ou **Imprimir QR de todas** para uma folha com todos).
+- O cliente lê com a câmera, vê o cardápio (com as promoções), escolhe e o pedido vai direto para a cozinha, **na comanda daquela mesa**. Se a mesa estava livre, a comanda abre sozinha.
+- Pelo celular ele vê também **a conta da mesa** (o que já foi pedido e quanto falta). O pagamento continua com o garçom ou no caixa.
+- Depois de pedir a conta, o QR não aceita mais pedidos ("chame o garçom").
+- **Gerar outro** invalida o QR impresso daquela mesa. Para desligar o autoatendimento: Dados da loja → Mesas e WhatsApp.
+
+## Atendente automático no WhatsApp
+
+Com a integração **Z-API** ativa e **Atendente automático** ligado (Dados da loja → Mesas e WhatsApp), o WhatsApp da loja responde sozinho:
+- **cardápio** (link para pedir, com as promoções do dia), **meu pedido** (status do último pedido daquele número, com link), **horário** (aberto agora? e horários da semana), **endereço** e **formas de pagamento**;
+- primeira mensagem: boas-vindas (personalizável, com `{loja}` e `{link}`) e um menu numerado (1 cardápio, 2 meu pedido, 3 horário, 4 atendente);
+- "4" ou "falar com atendente": avisa que alguém vai responder e fica **2 horas sem responder** aquele número.
+- Configure na Z-API, em Webhooks → **Ao receber**, a URL que aparece em Configurações → Integrações (cartão Z-API).
+- O cliente também recebe o aviso de cada etapa do pedido; ao sair para entrega, com o link para acompanhar o entregador.
+
+## CMV e margem
+
+Relatórios → **CMV e margem**: custo teórico de cada venda pela **ficha técnica** (custo médio dos insumos, atualizado pelas compras), vezes o fator do tamanho, mais os adicionais que têm insumo. Pizza meio a meio usa a média dos sabores; produto de revenda (lata) usa o próprio custo de compra.
+- Mostra faturamento, custo, **CMV %** e lucro bruto do período, a margem por produto vendido e o **cardápio todo com preço × custo × margem** (verde ≥ 60%, amarelo ≥ 40%, vermelho abaixo).
+- Vendas de produtos sem custo ficam fora do CMV, com aviso.
+
+## Cartão fidelidade (selos)
+
+Dados da loja → Fidelidade: **pedidos para completar o cartão**, valor mínimo do pedido para ganhar selo e o **prêmio** (crédito em R$ + descrição, ex.: "um X-Burger por nossa conta").
+- Cada pedido **concluído** de cliente identificado pelo telefone (acima do mínimo) vale um selo. Ao completar, o prêmio vira **saldo**, usado como o cashback (desconto no próximo pedido, no PDV), e o cliente recebe um WhatsApp.
+- O cardápio online anuncia o cartão; a página do pedido mostra os selos; a lista de Clientes mostra "3/10".
+
+## Rastreio da entrega
+
+Com o link do celular aberto, o entregador compartilha a localização (a cada ~15 s). Enquanto o pedido está **saiu para entrega**, a página de acompanhamento do cliente mostra **o mapa com o entregador**, a distância e o tempo estimado. A posição some quando o pedido é concluído ou fica 10 minutos sem atualizar.
+
 ## Campanhas de WhatsApp
 
 Em **Clientes e entrega → Campanhas WhatsApp** (gerente+), escreva a mensagem e escolha o público:

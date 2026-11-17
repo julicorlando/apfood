@@ -87,3 +87,35 @@ class MercadoPagoPlataformaWebhook(Webhook):
             wh.erro = str(exc)[:2000]
         wh.save()
         return Response({"ok": True})
+
+
+class ZApiWebhook(Webhook):
+    """Mensagens recebidas no WhatsApp da loja (Z-API → "Ao receber")."""
+
+    def post(self, request, loja_id, chave):
+        import hmac
+
+        from apps.integracoes import atendente
+
+        loja = Loja.objects.filter(pk=loja_id).first()
+        if loja is None or not hmac.compare_digest(chave, atendente.chave_webhook(loja)):
+            return Response({"ok": False}, status=404)
+        dados = request.data if isinstance(request.data, dict) else {}
+        mid = str(dados.get("messageId") or "")
+        if mid:
+            wh = _registrar("zapi", loja, request, mid)
+            if wh is None or wh.processado_em:
+                return Response({"ok": True})
+        else:
+            wh = None
+        try:
+            atendente.processar_mensagem(loja, dados)
+            if wh:
+                wh.processado_em = timezone.now()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("webhook Z-API loja %s", loja_id)
+            if wh:
+                wh.erro = str(exc)[:2000]
+        if wh:
+            wh.save()
+        return Response({"ok": True})
