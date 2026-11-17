@@ -141,6 +141,26 @@ class OnlineView(Base):
         return Response({"online": campos["online"]})
 
 
+class PlantaoView(Base):
+    """Serviço nativo do APK (celular bloqueado ou app fechado), a cada ~5 s: mantém o entregador
+    disponível, atualiza a posição e devolve a chamada que está com ele. Não liga quem está indisponível."""
+
+    def post(self, request):
+        es = entregadores_da(request)
+        ligados = [e for e in es if e.online]
+        if ligados:
+            campos = {"online_em": timezone.now()}
+            try:
+                lat, lng = Decimal(str(request.data["latitude"])), Decimal(str(request.data["longitude"]))
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    campos.update(latitude=round(lat, 7), longitude=round(lng, 7), localizacao_em=timezone.now())
+            except (KeyError, InvalidOperation, TypeError, ValueError):
+                pass
+            Entregador.objects.filter(pk__in=[e.pk for e in ligados]).update(**campos)
+        ch = chamadas.oferta_para(es) if ligados else None
+        return Response({"online": bool(ligados), "oferta": _oferta(ch, es) if ch else None})
+
+
 # ----------------------------------------------------------------------------- estado (polling do app)
 def _endereco(p: Pedido) -> str:
     return ", ".join(x for x in [f"{p.entrega_logradouro} {p.entrega_numero}".strip(), p.entrega_complemento,

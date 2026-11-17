@@ -1,3 +1,17 @@
+/* Peças opcionais da tela (null/undefined/false) não viram o texto "null" ao montar a página. */
+(function () {
+  [Element.prototype, DocumentFragment.prototype].forEach(function (proto) {
+    ["append", "prepend", "replaceChildren"].forEach(function (m) {
+      const original = proto[m];
+      if (!original || original.semNulos) return;
+      const f = function () {
+        return original.apply(this, Array.prototype.filter.call(arguments, function (x) { return x !== null && x !== undefined && x !== false; }));
+      };
+      f.semNulos = true;
+      proto[m] = f;
+    });
+  });
+})();
 /* ApFood — regras do carrinho do cardápio digital (puras, testáveis no Node).
  * Espelham apfood_core (totais.py / precos.py). O servidor sempre recalcula:
  * aqui é só para mostrar o preço certo enquanto o cliente monta o pedido. */

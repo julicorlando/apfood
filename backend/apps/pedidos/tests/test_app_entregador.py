@@ -170,3 +170,28 @@ def test_avaliacao_opcional_depois_de_receber(loja, cardapio, operador, gerente)
     api.force_authenticate(gerente)
     rel = api.get(f"/api/relatorios/avaliacoes/?loja={loja.id}").data
     assert rel["quantidade"] == 1 and rel["media"] == 4 and rel["avaliacoes"][0]["comentario"] == "Chegou quentinho"
+
+
+def test_plantao_do_apk_mantem_disponivel_e_traz_a_chamada(loja, cardapio, operador, gerente):
+    """Celular bloqueado / app fechado: o serviço nativo chama /plantao/ e continua recebendo."""
+    e = entregador(loja, "João", "11988887777", -23.5501, -46.6301)
+    tok = entrar("11988887777", "2580")
+    Entregador.objects.filter(pk=e.pk).update(online_em=timezone.now() - timedelta(seconds=chamadas.ONLINE_S + 30))
+    assert not chamadas.disponiveis(loja).exists()  # sem sinal há mais de 90 s
+    r = app(tok).post("/api/entregador/plantao/", {"latitude": -23.56, "longitude": -46.64}, format="json")
+    assert r.status_code == 200 and r.data == {"online": True, "oferta": None}
+    assert chamadas.disponiveis(loja).filter(pk=e.pk).exists()
+    e.refresh_from_db()
+    assert str(e.latitude).startswith("-23.56")
+
+    p = pedido_entrega(loja, cardapio, operador)
+    api = APIClient()
+    api.force_authenticate(gerente)
+    assert api.post(f"/api/pedidos/{p.id}/chamada/?loja={loja.id}").status_code in (200, 201)
+    o = app(tok).post("/api/entregador/plantao/", {}, format="json").data["oferta"]
+    assert o["numero"] == p.numero and o["segundos"] > 0
+
+    # indisponível pelo app: o plantão não religa e o serviço se desliga
+    app(tok).post("/api/entregador/online/", {"online": False}, format="json")
+    assert app(tok).post("/api/entregador/plantao/", {}, format="json").data == {"online": False, "oferta": None}
+    assert app().post("/api/entregador/plantao/", {}, format="json").status_code == 401

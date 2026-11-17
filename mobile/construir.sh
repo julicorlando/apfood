@@ -33,10 +33,13 @@ if [ "$APP" = "entregador" ]; then
   # código nativo: chamada por cima da tela bloqueada, Aceitar/Recusar na notificação
   PKG=android/app/src/main/java/br/com/axionweb/apfood/entregador
   mkdir -p "$PKG"
-  cp "$DIR/nativo/MainActivity.java" "$DIR/nativo/Ofertas.java" "$DIR/nativo/OfertaReceiver.java" "$PKG/"
+  cp "$DIR/nativo/MainActivity.java" "$DIR/nativo/Ofertas.java" "$DIR/nativo/OfertaReceiver.java" "$DIR/nativo/PlantaoService.java" "$PKG/"
   M=android/app/src/main/AndroidManifest.xml
   sed -i 's#<application#<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n\n    <application#' "$M"
   sed -i 's#</application>#    <receiver android:name=".OfertaReceiver" android:exported="false" />\n    </application>#' "$M"
+  # plantão: enquanto "Disponível", recebe as chamadas com o celular bloqueado ou o app fechado (sem Firebase)
+  sed -i 's#<application#<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n\n    <application#' "$M"
+  sed -i 's#</application>#    <service android:name=".PlantaoService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="location|specialUse"><property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Chamadas de entrega em tempo real enquanto o entregador está disponível" /></service>\n    </application>#' "$M"
   if [ -n "$PUSH" ]; then
     cp "$DIR/nativo/EntregaMessagingService.java" "$PKG/"
     sed -i 's#</application>#    <service android:name=".EntregaMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter></service>\n    </application>#' "$M"
