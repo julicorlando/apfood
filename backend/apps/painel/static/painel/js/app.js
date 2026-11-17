@@ -46,6 +46,7 @@ const ROTAS = [
   ["/loja", "Dados da loja", "🏪", "Configurações", () => temLoja() && ehAdmin(), "config", "loja"],
   ["/fiscal", "Fiscal", "🏛️", "Configurações", () => temLoja() && ehAdmin(), "config", "fiscal"],
   ["/integracoes", "Integrações", "🔌", "Configurações", () => temLoja() && ehAdmin(), "config", "integracoes"],
+  ["/whatsapp", "WhatsApp", "💬", "Configurações", () => temLoja() && ehGerente(), "config", "whatsapp"],
   ["/impressao", "Impressão", "🖨️", "Configurações", () => !ehMaster(), "config", "impressao"],
   ["/usuarios", "Usuários", "🔑", "Configurações", ehGerente, "config", "usuarios"],
   ["/lojas", "Lojas", "🏬", "Configurações", ehAdmin, "config", "lojas"],

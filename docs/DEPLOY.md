@@ -65,3 +65,6 @@ Defina no Coolify:
 | `APFOOD_LEGAL_CIDADE_FORO` | `Recife/PE` |
 
 Enquanto faltar alguma, `/termos/` e `/privacidade/` mostram o aviso "Rascunho". O texto é um modelo: **revise com um advogado** antes de vender.
+
+## 8. WhatsApp (servidor próprio)
+O `docker-compose.prod.yml` sobe o serviço **whatsapp** (Evolution API, código aberto), só na rede interna. Ele guarda as sessões no volume `whatsapp` e os dados no mesmo Postgres, no schema `evolution_api`. A chave entre o web e esse serviço é a `SERVICE_PASSWORD_EVOLUTION`, que o Coolify gera sozinho na próxima implantação. Cada loja conecta o próprio número em Configurações → WhatsApp, lendo o QR Code; não há nada para configurar por loja.

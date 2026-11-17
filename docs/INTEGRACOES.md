@@ -6,7 +6,7 @@ Cadastre em **Admin → Integrações** (por loja). As credenciais são **cifrad
 |---|---|---|---|
 | FISCAL | `focusnfe` | `{"token": "..."}` | `{"cnpj_emitente": "...", "csc_id"?: "..."}` + **Configuração fiscal** da loja (regime, ambiente, série, emitir automático) |
 | PAGAMENTO | `mercadopago` | `{"access_token": "...", "webhook_secret": "..."}` | webhook: `https://SEU_SERVIDOR/api/webhooks/mercadopago/<loja_id>/` |
-| WHATSAPP | `zapi` | `{"instance": "...", "token": "...", "client_token": "..."}` | avisa o cliente a cada etapa do pedido |
+| WHATSAPP | `whatsapp` (próprio) | nenhuma: a loja lê o QR Code em Configurações → WhatsApp | avisos de cada etapa, campanhas e atendente automático |
 | MAPAS | `google` ou `nominatim` | Google: `{"api_key": "..."}` · Nominatim: nenhuma | Nominatim: `{"email": "contato@loja.com"}` (exigência do OpenStreetMap). Transforma o endereço digitado em coordenadas para a **taxa por raio**; cache de 30 dias |
 | MARKETPLACE | `ifood` | `{"client_id": "...", "client_secret": "..."}` | `{"merchant_id": "..."}`. No catálogo do iFood, use o **código externo = id ou código do produto** no ApFood |
 

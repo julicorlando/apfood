@@ -1,7 +1,7 @@
-"""Atendente automático do WhatsApp (integração Z-API).
+"""Atendente automático do WhatsApp (número da loja conectado pelo QR Code).
 
-A Z-API chama /api/webhooks/zapi/<loja>/<chave>/ a cada mensagem recebida. O
-atendente responde sozinho o básico — cardápio (link para pedir), status do
+O servidor de WhatsApp chama /api/webhooks/whatsapp/<loja>/<chave>/ a cada
+mensagem recebida. O atendente responde sozinho o básico — cardápio (link para pedir), status do
 último pedido, horário, endereço e formas de pagamento — e, se o cliente pedir
 um atendente, fica quieto por 2 horas com aquele número.
 
@@ -11,8 +11,6 @@ certinhos), não por texto solto no chat.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import re
 import unicodedata
 from datetime import timedelta
@@ -38,15 +36,6 @@ STATUS_TEXTO = {
     "CANCELADO": "cancelado ❌", "RECUSADO": "recusado ❌",
 }
 DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-
-
-def chave_webhook(loja) -> str:
-    """Chave secreta da URL do webhook (não dá para adivinhar a de outra loja)."""
-    return hmac.new(settings.SECRET_KEY.encode(), f"zapi:{loja.id}".encode(), hashlib.sha256).hexdigest()[:24]
-
-
-def url_webhook(loja) -> str:
-    return settings.APFOOD["URL_PUBLICA"].rstrip("/") + f"/api/webhooks/zapi/{loja.id}/{chave_webhook(loja)}/"
 
 
 def _normalizar(texto: str) -> str:
@@ -139,7 +128,7 @@ def resp_pagamento(loja) -> str:
 def _em_pausa(loja, telefone: str) -> bool:
     from apps.integracoes.models import WebhookRecebido
 
-    return WebhookRecebido.objects.filter(provedor="zapi", loja=loja, evento="atendente.pausa",
+    return WebhookRecebido.objects.filter(provedor="whatsapp", loja=loja, evento="atendente.pausa",
                                           id_evento__startswith=f"pausa:{telefone}:",
                                           criado_em__gte=timezone.now() - PAUSA).exists()
 
@@ -147,7 +136,7 @@ def _em_pausa(loja, telefone: str) -> bool:
 def _saudou_recente(loja, telefone: str) -> bool:
     from apps.integracoes.models import WebhookRecebido
 
-    return WebhookRecebido.objects.filter(provedor="zapi", loja=loja, evento="atendente.saudacao",
+    return WebhookRecebido.objects.filter(provedor="whatsapp", loja=loja, evento="atendente.saudacao",
                                           id_evento__startswith=f"saudacao:{telefone}:",
                                           criado_em__gte=timezone.now() - SAUDACAO_VALE).exists()
 
@@ -155,7 +144,7 @@ def _saudou_recente(loja, telefone: str) -> bool:
 def _marcar(loja, evento: str, telefone: str):
     from apps.integracoes.models import WebhookRecebido
 
-    WebhookRecebido.objects.create(provedor="zapi", loja=loja, evento=evento, payload={"telefone": telefone},
+    WebhookRecebido.objects.create(provedor="whatsapp", loja=loja, evento=evento, payload={"telefone": telefone},
                                    id_evento=f"{evento.split('.')[-1]}:{telefone}:{timezone.now().timestamp()}",
                                    processado_em=timezone.now())
 
@@ -184,22 +173,31 @@ def responder(loja, telefone: str, texto: str) -> str | None:
     }[alvo]()
 
 
-def processar_mensagem(loja, dados: dict) -> str | None:
-    """Payload da Z-API ("Ao receber"): responde pela fila de tarefas."""
+def texto_da_mensagem(data: dict) -> tuple[str, str, str]:
+    """(telefone, texto, id) de um MESSAGES_UPSERT; vazio se não for para responder."""
+    chave = data.get("key") or {}
+    jid = chave.get("remoteJid") or ""
+    if chave.get("fromMe") or not jid.endswith("@s.whatsapp.net"):
+        return "", "", ""  # mensagem nossa, grupo, status ou canal
+    msg = data.get("message") or {}
+    texto = (msg.get("conversation") or (msg.get("extendedTextMessage") or {}).get("text")
+             or (msg.get("buttonsResponseMessage") or {}).get("selectedDisplayText") or "")
+    return jid.split("@")[0], texto.strip(), str(chave.get("id") or "")
+
+
+def processar_mensagem(loja, data: dict) -> str | None:
+    """Mensagem recebida: responde pela fila de tarefas (o webhook volta na hora)."""
     from apps.integracoes.models import Integracao
     from apps.integracoes.tarefas import enfileirar
 
-    if dados.get("fromMe") or dados.get("isGroup") or dados.get("isNewsletter"):
-        return None
-    texto = ((dados.get("text") or {}).get("message") or "").strip()
-    telefone = str(dados.get("phone") or "")
+    telefone, texto, mid = texto_da_mensagem(data)
     if not texto or not telefone:
         return None
-    integ = Integracao.ativa(loja, "WHATSAPP")
+    integ = Integracao.ativa(loja, "WHATSAPP", "whatsapp")
     if integ is None:
         return None
     resposta = responder(loja, telefone, texto)
     if resposta:
         enfileirar("whatsapp.enviar", {"integracao_id": str(integ.id), "telefone": telefone, "mensagem": resposta},
-                   chave=f"wa-bot-{dados.get('messageId') or timezone.now().timestamp()}")
+                   chave=f"wa-bot-{mid or timezone.now().timestamp()}")
     return resposta

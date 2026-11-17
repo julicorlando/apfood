@@ -606,7 +606,7 @@ const PUBLICOS = [
 export function campanhas() {
   return paginaCadastro({
     titulo: "Campanhas WhatsApp", singular: "Campanha", textoNovo: "Nova campanha", url: "/api/campanhas/",
-    intro: "Mensagens pelo WhatsApp (integração Z-API) só para clientes que aceitaram receber promoções. "
+    intro: "Mensagens pelo WhatsApp da loja (Configurações → WhatsApp) só para clientes que aceitaram receber promoções. "
       + "As mensagens saem aos poucos (uma a cada 8 segundos) para o número não ser bloqueado.",
     busca: ["nome"], podeEditar: (c) => c.status === "RASCUNHO",
     novo: { publico: "MARKETING", dias_inativo: 30,

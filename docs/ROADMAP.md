@@ -22,7 +22,7 @@
 
 ## ✅ Passo 2b — Integrações e plataforma
 - NFC-e via Focus NFe (emissão, consulta, cancelamento, DANFE na térmica com QR Code); sem emissor → cupom não fiscal
-- Pix dinâmico (Mercado Pago) com webhook; WhatsApp (Z-API) a cada etapa; iFood (polling, importação, ações)
+- Pix dinâmico (Mercado Pago) com webhook; WhatsApp próprio (QR Code, Evolution API) a cada etapa; iFood (polling, importação, ações)
 - Credenciais cifradas, fila de tarefas com retentativa, WebSocket por JWT
 - Cobrança das empresas: faturas, inadimplência, bloqueio e reativação automáticos
 

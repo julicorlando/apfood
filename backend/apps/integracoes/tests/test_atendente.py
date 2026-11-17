@@ -16,9 +16,8 @@ def loja_bot(loja):
     loja.whatsapp_atendente = True
     loja.logradouro, loja.numero, loja.bairro = "Rua do Sol", "10", "Boa Vista"
     loja.save()
-    i = Integracao(loja=loja, tipo="WHATSAPP", provedor="zapi", ativo=True)
-    i.definir_credenciais({"instance": "x", "token": "y"})
-    i.save()
+    Integracao.objects.create(loja=loja, tipo="WHATSAPP", provedor="whatsapp", ativo=True,
+                              configuracao={"instancia": "loja1"})
     return loja
 
 
@@ -51,17 +50,28 @@ def test_desligado_nao_responde(loja):
     assert atendente.responder(loja, TEL, "oi") is None
 
 
+def msg(texto, mid="M1", **chave):
+    return {"event": "messages.upsert", "instance": "loja1",
+            "data": {"key": {"remoteJid": f"{TEL}@s.whatsapp.net", "fromMe": False, "id": mid, **chave},
+                     "pushName": "Ana", "message": {"conversation": texto}}}
+
+
 def test_webhook_com_chave(loja_bot, django_capture_on_commit_callbacks):
+    from apps.integracoes import whatsapp
     from apps.integracoes.models import Tarefa
 
-    base = f"/api/webhooks/zapi/{loja_bot.id}/"
-    msg = {"phone": TEL, "fromMe": False, "isGroup": False, "messageId": "M1", "text": {"message": "oi"}}
-    assert Client().post(base + "errada/", msg, content_type="application/json").status_code == 404
+    base = f"/api/webhooks/whatsapp/{loja_bot.id}/"
+    certo = base + whatsapp.chave_webhook(loja_bot) + "/"
+    assert Client().post(base + "errada/", msg("oi"), content_type="application/json").status_code == 404
     with django_capture_on_commit_callbacks(execute=True):
-        r = Client().post(base + atendente.chave_webhook(loja_bot) + "/", msg, content_type="application/json")
-        Client().post(base + atendente.chave_webhook(loja_bot) + "/", msg, content_type="application/json")  # repetido
-        Client().post(base + atendente.chave_webhook(loja_bot) + "/", {**msg, "messageId": "M2", "fromMe": True},
-                      content_type="application/json")
+        r = Client().post(certo, msg("oi"), content_type="application/json")
+        Client().post(certo, msg("oi"), content_type="application/json")  # repetido
+        Client().post(certo, msg("oi", "M2", fromMe=True), content_type="application/json")  # nossa
+        Client().post(certo, {**msg("oi", "M3"), "data": {**msg("oi", "M3")["data"],
+                      "key": {"remoteJid": "1203@g.us", "fromMe": False, "id": "M3"}}},
+                      content_type="application/json")  # grupo
+        Client().post(certo, {"event": "messages.upsert", "data": {"key": {"remoteJid": f"{TEL}@s.whatsapp.net",
+                      "id": "M4"}, "message": {"extendedTextMessage": {"text": "1"}}}}, content_type="application/json")
     assert r.status_code == 200
-    tarefas = Tarefa.objects.filter(tipo="whatsapp.enviar")
-    assert tarefas.count() == 1 and "Responda com um número" in tarefas.get().payload["mensagem"]
+    textos = [t.payload["mensagem"] for t in Tarefa.objects.filter(tipo="whatsapp.enviar").order_by("criado_em")]
+    assert len(textos) == 2 and "Responda com um número" in textos[0] and f"/{loja_bot.slug}/" in textos[1]

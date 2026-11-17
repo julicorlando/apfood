@@ -14,11 +14,10 @@ from apps.marketing.models import Campanha, EnvioCampanha
 
 
 @pytest.fixture
-def whatsapp(loja):
-    i = Integracao.objects.create(loja=loja, tipo="WHATSAPP", provedor="zapi", ativo=True)
-    i.definir_credenciais({"instance": "i", "token": "t"})
-    i.save()
-    return i
+def whatsapp(loja, settings):
+    settings.APFOOD_WHATSAPP = {"URL": "http://whatsapp:8080", "CHAVE": "k", "WEBHOOK_BASE": ""}
+    return Integracao.objects.create(loja=loja, tipo="WHATSAPP", provedor="whatsapp", ativo=True,
+                                     configuracao={"instancia": "loja1"})
 
 
 @pytest.fixture
@@ -78,7 +77,7 @@ def test_envio_pela_fila_conta_e_conclui(gerente, loja, clientes, whatsapp, djan
     assert len(ts) == 2 and (ts[1].executar_em - ts[0].executar_em).total_seconds() >= 7  # espaçadas
     assert api(gerente).patch(f"/api/campanhas/{c.id}/?loja={loja.id}", {"nome": "x"}, format="json").status_code == 400
 
-    with mock.patch("apps.integracoes.provedores.zapi.ZApi.enviar_texto") as enviar:
+    with mock.patch("apps.integracoes.provedores.evolution.Evolution.enviar_texto") as enviar:
         assert tarefas.executar(ts[0]) is True
         enviar.side_effect = RuntimeError("número inválido")
         ts[1].max_tentativas = 1

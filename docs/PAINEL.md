@@ -68,6 +68,14 @@ Na comanda, **Receber (total ou parte)** aceita só uma parte da conta: o client
 
 Pedido de balcão sem senha informada ganha o número do pedido do dia com 4 dígitos (ex.: **0124**), impresso no cupom e mostrado no PDV para chamar o cliente. Sem internet, o PDV do computador numera sozinho (sequência do dia naquele caixa). No PDV do computador, sem itens no pedido aparece **CAIXA LIVRE** (ou **CAIXA FECHADO**, se o caixa não foi aberto) com o último número chamado.
 
+## WhatsApp da loja (QR Code)
+
+Em **Configurações → WhatsApp** (gerente+), clique em **Conectar** e leia o QR Code com o WhatsApp do celular da loja (Mais opções → **Aparelhos conectados** → Conectar um aparelho), igual ao WhatsApp Web. Não precisa de conta em nenhum serviço externo.
+- Depois de conectado, a tela mostra o número. O celular pode até ficar desligado: a conexão fica no servidor da plataforma.
+- Esse número envia os avisos de cada etapa do pedido, as campanhas e as respostas do atendente automático.
+- **Desconectar** desliga tudo isso até conectar de novo. Se o WhatsApp for desconectado pelo celular, o sistema percebe sozinho.
+- Use um número só da loja: o WhatsApp não é oficial para automação e pode bloquear números que mandam muitas mensagens para quem não pediu.
+
 ## Autoatendimento pelo QR Code da mesa
 
 Em **Cadastro de mesas**, cada mesa tem um QR Code (botão **QR Code**, ou **Imprimir QR de todas** para uma folha com todos).
@@ -78,11 +86,10 @@ Em **Cadastro de mesas**, cada mesa tem um QR Code (botão **QR Code**, ou **Imp
 
 ## Atendente automático no WhatsApp
 
-Com a integração **Z-API** ativa e **Atendente automático** ligado (Dados da loja → Mesas e WhatsApp), o WhatsApp da loja responde sozinho:
+Com o **WhatsApp da loja conectado** (Configurações → WhatsApp) e **Atendente automático** ligado (Dados da loja → Mesas e WhatsApp), o WhatsApp da loja responde sozinho:
 - **cardápio** (link para pedir, com as promoções do dia), **meu pedido** (status do último pedido daquele número, com link), **horário** (aberto agora? e horários da semana), **endereço** e **formas de pagamento**;
 - primeira mensagem: boas-vindas (personalizável, com `{loja}` e `{link}`) e um menu numerado (1 cardápio, 2 meu pedido, 3 horário, 4 atendente);
 - "4" ou "falar com atendente": avisa que alguém vai responder e fica **2 horas sem responder** aquele número.
-- Configure na Z-API, em Webhooks → **Ao receber**, a URL que aparece em Configurações → Integrações (cartão Z-API).
 - O cliente também recebe o aviso de cada etapa do pedido; ao sair para entrega, com o link para acompanhar o entregador.
 
 ## CMV e margem
@@ -111,7 +118,7 @@ Em **Clientes e entrega → Campanhas WhatsApp** (gerente+), escreva a mensagem 
 A mensagem aceita `{nome}`, `{loja}`, `{cashback}` e `{link}` (o cardápio da loja). **Revisar e enviar** mostra quantos vão receber e um exemplo.
 
 - **Quem recebe:** só clientes com "Aceita receber promoções" marcado (LGPD).
-- **Envio:** pela integração **Z-API**, uma mensagem a cada 8 segundos, pela fila de tarefas, para o número não ser bloqueado. A lista mostra enviados e falhas.
+- **Envio:** pelo WhatsApp da loja (Configurações → WhatsApp), uma mensagem a cada 8 segundos, pela fila de tarefas, para o número não ser bloqueado. A lista mostra enviados e falhas.
 
 ## PDV no navegador
 
