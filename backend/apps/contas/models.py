@@ -114,18 +114,26 @@ class Usuario(AbstractUser):
         )
 
     def lojas_permitidas(self):
-        """QuerySet das lojas que este usuário pode ver."""
+        """QuerySet das lojas que este usuário pode OPERAR (cardápio, pedidos,
+        caixa...). O MASTER administra a plataforma e não opera loja de cliente."""
         from apps.lojas.models import Loja
 
         a = self.acesso()
-        if a.bloqueado:
+        if a.bloqueado or a.eh_master:
             return Loja.objects.none()
-        if a.eh_master:
-            return Loja.objects.all()
         qs = Loja.objects.filter(empresa_id=self.empresa_id)
         if not a.ve_todas_as_lojas_da_empresa:
             qs = qs.filter(id__in=a.lojas_ids)
         return qs
+
+    def lojas_visiveis(self):
+        """Cadastro de lojas (tela Lojas, vincular usuário): o MASTER vê todas."""
+        from apps.lojas.models import Loja
+
+        a = self.acesso()
+        if a.eh_master and not a.bloqueado:
+            return Loja.objects.all()
+        return self.lojas_permitidas()
 
     def pode_acessar_loja(self, loja) -> bool:
         return permissoes.pode_acessar_loja(self.acesso(), str(loja.id), str(loja.empresa_id))

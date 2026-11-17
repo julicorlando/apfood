@@ -5,6 +5,7 @@ from apfood_core.permissoes import (
     Acesso,
     pode_acessar_empresa,
     pode_acessar_loja,
+    pode_ver_loja,
     pode_cadastrar_empresa,
     pode_criar_loja,
     pode_gerenciar_usuario,
@@ -20,7 +21,8 @@ OPERADOR_A2 = Acesso(P.OPERADOR, empresa_id="A", lojas_ids=frozenset({"a2"}))
 def test_master_ve_tudo():
     assert pode_acessar_empresa(MASTER, "A")
     assert pode_acessar_empresa(MASTER, "B")
-    assert pode_acessar_loja(MASTER, "b1", "B")
+    assert pode_ver_loja(MASTER, "b1", "B")
+    assert not pode_acessar_loja(MASTER, "b1", "B")  # administra, mas não opera a loja
     assert pode_cadastrar_empresa(MASTER)
 
 

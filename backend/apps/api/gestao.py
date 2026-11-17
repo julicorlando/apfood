@@ -89,7 +89,7 @@ class LojaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         return [EhAdmin()]
 
     def get_queryset(self):
-        return self.request.user.lojas_permitidas().select_related("empresa").order_by("nome")
+        return self.request.user.lojas_visiveis().select_related("empresa").order_by("nome")
 
     def perform_create(self, serializer):
         u = self.request.user
@@ -115,6 +115,8 @@ class LojaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         if not request.user.eh_gerente:
             raise PermissionDenied("requer gerente")
         loja = self.get_object()
+        if not request.user.pode_acessar_loja(loja):  # MASTER não opera loja de cliente
+            raise PermissionDenied("loja fora do seu acesso")
         loja.aberta_para_pedidos = bool(request.data.get("aberta"))
         loja.save(update_fields=["aberta_para_pedidos", "atualizado_em"])
         return Response(self.get_serializer(loja).data)
@@ -246,7 +248,7 @@ class UsuarioGestaoSerializer(serializers.ModelSerializer):
         if lojas:
             if any(str(l.empresa_id) != empresa_id for l in lojas):
                 raise serializers.ValidationError({"lojas": ["loja de outra empresa"]})
-            permitidas = set(eu.lojas_permitidas().values_list("id", flat=True))
+            permitidas = set(eu.lojas_visiveis().values_list("id", flat=True))
             if any(l.id not in permitidas for l in lojas):
                 raise serializers.ValidationError({"lojas": ["loja fora do seu acesso"]})
         if alvo is None and empresa is not None and not eu.eh_master:

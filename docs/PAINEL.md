@@ -17,6 +17,8 @@ Tudo o que o PDV para Windows faz também pode ser feito pelo navegador, no comp
 | Configurações | Dados da loja e horários, Fiscal, Integrações, Usuários, Lojas, Minha empresa | admin+ (usuários: gerente+) |
 | Plataforma | Visão geral, Empresas (cadastro com loja e admin num passo só), Planos, Faturas | só o MASTER |
 
+**Quem acessa o quê:** o MASTER (dono da plataforma) administra empresas, lojas, usuários, planos e faturas, mas **não opera as lojas dos clientes**: não vê nem altera cardápio, pedidos, caixa, estoque, clientes ou relatórios de loja. Cada empresa (ADMIN) acessa só as suas lojas; GERENTE e OPERADOR, só as lojas vinculadas a eles.
+
 O seletor no topo troca a loja ativa, para quem tem acesso a mais de uma.
 
 ## Páginas públicas

@@ -68,11 +68,18 @@ def pode_acessar_empresa(a: Acesso, empresa_id: str) -> bool:
 
 
 def pode_acessar_loja(a: Acesso, loja_id: str, loja_empresa_id: str) -> bool:
-    if not pode_acessar_empresa(a, loja_empresa_id):
+    """Operar a loja (cardápio, pedidos, caixa, estoque...). O MASTER administra
+    a plataforma, mas não opera as lojas dos clientes."""
+    if a.eh_master or not pode_acessar_empresa(a, loja_empresa_id):
         return False
-    if a.eh_master or a.ve_todas_as_lojas_da_empresa:
+    if a.ve_todas_as_lojas_da_empresa:
         return True
     return loja_id in a.lojas_ids
+
+
+def pode_ver_loja(a: Acesso, loja_id: str, loja_empresa_id: str) -> bool:
+    """Ver o cadastro da loja (lista de lojas, vincular usuário). O MASTER vê todas."""
+    return (a.eh_master and not a.bloqueado) or pode_acessar_loja(a, loja_id, loja_empresa_id)
 
 
 def pode_cadastrar_empresa(a: Acesso) -> bool:
