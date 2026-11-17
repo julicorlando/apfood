@@ -24,13 +24,13 @@
     a:focus-visible { outline: 3px solid var(--tinta); outline-offset: 3px; }
 
     /* topo */
-    .barra { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid #f1e9e2; }
-    .barra .largura { display: flex; align-items: center; gap: 16px; height: 68px; }
-    .barra img { height: 40px; width: auto; display: block; }
-    .barra nav { margin-left: auto; display: flex; align-items: center; gap: 18px; }
-    .barra nav a { color: var(--tinta); text-decoration: none; font-weight: 600; font-size: 15px; }
-    .barra nav a.cta { color: #fff; font-size: 15px; padding: 10px 16px; box-shadow: none; }
-    @media (max-width: 720px) { .barra nav .some { display: none; } }
+    .v-barra { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid #f1e9e2; }
+    .v-barra .largura { display: flex; align-items: center; gap: 16px; height: 68px; }
+    .v-barra img { height: 40px; width: auto; display: block; }
+    .v-barra nav { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+    .v-barra nav a { color: var(--tinta); text-decoration: none; font-weight: 600; font-size: 15px; }
+    .v-barra nav a.cta { color: #fff; font-size: 15px; padding: 10px 16px; box-shadow: none; }
+    @media (max-width: 720px) { .v-barra nav .some { display: none; } }
 
     /* herói */
     .heroi { background: radial-gradient(1200px 500px at 85% -10%, #ffe2cc 0, transparent 60%), var(--creme); padding: 56px 0 72px; }
@@ -41,7 +41,7 @@
     .heroi h1 { font-size: clamp(34px, 5.2vw, 58px); line-height: 1.04; letter-spacing: -1.6px; margin: 0 0 18px; }
     .heroi h1 em { font-style: normal; color: var(--laranja); }
     .heroi p.sub { font-size: 20px; line-height: 1.5; color: var(--cinza); margin: 0 0 28px; max-width: 580px; }
-    .acoes { display: flex; flex-wrap: wrap; gap: 12px; }
+    .v-acoes { display: flex; flex-wrap: wrap; gap: 12px; }
     .garantias { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; color: var(--cinza); font-size: 15px; padding: 0; list-style: none; }
     .garantias li::before { content: "✓ "; color: #1f9d55; font-weight: 800; }
 
@@ -50,11 +50,11 @@
     .tela .cab { background: var(--laranja); color: #fff; padding: 22px 16px 16px; }
     .tela .cab b { display: block; font-size: 18px; }
     .tela .cab span { font-size: 13px; opacity: .9; }
-    .tela .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f2ede8; font-size: 14px; }
-    .tela .item small { display: block; color: var(--cinza); }
-    .tela .item .mais { background: var(--laranja); color: #fff; border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; font-weight: 800; }
+    .tela .v-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #f2ede8; font-size: 14px; }
+    .tela .v-item small { display: block; color: var(--cinza); }
+    .tela .v-item .mais { background: var(--laranja); color: #fff; border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; font-weight: 800; }
     .tela .carrinho { margin: 12px; background: #1f9d55; color: #fff; border-radius: 12px; padding: 12px; font-weight: 700; display: flex; justify-content: space-between; font-size: 14px; }
-    .tela .aviso { margin: 0 12px 14px; font-size: 12px; color: var(--cinza); text-align: center; }
+    .tela .v-nota { margin: 0 12px 14px; font-size: 12px; color: var(--cinza); text-align: center; }
 
     /* dores */
     .dores { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
@@ -64,7 +64,7 @@
     .dor p { color: var(--cinza); line-height: 1.55; margin: 0; }
 
     /* recursos */
-    .faixa { background: var(--creme); }
+    .v-faixa { background: var(--creme); }
     .recursos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
     .recurso { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.04); }
     .recurso .ico { font-size: 26px; }
@@ -78,7 +78,7 @@
                      background: var(--laranja); color: #fff; font-weight: 800; margin-bottom: 12px; }
     .passo h3 { margin: 0 0 6px; }
     .passo p { margin: 0; color: var(--cinza); line-height: 1.5; }
-    .centro { text-align: center; margin-top: 32px; }
+    .v-centro { text-align: center; margin-top: 32px; }
 
     /* cliente */
     .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
@@ -120,7 +120,7 @@
   </style>
 </head>
 <body>
-  <header class="barra">
+  <header class="v-barra">
     <div class="largura">
       <a href="/empresas/" aria-label="ApFood"><img src="{% static 'marca/logo.png' %}" srcset="{% static 'marca/logo@2x.png' %} 2x" alt="ApFood"></a>
       <nav aria-label="Página">
@@ -140,7 +140,7 @@
           <span class="selo">🍔 Feito para restaurantes, lanchonetes e hamburguerias</span>
           <h1>Seu restaurante vendendo <em>mais</em>, com tudo num lugar só.</h1>
           <p class="sub">Cardápio digital com pedidos direto para você, PDV que não para quando a internet cai, caixa conferido por operador e WhatsApp que responde sozinho.</p>
-          <div class="acoes">
+          <div class="v-acoes">
             <a class="cta" href="#cadastro">Começar meu teste grátis</a>
             {% if demo %}<a class="cta-2" href="/{{ demo }}/" target="_blank" rel="noopener">Ver um cardápio de exemplo →</a>{% endif %}
           </div>
@@ -153,11 +153,11 @@
         <div class="celular" aria-hidden="true">
           <div class="tela">
             <div class="cab"><b>Seu Restaurante</b><span>Aberto · entrega em ~35 min</span></div>
-            <div class="item"><div>X-Bacon da Casa<small>Pão brioche, blend 160 g, bacon</small></div><span class="mais">+</span></div>
-            <div class="item"><div>Combo Família<small>2 burgers, batata e refri 2 L</small></div><span class="mais">+</span></div>
-            <div class="item"><div>Batata com cheddar<small>🔥 Happy hour: 20% off</small></div><span class="mais">+</span></div>
+            <div class="v-item"><div>X-Bacon da Casa<small>Pão brioche, blend 160 g, bacon</small></div><span class="mais">+</span></div>
+            <div class="v-item"><div>Combo Família<small>2 burgers, batata e refri 2 L</small></div><span class="mais">+</span></div>
+            <div class="v-item"><div>Batata com cheddar<small>🔥 Happy hour: 20% off</small></div><span class="mais">+</span></div>
             <div class="carrinho"><span>Ver carrinho · 3 itens</span><span>Pix</span></div>
-            <p class="aviso">Pedido chega na hora no seu painel e na cozinha</p>
+            <p class="v-nota">Pedido chega na hora no seu painel e na cozinha</p>
           </div>
         </div>
       </div>
@@ -187,7 +187,7 @@
       </div>
     </section>
 
-    <section class="faixa" id="recursos">
+    <section class="v-faixa" id="recursos">
       <div class="largura">
         <h2 class="titulo-secao">Tudo o que o seu restaurante precisa</h2>
         <p class="lead">Do balcão à entrega, da cozinha ao financeiro. Sem precisar juntar vários sistemas.</p>
@@ -215,11 +215,11 @@
           <div class="passo"><h3>Cadastre o cardápio</h3><p>Produtos, fotos, preços e adicionais. Defina horários e as regiões de entrega.</p></div>
           <div class="passo"><h3>Divulgue e venda</h3><p>Compartilhe seu link, imprima os QR das mesas e acompanhe os pedidos chegando.</p></div>
         </div>
-        <div class="centro"><a class="cta" href="#cadastro">Quero começar agora</a></div>
+        <div class="v-centro"><a class="cta" href="#cadastro">Quero começar agora</a></div>
       </div>
     </section>
 
-    <section class="faixa">
+    <section class="v-faixa">
       <div class="largura duas">
         <div>
           <h2>Seu cliente também ganha</h2>
@@ -287,7 +287,7 @@
       </form>
     </section>
 
-    <section class="faixa" id="duvidas">
+    <section class="v-faixa" id="duvidas">
       <div class="largura">
         <h2 class="titulo-secao">Perguntas frequentes</h2>
         <div class="faq">
