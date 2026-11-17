@@ -252,6 +252,12 @@ class OperadoresView(Relatorio):
 
         pedidos = list(Pedido.objects.filter(loja=loja, data_referencia__range=(inicio, fim), atendente__isnull=False)
                        .values("atendente", "status").annotate(n=Count("id"), v=Sum("total_centavos")))
+        pags = list(Pagamento.objects.filter(status="CONFIRMADO", recebido_por__isnull=False,
+                                             confirmado_em__date__range=(inicio, fim))
+                    .filter(Q(pedido__loja=loja) | Q(comanda__loja=loja))
+                    .values("recebido_por", "forma").annotate(n=Count("id"), v=Sum("valor_centavos")))
+        ids = {p["atendente"] for p in pedidos} | {pg["recebido_por"] for pg in pags}
+        nomes = {str(u.pk): (u.get_full_name() or u.username) for u in Usuario.objects.filter(pk__in=ids)}
         for p in pedidos:
             o = op(p["atendente"], nomes.get(str(p["atendente"]), "?"))
             if p["status"] == "CONCLUIDO":
@@ -259,12 +265,6 @@ class OperadoresView(Relatorio):
                 o["pedidos_centavos"] += p["v"] or 0
             elif p["status"] in ("CANCELADO", "RECUSADO"):
                 o["cancelados"] += p["n"]
-        pags = list(Pagamento.objects.filter(status="CONFIRMADO", recebido_por__isnull=False,
-                                             confirmado_em__date__range=(inicio, fim))
-                    .filter(Q(pedido__loja=loja) | Q(comanda__loja=loja))
-                    .values("recebido_por", "forma").annotate(n=Count("id"), v=Sum("valor_centavos")))
-        ids = {p["atendente"] for p in pedidos} | {pg["recebido_por"] for pg in pags}
-        nomes = {str(u.pk): (u.get_full_name() or u.username) for u in Usuario.objects.filter(pk__in=ids)}
         for pg in pags:
             o = op(pg["recebido_por"], nomes.get(str(pg["recebido_por"]), "?"))
             o["recebido_centavos"] += pg["v"] or 0
