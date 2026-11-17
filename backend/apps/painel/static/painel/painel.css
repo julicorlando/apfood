@@ -209,7 +209,16 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .formas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 .formas button { padding: 14px 8px; border-radius: 10px; border: 1px solid var(--linha); background: #fff; font-weight: 700; cursor: pointer; }
 .formas button.ativa { border-color: var(--cor); background: var(--cor-suave); color: var(--cor-escura); }
-@media (max-width: 1000px) { .pdv { grid-template-columns: 1fr; } .pdv-carrinho { position: static; max-height: none; } }
+@media (max-width: 1000px) { .pdv { grid-template-columns: minmax(0, 1fr); } .pdv-carrinho { position: static; max-height: none; } }
+.pdv > * { min-width: 0; }
+.pdv-carrinho-topo { display: none; }
+.pdv-carrinho .abas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 10px; overflow: visible; }
+.pdv-carrinho .abas button { padding: 10px 2px; font-size: 14px; white-space: normal; line-height: 1.15; }
+.pdv-carrinho .acoes { flex-wrap: nowrap; }
+.pdv-carrinho .acoes > input, .pdv-carrinho .acoes > select { flex: 1 1 auto; min-width: 0; }
+@media (min-width: 1001px) {
+  .modo-app .pdv-carrinho { top: calc(var(--topo, 60px) + 12px); max-height: calc(100vh - var(--topo, 60px) - 100px); }
+}
 
 /* mesas */
 .mesas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -262,13 +271,27 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .qr-whatsapp img { background: #fff; padding: 8px; border-radius: 10px; border: 1px solid var(--linha); }
 .passos-qr { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 360px; }
 
-/* botão "ver pedido" do PDV em telas estreitas (carrinho fica abaixo dos produtos) */
-.pdv-ir-carrinho { display: none; }
+/* PDV em telas estreitas: produtos ocupam a tela; o pedido abre como painel que sobe de baixo */
+.pdv-ir-carrinho, .pdv-fundo { display: none; }
 @media (max-width: 1000px) {
-  .pdv-ir-carrinho { display: flex; justify-content: space-between; align-items: center; gap: 10px; position: sticky; bottom: 12px; z-index: 6;
-    margin-top: 12px; width: 100%; padding: 14px 16px; border: 0; border-radius: 12px; background: var(--cor); color: #fff; font-weight: 800;
-    font-size: 16px; box-shadow: 0 6px 18px rgba(242,106,15,.35); cursor: pointer; }
+  .pdv-cabeca { position: sticky; top: var(--topo, 0px); z-index: 4; background: var(--fundo); margin: 0 -16px; padding: 8px 16px 2px; }
+  .pdv-cabeca .barra-ferramentas { margin-bottom: 8px; }
+  .pdv-cabeca .barra-ferramentas input[type=search] { max-width: none; flex: 1 1 100%; }
+  .pdv-produtos { grid-template-columns: repeat(auto-fill, minmax(min(140px, 46%), 1fr)); padding-bottom: 84px; }
+  .pdv-ir-carrinho { display: flex; justify-content: space-between; align-items: center; gap: 10px; position: fixed; z-index: 35;
+    left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 14px 16px; border: 0; border-radius: 12px;
+    background: var(--cor); color: #fff; font-weight: 800; font-size: 16px; box-shadow: 0 6px 18px rgba(242,106,15,.35); cursor: pointer; }
   .pdv-ir-carrinho[data-vazio] { display: none; }
+  .pdv-carrinho { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 45; margin: 0; max-height: 88vh; max-height: 88dvh;
+    border-radius: 18px 18px 0 0; overflow-y: auto; transform: translateY(105%); transition: transform .22s ease; visibility: hidden;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 30px rgba(0,0,0,.18); }
+  .pdv-carrinho.aberto { transform: none; visibility: visible; }
+  .pdv-carrinho .pdv-itens { overflow: visible; flex: none; }
+  .pdv-carrinho-topo { display: flex; align-items: center; justify-content: space-between; position: sticky; top: -16px; z-index: 1;
+    background: var(--cartao); margin: -16px -16px 8px; padding: 14px 16px 10px; border-bottom: 1px solid var(--linha); }
+  .pdv-carrinho-topo h2 { margin: 0; }
+  .pdv-fundo.aberto { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 44; }
+  .pdv-caixa-fechado { font-size: 14px; padding: 8px 12px; }
 }
 
 /* modais ocupam a tela no celular */
@@ -293,7 +316,7 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .abas-app a .icone { font-size: 22px; line-height: 1; filter: grayscale(1); opacity: .75; }
 .abas-app a.ativo { color: var(--cor-escura); }
 .abas-app a.ativo .icone { filter: none; opacity: 1; }
-.modo-app .pdv-ir-carrinho { bottom: calc(76px + env(safe-area-inset-bottom)); }
+.modo-app .pdv-ir-carrinho { bottom: calc(72px + env(safe-area-inset-bottom)); }
 .modo-app .modal-fundo { z-index: 60; }
 /* tablet/PC deitado: abas maiores e centralizadas */
 @media (min-width: 900px) {

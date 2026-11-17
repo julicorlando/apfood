@@ -191,7 +191,7 @@ export function pdv() {
       const desenharAvisoCaixa = () => {
         limpar(avisoCaixa);
         if (!turno) {
-          avisoCaixa.append(h("div", { class: "alerta alerta-aviso acoes", style: { marginBottom: "12px" } },
+          avisoCaixa.append(h("div", { class: "alerta alerta-aviso acoes pdv-caixa-fechado", style: { marginBottom: "12px" } },
             h("span", { style: { flex: 1 } }, "Seu caixa está fechado: abra para receber pagamentos."),
             botaoAcao("Abrir caixa", async () => {
               const t = await abrirCaixaModal();
@@ -241,7 +241,14 @@ export function pdv() {
       // ---------- carrinho
       const carrinho = h("div", { class: "cartao pdv-carrinho" });
       const modos = [["LOCAL", "Comer aqui"], ["MESA", "Mesa"], ["RETIRADA", "Para viagem"], ["DELIVERY", "Delivery"]];
-      const irCarrinho = h("button", { type: "button", class: "pdv-ir-carrinho", onclick: () => carrinho.scrollIntoView({ behavior: "smooth", block: "start" }) });
+      const estreita = () => matchMedia("(max-width: 1000px)").matches;
+      const fundoCarrinho = h("div", { class: "pdv-fundo", onclick: () => fecharCarrinho() });
+      function abrirCarrinho() {
+        if (!estreita()) { carrinho.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+        carrinho.classList.add("aberto"); fundoCarrinho.classList.add("aberto");
+      }
+      function fecharCarrinho() { carrinho.classList.remove("aberto"); fundoCarrinho.classList.remove("aberto"); }
+      const irCarrinho = h("button", { type: "button", class: "pdv-ir-carrinho", onclick: abrirCarrinho });
       const canalPromo = (m) => (m === "DELIVERY" ? "DELIVERY" : m === "MESA" ? "MESA" : "BALCAO");
 
       function totais() {
@@ -296,6 +303,8 @@ export function pdv() {
 
         const cliente = blocoCliente();
         trocar(carrinho, 
+          h("div", { class: "pdv-carrinho-topo" }, h("h2", null, "Pedido"),
+            h("button", { type: "button", class: "botao botao-pequeno", "aria-label": "Fechar", onclick: fecharCarrinho }, "Continuar vendendo")),
           blocoModo, cliente, itens,
           h("ul", { class: "lista-simples" },
             h("li", null, "Subtotal", h("span", { class: "num" }, dinheiro(t.subtotal))),
@@ -308,7 +317,7 @@ export function pdv() {
           h("div", { style: { marginTop: "10px" } }, botaoAcao(estado.modo === "MESA" ? "Enviar para a mesa" : "Finalizar venda", finalizar, "botao botao-primario botao-grande botao-bloco")),
         );
         const qtd = estado.itens.reduce((n, i) => n + i.quantidade, 0);
-        if (qtd) irCarrinho.removeAttribute("data-vazio"); else irCarrinho.setAttribute("data-vazio", "");
+        if (qtd) irCarrinho.removeAttribute("data-vazio"); else { irCarrinho.setAttribute("data-vazio", ""); fecharCarrinho(); }
         trocar(irCarrinho, h("span", null, `Ver pedido · ${qtd} ${qtd === 1 ? "item" : "itens"}`), h("span", null, dinheiro(t.total)));
       }
 
@@ -389,7 +398,7 @@ export function pdv() {
         if (estado.modo !== "DELIVERY") {
           const nome = h("input", { type: "text", placeholder: "Nome do cliente (opcional)", value: estado.cliente.nome });
           nome.addEventListener("input", () => { estado.cliente.nome = nome.value; });
-          const senha = h("input", { type: "text", placeholder: "Nº (automático)", value: estado.senha, style: { maxWidth: "110px" } });
+          const senha = h("input", { type: "text", placeholder: "Nº auto", value: estado.senha, style: { maxWidth: "96px" } });
           senha.addEventListener("input", () => { estado.senha = senha.value; });
           const tel = h("input", { type: "tel", placeholder: "Telefone (cashback)", value: estado.cliente.telefone });
           tel.addEventListener("input", () => { estado.cliente.telefone = tel.value; });
@@ -561,8 +570,8 @@ export function pdv() {
       }
 
       trocar(raiz, avisoCaixa, h("div", { class: "pdv" },
-        h("div", null, h("div", { class: "barra-ferramentas" }, busca), cats, grade, irCarrinho),
-        carrinho));
+        h("div", null, h("div", { class: "pdv-cabeca" }, h("div", { class: "barra-ferramentas" }, busca), cats), grade, irCarrinho),
+        carrinho, fundoCarrinho));
       desenharCatalogo();
       desenharCarrinho();
       if (!matchMedia("(pointer: coarse)").matches) busca.focus();  // no celular não abre o teclado sozinho
