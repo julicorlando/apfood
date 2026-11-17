@@ -97,7 +97,7 @@ def codigo_indicacao(cliente) -> str:
 
     loja = cliente.loja
     if cliente.codigo_indicacao:
-        Cupom.objects.filter(indicacao_de=cliente).update(valor=Decimal(loja.indicacao_desconto_centavos) / 100)
+        Cupom.objects.filter(indicacao_de=cliente).update(valor=Decimal(loja.indicacao_desconto_centavos))
         return cliente.codigo_indicacao
     prefixo = re.sub(r"[^A-Z]", "", (cliente.nome or "AMIGO").upper().replace("Ç", "C"))[:5] or "AMIGO"
     for _ in range(20):
@@ -105,7 +105,7 @@ def codigo_indicacao(cliente) -> str:
         if not Cupom.objects.filter(loja=loja, codigo=codigo).exists():
             break
     Cupom.objects.create(loja=loja, codigo=codigo, descricao=f"Indicação de {cliente.nome}"[:160],
-                         tipo=TipoCupom.VALOR_FIXO, valor=Decimal(loja.indicacao_desconto_centavos) / 100,
+                         tipo=TipoCupom.VALOR_FIXO, valor=Decimal(loja.indicacao_desconto_centavos),
                          somente_primeira_compra=True, usos_por_cliente=1, indicacao_de=cliente, ativo=True)
     Cliente.objects.filter(pk=cliente.pk).update(codigo_indicacao=codigo)
     cliente.codigo_indicacao = codigo

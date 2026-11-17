@@ -84,7 +84,7 @@ class LojaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     parser_classes = [JSONParser, MultiPartParser, FormParser]  # logo
 
     def get_permissions(self):
-        if self.request.method in LEITURA or self.action == "pedidos_online":
+        if self.request.method in LEITURA or self.action in ("pedidos_online", "totem"):
             return [UsuarioLiberado()]
         return [EhAdmin()]
 
