@@ -1,7 +1,7 @@
 """Conexões com serviços externos, por loja.
 
     MARKETPLACE: ifood, 99food, rappi       PAGAMENTO: mercadopago, asaas, efi
-    FISCAL: focusnfe, plugnotas, nfeio      WHATSAPP: zapi, evolution, meta
+    FISCAL: focusnfe, plugnotas, nfeio      WHATSAPP: whatsapp (próprio, QR Code)
     MAPAS: google, osrm
 
 `credenciais` guarda tokens/segredos CIFRADOS (Fernet, ver cripto.py) e nunca

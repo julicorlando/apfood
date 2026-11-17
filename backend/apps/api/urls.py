@@ -30,6 +30,7 @@ urlpatterns = [
     path("taxa-entrega/", views.TaxaEntregaView.as_view()),
     path("enums/", gestao.EnumsView.as_view()),
     path("assinatura/", gestao.AssinaturaView.as_view()),
+    path("whatsapp/", gestao.WhatsAppView.as_view()),
     path("plataforma/recebimentos/", gestao.RecebimentosView.as_view()),
     path("fiscal/configuracao/", gestao.ConfiguracaoFiscalView.as_view()),
     path("sync/pull/", sync.PullView.as_view()),
@@ -49,7 +50,7 @@ urlpatterns = [
     path("publico/lojas/<slug:slug>/mesa/<str:token>/", publico.MesaPublicaView.as_view()),
     path("publico/lojas/<slug:slug>/mesa/<str:token>/pedidos/", publico.PedidoMesaView.as_view()),
     path("webhooks/mercadopago/plataforma/", webhooks.MercadoPagoPlataformaWebhook.as_view()),
-    path("webhooks/zapi/<uuid:loja_id>/<str:chave>/", webhooks.ZApiWebhook.as_view()),
+    path("webhooks/whatsapp/<uuid:loja_id>/<str:chave>/", webhooks.WhatsAppWebhook.as_view()),
     path("webhooks/mercadopago/<uuid:loja_id>/", webhooks.MercadoPagoLojaWebhook.as_view()),
     path("", include(r.urls)),
 ]

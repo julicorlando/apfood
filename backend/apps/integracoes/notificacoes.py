@@ -35,7 +35,7 @@ def notificar_status(pedido) -> None:
         return
     if pedido.status == "PRONTO" and pedido.tipo_atendimento == "ENTREGA":
         return  # cliente de entrega recebe "saiu para entrega"
-    integ = Integracao.ativa(pedido.loja, "WHATSAPP")
+    integ = Integracao.ativa(pedido.loja, "WHATSAPP", "whatsapp")
     if integ is None or not (texto := mensagem(pedido)):
         return
     enfileirar("whatsapp.enviar", {"integracao_id": str(integ.id), "telefone": pedido.telefone_cliente,
@@ -44,14 +44,10 @@ def notificar_status(pedido) -> None:
 
 @executor("whatsapp.enviar")
 def enviar(integracao_id: str, telefone: str, mensagem: str):
+    from apps.integracoes import whatsapp
     from apps.integracoes.models import Integracao
-    from apps.integracoes.provedores.zapi import ZApi
 
-    integ = Integracao.objects.get(pk=integracao_id)
-    c = integ.obter_credenciais()
-    try:
-        ZApi(c["instance"], c["token"], c.get("client_token", "")).enviar_texto(telefone, mensagem)
-    except Exception as exc:
-        integ.registrar_erro(str(exc))
-        raise
-    integ.registrar_sucesso()
+    integ = Integracao.objects.select_related("loja").get(pk=integracao_id)
+    if integ.provedor != whatsapp.PROVEDOR:
+        return  # integração antiga (Z-API removida): não envia
+    whatsapp.enviar(integ, telefone, mensagem)

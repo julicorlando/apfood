@@ -52,20 +52,9 @@ def cadastro(model_cls, **extra_meta):
 
 # --- contas / lojas ---------------------------------------------------------
 class LojaSerializer(serializers.ModelSerializer):
-    whatsapp_webhook_url = serializers.SerializerMethodField()
-
     class Meta:
         model = Loja
         exclude = ["empresa"]
-
-    def get_whatsapp_webhook_url(self, loja):
-        """URL para colar na Z-API ("Ao receber") — só para quem administra a loja."""
-        req = self.context.get("request")
-        if req is None or not getattr(req.user, "eh_gerente", False) or not loja.pk:
-            return ""
-        from apps.integracoes.atendente import url_webhook
-
-        return url_webhook(loja)
 
 
 class UsuarioSerializer(serializers.ModelSerializer):

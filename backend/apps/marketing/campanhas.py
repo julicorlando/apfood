@@ -1,4 +1,4 @@
-"""Campanhas de WhatsApp (Z-API): só para clientes que aceitaram promoções.
+"""Campanhas de WhatsApp (número da loja conectado pelo QR Code): só para clientes que aceitaram promoções.
 
 Cada mensagem vira uma tarefa na fila, espaçadas por INTERVALO_S segundos
 para não parecer spam ao WhatsApp. Falhas são tentadas de novo pela fila."""
@@ -46,9 +46,9 @@ def texto(campanha, cliente) -> str:
 def _integracao(loja):
     from apps.integracoes.models import Integracao
 
-    integ = Integracao.ativa(loja, "WHATSAPP")
+    integ = Integracao.ativa(loja, "WHATSAPP", "whatsapp")
     if integ is None:
-        raise ErroNegocio("ative a integração de WhatsApp (Z-API) em Configurações → Integrações")
+        raise ErroNegocio("conecte o WhatsApp da loja em Configurações → WhatsApp (ler o QR Code)")
     return integ
 
 
@@ -85,18 +85,13 @@ def _talvez_concluir(campanha_id):
 
 @executor("marketing.campanha")
 def enviar(envio_id: str):
-    from apps.integracoes.provedores.zapi import ZApi
+    from apps.integracoes import whatsapp
 
     e = EnvioCampanha.objects.select_related("campanha__loja").select_for_update().filter(pk=envio_id).first()
     if e is None or e.status != EnvioCampanha.PENDENTE:
         return
     integ = _integracao(e.campanha.loja)
-    c = integ.obter_credenciais()
-    try:
-        ZApi(c["instance"], c["token"], c.get("client_token", "")).enviar_texto(e.telefone, e.texto)
-    except Exception as exc:
-        integ.registrar_erro(str(exc))
-        raise  # a fila tenta de novo; na última tentativa, `falhou` marca o envio
+    whatsapp.enviar(integ, e.telefone, e.texto)  # erro: a fila tenta de novo; na última, `falhou` marca
     e.status = EnvioCampanha.ENVIADO
     e.save(update_fields=["status", "atualizado_em"])
     Campanha.objects.filter(pk=e.campanha_id).update(enviados=F("enviados") + 1)

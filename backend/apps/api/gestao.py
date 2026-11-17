@@ -558,6 +558,50 @@ class RecebimentosView(APIView):
         return Response({**self._dados(), "gerados": gerados, "falhas": falhas})
 
 
+class WhatsAppView(APIView):
+    """WhatsApp da loja conectado por QR Code (gerente+).
+
+    GET  → situação (conectado?, número)
+    POST {"acao": "conectar"}    → devolve o QR Code (data:image/png;base64,…) para ler no celular
+    POST {"acao": "desconectar"} → desliga o número da loja"""
+
+    def get_permissions(self):
+        from apps.core.permissoes_api import UsuarioLiberado
+
+        return [UsuarioLiberado()]
+
+    def _loja(self, request):
+        from apps.core.api import loja_da_requisicao
+
+        loja = loja_da_requisicao(request, obrigatoria=True)
+        if not request.user.eh_gerente:
+            raise PermissionDenied("requer gerente")
+        return loja
+
+    def get(self, request):
+        from apps.integracoes import whatsapp
+
+        return Response(whatsapp.situacao(self._loja(request)))
+
+    def post(self, request):
+        from apps.integracoes import whatsapp
+        from apps.integracoes.provedores.base import ErroProvedor
+        from apps.integracoes.provedores.evolution import configurado
+
+        loja = self._loja(request)
+        if not configurado():
+            raise ValidationError({"detail": "o servidor de WhatsApp não está configurado nesta instalação"})
+        acao = request.data.get("acao")
+        try:
+            if acao == "conectar":
+                return Response(whatsapp.conectar(loja))
+            if acao == "desconectar":
+                return Response(whatsapp.desconectar(loja))
+        except ErroProvedor as exc:
+            raise ValidationError({"detail": f"servidor de WhatsApp: {exc}"}) from exc
+        raise ValidationError({"acao": ["use conectar ou desconectar"]})
+
+
 class AssinaturaView(APIView):
     """ADMIN: situação da assinatura da própria empresa (banner do painel).
     POST {"plano": <id>} troca o plano a partir da próxima fatura."""

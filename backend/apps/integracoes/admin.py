@@ -9,7 +9,7 @@ from .models import Integracao, Tarefa, WebhookRecebido
 
 AJUDA = {
     "focusnfe": '{"token": "..."}', "mercadopago": '{"access_token": "APP_USR-..."}',
-    "zapi": '{"instance": "...", "token": "...", "client_token": "..."}',
+    "whatsapp": "{} — conectado pelo QR Code em Configurações → WhatsApp",
     "ifood": '{"client_id": "...", "client_secret": "..."} (ou vazio para usar o app da plataforma)',
 }
 

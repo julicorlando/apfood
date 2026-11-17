@@ -3,7 +3,6 @@ evento (idempotência/auditoria) e conferimos o status direto na API do provedor
 
 import logging
 
-from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
@@ -89,31 +88,36 @@ class MercadoPagoPlataformaWebhook(Webhook):
         return Response({"ok": True})
 
 
-class ZApiWebhook(Webhook):
-    """Mensagens recebidas no WhatsApp da loja (Z-API → "Ao receber")."""
+class WhatsAppWebhook(Webhook):
+    """Eventos do servidor de WhatsApp (Evolution API) da loja: mensagem recebida
+    (atendente automático) e mudança de conexão (conectou/desconectou)."""
 
     def post(self, request, loja_id, chave):
         import hmac
 
-        from apps.integracoes import atendente
+        from apps.integracoes import atendente, whatsapp
 
         loja = Loja.objects.filter(pk=loja_id).first()
-        if loja is None or not hmac.compare_digest(chave, atendente.chave_webhook(loja)):
+        if loja is None or not hmac.compare_digest(chave, whatsapp.chave_webhook(loja)):
             return Response({"ok": False}, status=404)
-        dados = request.data if isinstance(request.data, dict) else {}
-        mid = str(dados.get("messageId") or "")
-        if mid:
-            wh = _registrar("zapi", loja, request, mid)
-            if wh is None or wh.processado_em:
-                return Response({"ok": True})
-        else:
-            wh = None
+        corpo = request.data if isinstance(request.data, dict) else {}
+        evento = str(corpo.get("event") or "").lower().replace("_", ".")
+        data = corpo.get("data") or {}
+        if evento == "connection.update":
+            whatsapp.evento_conexao(loja, str((data or {}).get("state") or ""))
+            return Response({"ok": True})
+        if evento != "messages.upsert" or not isinstance(data, dict):
+            return Response({"ok": True})
+        mid = str((data.get("key") or {}).get("id") or "")
+        wh = _registrar("whatsapp", loja, request, mid) if mid else None
+        if mid and (wh is None or wh.processado_em):
+            return Response({"ok": True})
         try:
-            atendente.processar_mensagem(loja, dados)
+            atendente.processar_mensagem(loja, data)
             if wh:
                 wh.processado_em = timezone.now()
         except Exception as exc:  # noqa: BLE001
-            log.exception("webhook Z-API loja %s", loja_id)
+            log.exception("webhook WhatsApp loja %s", loja_id)
             if wh:
                 wh.erro = str(exc)[:2000]
         if wh:

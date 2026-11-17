@@ -171,6 +171,7 @@ jobs:
       SERVICE_BASE64_64_DJANGO: ci-segredo-nao-usar-em-producao-0123456789abcdef
       SERVICE_PASSWORD_POSTGRES: ci-senha
       SERVICE_PASSWORD_MASTER: ci-master
+      SERVICE_PASSWORD_EVOLUTION: ci-whatsapp
       APFOOD_DOMINIO: apfood.exemplo.com.br
     steps:
       - uses: actions/checkout@v4

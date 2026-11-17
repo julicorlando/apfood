@@ -136,9 +136,14 @@ def test_pix_com_webhook(loja, cardapio, operador, provedor):
     assert sum(1 for c in provedor.chamadas if c.method == "GET") == 1
 
 
-def test_whatsapp_por_tarefa(loja, cardapio, operador, provedor, django_capture_on_commit_callbacks):
-    integracao(loja, "WHATSAPP", "zapi", {"instance": "I1", "token": "T1", "client_token": "C1"})
-    provedor.rotas[("POST", "/send-text")] = (200, {"zaapId": "z", "messageId": "m"})
+@pytest.fixture
+def servidor_wa(settings):
+    settings.APFOOD_WHATSAPP = {"URL": "http://whatsapp:8080", "CHAVE": "chave-global", "WEBHOOK_BASE": "http://web:8000"}
+
+
+def test_whatsapp_por_tarefa(loja, cardapio, operador, provedor, servidor_wa, django_capture_on_commit_callbacks):
+    integracao(loja, "WHATSAPP", "whatsapp", {}, {"instancia": "loja1"})
+    provedor.rotas[("POST", "/message/sendText/loja1")] = (201, {"key": {"id": "m"}})
     with django_capture_on_commit_callbacks(execute=True):
         p = ps.criar_pedido(loja, ps.PedidoIn(CanalVenda.DELIVERY, TipoAtendimento.RETIRADA,
                                               [ps.ItemIn(str(cardapio["lata"].id))], telefone_cliente="11987654321",
@@ -149,14 +154,14 @@ def test_whatsapp_por_tarefa(loja, cardapio, operador, provedor, django_capture_
     t = Tarefa.objects.get()
     assert t.status == "CONCLUIDA", t.erro
     req = provedor.chamadas[-1]
-    assert "/instances/I1/token/T1/send-text" in req.url.path and req.headers["client-token"] == "C1"
+    assert req.url.path == "/message/sendText/loja1" and req.headers["apikey"] == "chave-global"
     corpo = json.loads(req.content)
-    assert corpo["phone"] == "5511987654321" and "pronto para retirada" in corpo["message"]
+    assert corpo["number"] == "5511987654321" and "pronto para retirada" in corpo["text"]
 
 
-def test_tarefa_com_falha_reagenda(loja, cardapio, operador, provedor, django_capture_on_commit_callbacks):
-    integracao(loja, "WHATSAPP", "zapi", {"instance": "I", "token": "T"})
-    provedor.rotas[("POST", "/send-text")] = (500, {"error": "fora do ar"})
+def test_tarefa_com_falha_reagenda(loja, cardapio, operador, provedor, servidor_wa, django_capture_on_commit_callbacks):
+    integracao(loja, "WHATSAPP", "whatsapp", {}, {"instancia": "loja1"})
+    provedor.rotas[("POST", "/message/sendText/")] = (500, {"error": "fora do ar"})
     with django_capture_on_commit_callbacks(execute=True):
         p = ps.criar_pedido(loja, ps.PedidoIn(CanalVenda.DELIVERY, TipoAtendimento.RETIRADA,
                                               [ps.ItemIn(str(cardapio["lata"].id))], telefone_cliente="11987654321"),

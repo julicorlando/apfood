@@ -178,4 +178,11 @@ APFOOD_CHAVE_CRIPTO = env("APFOOD_CHAVE_CRIPTO", default="")  # manage.py gerar_
 APFOOD_IFOOD_CLIENT_ID = env("APFOOD_IFOOD_CLIENT_ID", default="")
 APFOOD_IFOOD_CLIENT_SECRET = env("APFOOD_IFOOD_CLIENT_SECRET", default="")
 APFOOD_MP_TOKEN_PLATAFORMA = env("APFOOD_MP_TOKEN_PLATAFORMA", default="")  # cobrança das empresas
+# WhatsApp próprio (Evolution API): cada loja conecta o número lendo o QR Code no painel
+APFOOD_WHATSAPP = {
+    "URL": env("APFOOD_WHATSAPP_URL", default=""),
+    "CHAVE": env("APFOOD_WHATSAPP_CHAVE", default=""),
+    # endereço do web visto pelo servidor de WhatsApp (rede interna); vazio = URL pública
+    "WEBHOOK_BASE": env("APFOOD_WHATSAPP_WEBHOOK_BASE", default=""),
+}
 APFOOD_DIAS_TOLERANCIA = env.int("APFOOD_DIAS_TOLERANCIA", default=10)

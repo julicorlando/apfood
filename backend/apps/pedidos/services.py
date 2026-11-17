@@ -481,7 +481,7 @@ def _selo_fidelidade(p) -> None:
         from apps.integracoes.tarefas import enfileirar
         from apfood_core.dinheiro import formatar
 
-        integ = Integracao.ativa(loja, "WHATSAPP")
+        integ = Integracao.ativa(loja, "WHATSAPP", "whatsapp")
         if integ:
             premio = loja.fidelidade_premio_descricao or f"{formatar(loja.fidelidade_premio_centavos)} de crédito"
             enfileirar("whatsapp.enviar", {"integracao_id": str(integ.id), "telefone": c.telefone,
