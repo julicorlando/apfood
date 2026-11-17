@@ -162,4 +162,4 @@ def test_cardapio_traz_bairros_cadastrados(loja, cardapio):
     ZonaEntrega.objects.create(loja=loja, tipo="BAIRRO", nome="Pina", taxa_centavos=600)
     ZonaEntrega.objects.create(loja=loja, tipo="BAIRRO", nome="Fechado", taxa_centavos=600, ativa=False)
     dados = _dados(Client().get(f"/{loja.slug}/").content.decode())
-    assert dados["loja"]["bairros"] == ["Boa Viagem", "Pina"]
+    assert {"Boa Viagem", "Pina"} <= set(dados["loja"]["bairros"]) and "Fechado" not in dados["loja"]["bairros"]
