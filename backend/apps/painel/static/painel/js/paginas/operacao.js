@@ -580,9 +580,8 @@ async function cartaoImprimirFechamento() {
     if (gerente && op.options.length === 1) r.operadores.forEach((o) => op.append(h("option", { value: o.id }, o.nome)));
     trocar(listaEl, r.turnos.length ? tabela([
       { rotulo: "Operador", campo: "operador" },
-      { rotulo: "Aberto", valor: (x) => dataHora(x.aberto_em) },
-      { rotulo: "Fechado", valor: (x) => dataHora(x.fechado_em) },
-      { rotulo: "", classe: "acoes-linha", valor: (x) => botaoAcao("🖨️ Imprimir", async () => {
+      { rotulo: "Fechado", valor: (x) => hora(x.fechado_em) },
+      { rotulo: "", classe: "acoes-linha", valor: (x) => botaoAcao("🖨️", async () => {
         const c = await get(`/api/turnos/${x.id}/cupom/?${qsLargura()}`);
         imprimirLinhas(c.linhas);
       }, "botao botao-pequeno") },
