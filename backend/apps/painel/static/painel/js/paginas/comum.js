@@ -473,11 +473,23 @@ export async function abrirPedido(id, { aoMudar } = {}) {
     if (podeChamar() && !(chamada && chamada.status === "PROCURANDO")) {
       acoes.push(botaoAcao("🛵 Chamar entregador", chamar, "botao botao-primario"));
     }
+    // concluir só depois do pagamento: com valor em aberto, o botão recebe e já conclui
+    const precisaPagar = falta > 0 && !p.comanda && p.canal !== "MARKETPLACE";
+    let receberJunto = false;
     for (const [para, texto, cls] of PROXIMO[p.status] || []) {
       if (para === "SAIU_PARA_ENTREGA" && p.tipo_atendimento !== "ENTREGA") continue;
+      if (para === "CONCLUIDO" && precisaPagar) {
+        receberJunto = true;
+        acoes.push(botaoAcao(`Receber ${dinheiro(falta)} e concluir`, async () => {
+          if (await receber({ tipo: "pedido", id: p.id, restante: falta })) await mudarStatus(p, para);
+          await recarregar();
+        }, `botao ${cls}`));
+        continue;
+      }
+      if (para === "CONCLUIDO" && p.comanda && falta > 0) continue;  // mesa: conclui ao fechar a conta
       acoes.push(botaoAcao(texto, async () => { if (await mudarStatus(p, para)) await recarregar(); }, `botao ${cls}`));
     }
-    if (falta > 0 && !FINAIS.includes(p.status)) {
+    if (falta > 0 && !FINAIS.includes(p.status) && !receberJunto) {
       acoes.push(botaoAcao(`Receber ${dinheiro(falta)}`, async () => {
         await receber({ tipo: "pedido", id: p.id, restante: falta });
         await recarregar();

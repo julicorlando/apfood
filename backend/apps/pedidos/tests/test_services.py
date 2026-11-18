@@ -131,3 +131,29 @@ def test_pagamento_exige_caixa_e_calcula_troco(loja, cardapio, operador):
     with pytest.raises(ErroNegocio, match="restante"):
         ps.registrar_pagamento(usuario=operador, pedido=p, forma=FormaPagamento.PIX, valor_centavos=1)
     assert caixa.esperado(turno)[FormaPagamento.DINHEIRO] == 11400
+
+
+def test_so_conclui_pedido_depois_do_pagamento(loja, cardapio, operador):
+    """Concluir exige o pedido pago (mesa: a comanda; marketplace cuida do próprio pagamento)."""
+    from apfood_core.enums import CanalVenda, StatusPedido, TipoAtendimento
+
+    from apps.caixa import services as caixa
+    from apps.core.excecoes import ErroNegocio
+    from apps.pedidos import services as ps
+
+    caixa.abrir_turno(operador, loja, 0)
+    p = ps.criar_pedido(loja, ps.PedidoIn(canal=CanalVenda.BALCAO, tipo_atendimento=TipoAtendimento.RETIRADA,
+                                          itens=[ps.ItemIn(str(cardapio["lata"].id), 2)]), operador)
+    ps.transicionar(p, StatusPedido.PRONTO, operador)
+    with pytest.raises(ErroNegocio, match="depois do pagamento: falta receber R\\$ 14,00"):
+        ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
+    ps.registrar_pagamento(usuario=operador, forma="PIX", valor_centavos=700, pedido=p)
+    with pytest.raises(ErroNegocio, match="R\\$ 7,00"):
+        ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
+    ps.registrar_pagamento(usuario=operador, forma="DINHEIRO", valor_centavos=700, pedido=p)
+    assert ps.transicionar(p, StatusPedido.CONCLUIDO, operador).status == StatusPedido.CONCLUIDO
+
+    m = ps.criar_pedido(loja, ps.PedidoIn(canal=CanalVenda.MARKETPLACE, tipo_atendimento=TipoAtendimento.RETIRADA,
+                                          itens=[ps.ItemIn(str(cardapio["lata"].id), 1)]), operador)
+    ps.transicionar(m, StatusPedido.PRONTO, operador)
+    assert ps.transicionar(m, StatusPedido.CONCLUIDO, operador).status == StatusPedido.CONCLUIDO
