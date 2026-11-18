@@ -208,7 +208,9 @@ class PaginaPedidos(QWidget):
 
     @staticmethod
     def _falta(p) -> int:
-        return p["total_centavos"] - sum(pg["valor_centavos"] for pg in p.get("pagamentos", []) if pg["status"] == "CONFIRMADO")
+        # o dinheiro que o entregador já cobrou na porta (aguardando o repasse) conta como pago
+        return p["total_centavos"] - sum(pg["valor_centavos"] for pg in p.get("pagamentos", [])
+                                         if pg["status"] == "CONFIRMADO" or (pg["status"] == "PENDENTE" and pg.get("cobrado_em")))
 
     # ----------------------------------------------------------------- ações
     def _status(self, p, status, motivo="", entregador=None) -> bool:

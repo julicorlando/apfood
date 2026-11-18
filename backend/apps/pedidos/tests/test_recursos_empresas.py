@@ -14,6 +14,7 @@ from apps.clientes.models import Entregador
 from apps.contas.models import Usuario
 from apps.pedidos import services as ps
 from apps.pedidos.models import AcertoEntregador, Pedido
+from apps.core.testes import quitar  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +36,7 @@ def entregue(loja, cardapio, operador, entregador, *, dinheiro=True):
     ), operador)
     ps.transicionar(p, StatusPedido.PRONTO, operador)
     ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.SAIU_PARA_ENTREGA, operador, entregador_id=entregador.id)
+    quitar(p, "DINHEIRO" if dinheiro else "PIX")
     ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.CONCLUIDO, operador)
     return Pedido.objects.get(pk=p.pk)
 
@@ -159,6 +161,7 @@ def test_indicacao_da_cashback_a_quem_indicou(loja, cardapio, operador):
                                           itens=[ps.ItemIn(str(cardapio["lata"].id), 2)]), operador)
     assert p.desconto_centavos == 500
     ps.transicionar(p, StatusPedido.PRONTO, operador)
+    quitar(p)
     ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.CONCLUIDO, operador)
     ana.refresh_from_db()
     assert ana.saldo_cashback_centavos >= 1000

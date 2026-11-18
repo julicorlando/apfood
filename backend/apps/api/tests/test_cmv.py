@@ -4,10 +4,12 @@ from apfood_core.enums import CanalVenda, StatusPedido, TipoAtendimento
 from rest_framework.test import APIClient
 
 from apps.pedidos import services as ps
+from apps.core.testes import quitar  # noqa: E402
 
 
 def concluir(p, u):
     ps.transicionar(p, StatusPedido.PRONTO, u)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, u)
 
 

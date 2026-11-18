@@ -16,6 +16,7 @@ from apps.pedidos import services as ps
 from apps.pedidos.models import Pedido
 
 from .test_app_entregador import _cache_limpo, app, entrar, entregador, pedido_entrega  # noqa: F401
+from apps.core.testes import quitar  # noqa: E402
 
 
 def painel(u):
@@ -46,6 +47,7 @@ def test_previsao_de_chegada_e_pedir_de_novo(loja, cardapio, operador):
     v = app().get(f"/api/publico/pedidos/{p.token_rastreio}/").data["previsao"]
     assert v["base"] == "entregador" and 3 <= v["minutos"] <= 15
 
+    quitar(p)
     ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.CONCLUIDO, operador)
     d = app().get(f"/api/publico/pedidos/{p.token_rastreio}/").data
     assert d["previsao"] is None
@@ -217,6 +219,7 @@ def test_resumo_do_dia(loja, cardapio, operador, gerente, django_capture_on_comm
     from apps.lojas import resumo_diario
 
     p = pedido_entrega(loja, cardapio, operador)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
     r = resumo_diario.calcular(loja)
     assert r["pedidos"] == 1 and r["faturamento_centavos"] == p.total_centavos and r["entregas"] == 1
@@ -294,6 +297,7 @@ def test_importar_cardapio_por_texto_e_por_ia(loja, gerente, settings, monkeypat
 # ----------------------------------------------------------------------------- tempo por etapa
 def test_tempo_por_etapa(loja, cardapio, operador, gerente):
     p = pedido_entrega(loja, cardapio, operador)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
     t0 = timezone.now() - timedelta(minutes=60)
     Pedido.objects.filter(pk=p.pk).update(criado_em=t0, aceito_em=t0 + timedelta(minutes=2), pronto_em=t0 + timedelta(minutes=32),

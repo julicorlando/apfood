@@ -410,6 +410,8 @@ def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", 
         fluxo.validar_transicao(de, para, TipoAtendimento(p.tipo_atendimento))
     except fluxo.TransicaoInvalida as exc:
         raise ErroNegocio(f"não é possível mudar de {de.rotulo} para {para.rotulo}") from exc
+    if para == S.CONCLUIDO and not origem_externa and p.canal != CanalVenda.MARKETPLACE:
+        exigir_pago(p)  # só conclui depois de pago (iFood e afins cuidam do pagamento)
     if para in (S.CANCELADO, S.RECUSADO):
         if not motivo:
             raise ErroNegocio("informe o motivo", "motivo")
@@ -449,6 +451,26 @@ def transicionar(pedido, para: StatusPedido, usuario=None, *, motivo: str = "", 
     eventos.pedido_status(p)
     _ganchos_status(p, para, motivo, origem_externa)
     return p
+
+
+def falta_pagar(p) -> int:
+    """Quanto ainda falta pagar do pedido. Pedido de mesa: vale a comanda (paga junto, no fechamento).
+    O dinheiro que o entregador já cobrou na porta conta como pago."""
+    if p.comanda_id:
+        from apps.salao.models import Comanda
+
+        c = Comanda.objects.get(pk=p.comanda_id)
+        return max(0, c.total_centavos - total_pago(comanda=c))
+    return max(0, p.total_centavos - total_pago(pedido=p))
+
+
+def exigir_pago(p) -> None:
+    """Pedido só é concluído depois de pago (marketplace como o iFood cuida do pagamento e não passa aqui)."""
+    from apfood_core.dinheiro import formatar
+
+    if (resta := falta_pagar(p)) > 0:
+        raise ErroNegocio(f"o pedido só pode ser concluído depois do pagamento: falta receber {formatar(resta)}"
+                          + (" (feche a conta da mesa)" if p.comanda_id else ""))
 
 
 def _cashback_na_transicao(p, para) -> None:

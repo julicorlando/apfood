@@ -50,7 +50,9 @@ def painel_entregador(request, token):
     pedidos = (Pedido.objects.filter(entregador=e, status=StatusPedido.SAIU_PARA_ENTREGA)
                .prefetch_related("pagamentos", "itens").order_by("saiu_entrega_em"))
     erro = {"codigo": "Código de recebimento incorreto: confira com o cliente.",
-            "tentativas": "Muitas tentativas com código errado: peça para a loja conferir."}.get(request.GET.get("erro", ""))
+            "tentativas": "Muitas tentativas com código errado: peça para a loja conferir.",
+            "pagamento": "O pedido só é concluído depois do pagamento. Avise a loja para registrar o recebimento "
+                         "(ou use o app ApFood Entregador, que registra dinheiro, cartão e Pix na hora)."}.get(request.GET.get("erro", ""))
     return render(request, "painel/entregador.html", {"entregador": e, "cartoes": [_cartao(p) for p in pedidos],
                                                       "aviso": request.GET.get("ok"), "erro": erro})
 
@@ -62,8 +64,10 @@ def marcar_entregue(request, token, pedido):
     e = _entregador(token)
     p = get_object_or_404(Pedido, pk=pedido, entregador=e)
     try:
-        chamadas.entregar(p.id, e, request.POST.get("codigo", ""), exigir_pagamento=False)
+        chamadas.entregar(p.id, e, request.POST.get("codigo", ""))
     except ErroNegocio as exc:
+        if "pagamento" in exc.mensagem:
+            return redirect(f"/entrega/{token}/?erro=pagamento")
         if "incorreto" in exc.mensagem:
             return redirect(f"/entrega/{token}/?erro=codigo")
         if "tentativas" in exc.mensagem:
