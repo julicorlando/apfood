@@ -48,12 +48,12 @@ class DialogoFechamentos(QDialog):
         lay.addRow("Dia (DD/MM/AAAA)", self.dia)
         self.operador = QComboBox()
         self.operador.addItem("Todos os operadores", "")
+        self.info = QLabel("")
+        self.info.setWordWrap(True)
         if ctx.eh_gerente:
             lay.addRow("Operador", self.operador)
             self.dia.dateChanged.connect(lambda *_: self._operadores())
             self._operadores()
-        self.info = QLabel("")
-        self.info.setWordWrap(True)
         lay.addRow(self.info)
         h = QHBoxLayout()
         h.addWidget(botao("Visualizar / imprimir", self.imprimir, "primario"))
@@ -482,10 +482,9 @@ class PaginaRelatorios(QWidget):
             mostrar_e_imprimir(self, self.ctx, f"Faturamento {p['inicio']} a {p['fim']}", r["linhas"])
 
     def _preencher_operadores(self, ops):
-        if self.operador.count() > 1:
-            return
         for o in ops:
-            self.operador.addItem(o["nome"], o["id"])
+            if self.operador.findData(o["id"]) < 0:
+                self.operador.addItem(o["nome"], o["id"])
 
     def atualizar(self):
         p = self._params()
@@ -493,7 +492,7 @@ class PaginaRelatorios(QWidget):
         v = seguro(self, api.get, "/api/relatorios/vendas/", **p)
         if not v:
             return
-        if self.operador.count() == 1:
+        if self.operador.count() == 1 and self.ctx.eh_gerente:
             try:
                 self._preencher_operadores(api.get("/api/turnos/fechamentos/", **p).get("operadores", []))
             except Exception:  # noqa: BLE001

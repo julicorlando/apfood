@@ -21,6 +21,7 @@ def venda(loja, cardapio, usuario, forma, qtd=1):
     p = ps.criar_pedido(loja, ps.PedidoIn(canal=CanalVenda.BALCAO, tipo_atendimento=TipoAtendimento.CONSUMO_LOCAL,
                                           itens=[ps.ItemIn(str(cardapio["lata"].id), qtd)]), usuario)
     ps.registrar_pagamento(usuario=usuario, forma=forma, valor_centavos=p.total_centavos, pedido=p)
+    ps.transicionar(p, StatusPedido.PRONTO, usuario)
     ps.transicionar(p, StatusPedido.CONCLUIDO, usuario)
     return p
 
