@@ -13,6 +13,7 @@ from apps.clientes.models import Entregador
 from apps.pedidos import chamadas
 from apps.pedidos import services as ps
 from apps.pedidos.models import ChamadaEntrega, Pedido
+from apps.core.testes import quitar  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -158,6 +159,7 @@ def test_avaliacao_opcional_depois_de_receber(loja, cardapio, operador, gerente)
     assert app().get(url).data["pode_avaliar"] is False
     assert app().post(url, {"nota": 5}, format="json").status_code == 400  # ainda não recebeu
     ps.transicionar(p, StatusPedido.SAIU_PARA_ENTREGA, operador)
+    quitar(p)
     ps.transicionar(Pedido.objects.get(pk=p.pk), StatusPedido.CONCLUIDO, operador)
     assert app().get(url).data["pode_avaliar"] is True
     assert app().post(url, {"nota": 7}, format="json").status_code == 400

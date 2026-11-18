@@ -9,6 +9,7 @@ from apps.core.excecoes import ErroNegocio
 from apps.estoque.models import MovimentacaoEstoque
 from apps.pedidos import services as ps
 from apps.pedidos.models import Pedido
+from apps.core.testes import quitar  # noqa: E402
 
 A, I = ps.AdicionalIn, ps.ItemIn
 
@@ -51,6 +52,7 @@ def test_pizza_meio_a_meio_preco_maior_e_baixa_proporcional(loja, cardapio, oper
     assert p.total_centavos == 6000  # regra MAIOR, tamanho Grande
     assert "1/2 Calabresa" in p.itens.get().nome_produto
     ps.transicionar(p, StatusPedido.PRONTO, operador)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
     assert saldo(cardapio["massa"]) == Decimal("20") - Decimal("1.5")  # 2 × (1/2 × 1,5)
 
@@ -74,6 +76,7 @@ def test_baixa_na_conclusao_e_estorno_no_cancelamento(loja, cardapio, operador, 
     assert saldo(c["pao"]) == 50  # padrão: baixa na conclusão
     ps.transicionar(p, StatusPedido.EM_PREPARO, operador)
     ps.transicionar(p, StatusPedido.PRONTO, operador)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, operador)
     assert saldo(c["pao"]) == 48 and saldo(c["lata"]) == 8
     assert saldo(c["bacon"]) == Decimal("2") - Decimal("0.060")

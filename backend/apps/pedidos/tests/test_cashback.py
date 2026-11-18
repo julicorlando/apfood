@@ -9,6 +9,7 @@ from apps.clientes.models import Cliente
 from apps.core.excecoes import ErroNegocio
 from apps.pedidos import services as ps
 from apps.pedidos.models import Pedido
+from apps.core.testes import quitar  # noqa: E402
 
 TEL = "11999990000"
 
@@ -20,6 +21,7 @@ def balcao(c, qtd=1, **kw):
 
 def concluir(p, u):
     ps.transicionar(p, StatusPedido.PRONTO, u)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, u)
     return Pedido.objects.get(pk=p.pk)
 

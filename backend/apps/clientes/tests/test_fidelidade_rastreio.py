@@ -8,6 +8,7 @@ from django.test import Client
 from apps.clientes.models import Cliente, Entregador
 from apps.pedidos import services as ps
 from apps.pedidos.models import Pedido
+from apps.core.testes import quitar  # noqa: E402
 
 TEL = "11999990000"
 
@@ -17,6 +18,7 @@ def concluir(loja, cardapio, u, qtd=1):
                                           [ps.ItemIn(str(cardapio["lata"].id), qtd)], telefone_cliente=TEL,
                                           nome_cliente="Ana"), u)
     ps.transicionar(p, StatusPedido.PRONTO, u)
+    quitar(p)
     ps.transicionar(p, StatusPedido.CONCLUIDO, u)
     return p
 

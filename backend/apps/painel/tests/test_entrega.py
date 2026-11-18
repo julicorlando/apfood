@@ -4,6 +4,7 @@ from apfood_core.enums import CanalVenda, StatusPedido, TipoAtendimento
 from rest_framework.test import APIClient
 
 from apps.clientes.models import Entregador
+from apps.core.testes import quitar
 from apps.pedidos import services as ps
 from apps.pedidos.models import Pedido
 
@@ -34,6 +35,11 @@ def test_gerente_gera_link_e_entregador_conclui(client, loja, cardapio, operador
     r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/", {"codigo": "x"})
     assert r.status_code == 302 and "erro=codigo" in r["Location"]  # sem o código do cliente não conclui
     assert Pedido.objects.get(pk=p.pk).status == StatusPedido.SAIU_PARA_ENTREGA
+    r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/", {"codigo": p.codigo_entrega})
+    assert r.status_code == 302 and "erro=pagamento" in r["Location"]  # só conclui depois do pagamento
+    assert "só é concluído depois do pagamento" in client.get(r["Location"]).content.decode()
+    assert Pedido.objects.get(pk=p.pk).status == StatusPedido.SAIU_PARA_ENTREGA
+    quitar(p, "DINHEIRO")
     r = client.post(f"/entrega/{e.token_acesso}/{p.id}/entregue/", {"codigo": p.codigo_entrega})
     assert r.status_code == 302
     assert Pedido.objects.get(pk=p.pk).status == StatusPedido.CONCLUIDO
