@@ -50,6 +50,14 @@ fi
 npx cap sync android
 
 MANIFESTO=android/app/src/main/AndroidManifest.xml
+if [ "$APP" = "empresa" ]; then
+  # impressora do celular: térmica Bluetooth/rede (ESC/POS) e serviço de impressão do Android
+  PKG=android/app/src/main/java/br/com/axionweb/apfood/empresa
+  mkdir -p "$PKG"
+  cp "$DIR/nativo/MainActivity.java" "$DIR/nativo/ImpressaoPlugin.java" "$PKG/"
+  sed -i 's#<application#<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n\n    <application#' "$MANIFESTO"
+fi
+
 if [ "$APP" = "cliente" ] || [ "$APP" = "entregador" ]; then
   # cliente: "Perto de mim"; entregador: chamadas pelo mais perto e rastreio da entrega
   sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n\n    <application#' "$MANIFESTO"

@@ -564,6 +564,33 @@ class TurnoViewSet(EscopoLojaMixin, mixins.ListModelMixin, mixins.RetrieveModelM
     def resumo(self, request, pk=None):
         return Response(self._resumo(self.get_object(), request))
 
+    @action(detail=False, methods=["get"])
+    def fechamentos(self, request):
+        """Caixas fechados de um dia ou período (DD/MM/AAAA). Operador: só os dele. Gerente/administrador:
+        de um operador (?usuario=) ou de todos. Com ?cupom=1, as linhas de todos juntos para imprimir de uma vez."""
+        from .relatorios import operadores_da_loja, periodo
+
+        loja = loja_da_requisicao(request)
+        inicio, fim = periodo(request)
+        qs = TurnoCaixa.objects.filter(loja=loja, status="FECHADO", fechado_em__date__range=(inicio, fim)) \
+            .select_related("usuario", "loja").prefetch_related("conferencias").order_by("usuario__first_name", "fechado_em")
+        if not request.user.eh_gerente:
+            qs = qs.filter(usuario=request.user)
+        elif u := request.query_params.get("usuario"):
+            qs = qs.filter(usuario_id=u)
+        turnos = list(qs)
+        out = {"inicio": inicio, "fim": fim,
+               "turnos": [{**s.TurnoOut(t).data, "operador": str(t.usuario)} for t in turnos],
+               "operadores": operadores_da_loja(loja) if request.user.eh_gerente else []}
+        if request.query_params.get("cupom"):
+            if not turnos:
+                raise ValidationError({"detail": "nenhum caixa fechado nesse dia"})
+            linhas = []
+            for t in turnos:
+                linhas += fiscal_srv.cupom_fechamento(t, _largura(request))
+            out["linhas"] = fiscal_srv.linhas_para_json(linhas)
+        return Response(out)
+
     @action(detail=True, methods=["post"])
     def movimentos(self, request, pk=None):
         entrada = s.MovimentoIn(data=request.data)

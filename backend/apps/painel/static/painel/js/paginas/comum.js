@@ -42,7 +42,21 @@ body { margin: 0; font-family: "Courier New", monospace; font-size: 11px; color:
 .corte { border-bottom: 1px dashed #000; margin: 4mm 0; page-break-after: always; }
 img { display: block; margin: 2mm auto; width: 34mm; height: 34mm; }`;
 
+function htmlCupom(linhas) {
+  const doc = document.implementation.createHTMLDocument("Cupom");
+  const st = doc.createElement("style");
+  st.textContent = CSS_IMPRESSAO;
+  doc.head.append(st);
+  for (const l of linhas) {
+    const el = linhaCupom(doc, l);
+    if (el.tagName === "IMG") el.src = new URL(el.getAttribute("src"), location.origin).href;
+    doc.body.append(el);
+  }
+  return "<!doctype html>" + doc.documentElement.outerHTML;
+}
+
 function imprimirNoNavegador(linhas) {
+  if (app.bridge()) { imprimirNoApp(linhas); return; }
   const iframe = document.createElement("iframe");
   Object.assign(iframe.style, { position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0" });
   document.body.append(iframe);
@@ -105,8 +119,114 @@ async function imprimirNaPonte(linhas, { destino = "caixa", impressora = "", gav
   return false;
 }
 
-/** Imprime as linhas do cupom: na térmica (via PDV) ou pela janela do navegador. */
+// ---------------------------------------------------------------- impressora do celular (app ApFood Empresa)
+// No app Android a janela de impressão do navegador não existe: o app imprime direto na térmica
+// Bluetooth ou de rede (ESC/POS), ou pelo serviço de impressão do Android (Wi-Fi, Mopria, RawBT…).
+const CHAVE_IMPRESSORA = "apfood.impressora_app";
+function pluginImpressao() {
+  const C = window.Capacitor;
+  if (!C || !C.isNativePlatform?.() || !C.isPluginAvailable?.("Impressao")) return null;
+  const P = C.Plugins?.Impressao || C.registerPlugin?.("Impressao");
+  if (!P) return null;
+  const ok = (p) => p.then(() => "ok", (e) => `erro: ${e?.message || e}`);
+  return {
+    listarBluetooth: () => P.listarBluetooth().then((r) => r.dispositivos || [], (e) => ({ erro: e?.message || String(e) })),
+    imprimirBluetooth: (endereco, base64) => ok(P.imprimirBluetooth({ endereco, base64 })),
+    imprimirRede: (host, porta, base64) => ok(P.imprimirRede({ host, porta, base64 })),
+    imprimirSistema: (html, titulo) => ok(P.imprimirSistema({ html, titulo })),
+  };
+}
+
+export const app = {
+  bridge: pluginImpressao,
+  config() { try { return JSON.parse(localStorage.getItem(CHAVE_IMPRESSORA) || "null"); } catch { return null; } },
+  salvar(c) { try { localStorage.setItem(CHAVE_IMPRESSORA, JSON.stringify(c)); } catch { /* ok */ } },
+};
+
+/** 32 colunas (58 mm) quando a impressora do celular é de 58 mm; senão 48 (80 mm). */
+export function larguraCupom() {
+  const c = app.config();
+  return app.bridge() && c && Number(c.largura) === 32 ? 32 : 48;
+}
+export const qsLargura = () => (larguraCupom() === 32 ? "largura=32" : "");
+
+async function imprimirNoApp(linhas, opcoes = {}) {
+  const b = app.bridge();
+  let c = app.config();
+  if (!c) { c = await configurarImpressoraApp(); if (!c) return false; }
+  try {
+    let r;
+    if (c.modo === "sistema") r = await b.imprimirSistema(htmlCupom(linhas), "ApFood");
+    else {
+      const { base64 } = await post("/api/impressao/escpos/", { linhas, gaveta: !!opcoes.gaveta });
+      aviso("Imprimindo…");
+      r = c.modo === "rede" ? await b.imprimirRede(c.host, Number(c.porta) || 9100, base64) : await b.imprimirBluetooth(c.endereco, base64);
+    }
+    if (r === "ok") { aviso(c.modo === "sistema" ? "Escolha a impressora na tela do Android." : "Enviado para a impressora.", "ok"); return true; }
+    erro(`Impressora: ${String(r || "").replace(/^erro:\s*/, "") || "não respondeu"}. Confira em ⚙️ Impressora.`);
+  } catch (e) { erro(e); }
+  return false;
+}
+
+/** Escolher a impressora deste celular (Bluetooth pareada, rede IP:porta ou serviço do Android). */
+export function configurarImpressoraApp() {
+  const b = app.bridge();
+  if (!b) { aviso("Isto vale para o app ApFood Empresa no celular. No computador, use a impressora do PC."); return Promise.resolve(null); }
+  return new Promise((resolve) => {
+    const atual = app.config() || { modo: "bluetooth", largura: 48, porta: 9100 };
+    const modo = h("select", null, [["bluetooth", "Térmica Bluetooth (pareada no celular)"], ["rede", "Térmica de rede / Wi-Fi (IP)"],
+      ["sistema", "Impressoras do Android (Wi-Fi, Mopria, RawBT…)"]].map(([v, r]) => h("option", { value: v, selected: atual.modo === v }, r)));
+    const largura = h("select", null, h("option", { value: "48", selected: Number(atual.largura) !== 32 }, "80 mm (48 colunas)"),
+      h("option", { value: "32", selected: Number(atual.largura) === 32 }, "58 mm (32 colunas)"));
+    const bt = h("select");
+    const host = h("input", { type: "text", inputmode: "decimal", placeholder: "192.168.0.50", value: atual.host || "" });
+    const porta = h("input", { type: "number", value: atual.porta || 9100 });
+    const caixaBt = h("label", { class: "campo" }, h("span", null, "Impressora Bluetooth"), bt,
+      h("small", { class: "muted" }, "Pareie a impressora nas configurações de Bluetooth do celular antes."));
+    const caixaRede = h("div", { class: "grade grade-2" }, h("label", { class: "campo" }, h("span", null, "IP da impressora"), host),
+      h("label", { class: "campo" }, h("span", null, "Porta"), porta));
+    const caixaSis = h("p", { class: "muted" }, "Abre a tela de impressão do Android: funciona com impressoras Wi-Fi e com apps de impressão (ex.: RawBT) para térmicas.");
+    const carregarBt = async () => {
+      trocar(bt, h("option", { value: "" }, "Procurando impressoras pareadas…"));
+      const lista = await b.listarBluetooth();
+      if (!Array.isArray(lista)) { trocar(bt, h("option", { value: "" }, lista.erro || "Permita o Bluetooth e toque em Atualizar")); return; }
+      trocar(bt, lista.length ? lista.map((d) => h("option", { value: d.endereco, selected: d.endereco === atual.endereco }, `${d.nome} (${d.endereco})`))
+        : h("option", { value: "" }, "Nenhuma impressora pareada"));
+    };
+    const ajustar = () => {
+      caixaBt.hidden = modo.value !== "bluetooth"; caixaRede.hidden = modo.value !== "rede"; caixaSis.hidden = modo.value !== "sistema";
+      if (modo.value === "bluetooth") carregarBt();
+    };
+    modo.addEventListener("change", ajustar);
+    let resposta = null;
+    const ler = () => ({ modo: modo.value, largura: Number(largura.value), endereco: bt.value, nome: bt.selectedOptions[0]?.textContent || "",
+      host: host.value.trim(), porta: Number(porta.value) || 9100 });
+    const valida = (c) => (c.modo === "bluetooth" && !c.endereco ? "Escolha a impressora Bluetooth." : c.modo === "rede" && !c.host ? "Digite o IP da impressora." : "");
+    const mm = modal({
+      titulo: "🖨️ Impressora deste celular", tamanho: "modal-pequeno",
+      corpo: h("div", { class: "grade" }, h("label", { class: "campo" }, h("span", null, "Tipo"), modo), caixaBt, caixaRede, caixaSis,
+        h("label", { class: "campo" }, h("span", null, "Largura do papel"), largura),
+        h("div", { class: "acoes" }, botaoAcao("Atualizar lista", carregarBt, "botao botao-pequeno"),
+          botaoAcao("Imprimir teste", async () => {
+            const c = ler(); const msg = valida(c); if (msg) { erro(msg); return; }
+            app.salvar(c);
+            const larg = c.largura === 32 ? 32 : 48;
+            await imprimirNoApp([{ texto: "APFOOD", negrito: true, grande: true, alinhamento: "centro" }, { texto: "Teste de impressão", alinhamento: "centro" },
+              { texto: "-".repeat(larg) }, { texto: `Largura: ${larg} colunas` }, { texto: new Date().toLocaleString("pt-BR") }, { texto: "" }, { corte: true }]);
+          }, "botao botao-pequeno"))),
+      rodape: [botaoAcao("Salvar", () => {
+        const c = ler(); const msg = valida(c); if (msg) { erro(msg); return; }
+        app.salvar(c); resposta = c; aviso("Impressora salva neste celular.", "ok"); mm.fechar();
+      }, "botao botao-primario")],
+      aoFechar: () => resolve(resposta),
+    });
+    ajustar();
+  });
+}
+
+/** Imprime as linhas do cupom: na térmica (via PDV), pelo app no celular, ou pela janela do navegador. */
 export async function imprimirLinhas(linhas, opcoes = {}) {
+  if (app.bridge()) return imprimirNoApp(linhas, opcoes);
   if (await ponteDisponivel() && await imprimirNaPonte(linhas, opcoes)) {
     aviso("Enviado para a impressora.", "ok");
     return true;
@@ -124,10 +244,11 @@ export function mostrarCupom(linhas, { titulo = "Cupom", aviso: av = "" } = {}) 
 }
 
 export async function imprimirPedido(pedidoId, tipo = "venda") {
-  const r = await get(`/api/pedidos/${pedidoId}/cupom/?tipo=${tipo}`);
+  const r = await get(`/api/pedidos/${pedidoId}/cupom/?tipo=${tipo}&${qsLargura()}`);
   if (tipo === "cozinha") {
     const vias = (r.vias || []).map((v) => (Array.isArray(v) ? { linhas: v } : v));
     if (!vias.length) { aviso("Nenhum item para a cozinha."); return; }
+    if (app.bridge()) { await imprimirNoApp(vias.flatMap((v) => v.linhas || [])); return; }
     if (await ponteDisponivel()) {
       const falhou = [];
       for (const v of vias) {

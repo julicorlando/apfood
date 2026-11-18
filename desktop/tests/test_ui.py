@@ -72,6 +72,12 @@ class ServidorFalso:
             ("GET", r"/api/relatorios/fechamentos/", lambda c, m: (200, {"turnos": [], "por_operador": []})),
             ("GET", r"/api/relatorios/fluxo-caixa/", lambda c, m: (200, {"dias": [], "a_receber_centavos": 0,
                                                                          "a_pagar_centavos": 0})),
+            ("GET", r"/api/relatorios/faturamento/", lambda c, m: (200, {
+                "linhas": [{"texto": "RELATORIO DE FATURAMENTO"}, {"corte": True}],
+                "operadores": [{"id": "u1", "nome": "Caixa 1"}, {"id": "u2", "nome": "Caixa 2"}]})),
+            ("GET", r"/api/turnos/fechamentos/", lambda c, m: (200, {
+                "turnos": [{"id": "t1"}, {"id": "t2"}], "operadores": [{"id": "u1", "nome": "Caixa 1"}],
+                "linhas": [{"texto": "FECHAMENTO CAIXA 1"}, {"corte": True}, {"texto": "FECHAMENTO CAIXA 2"}, {"corte": True}]})),
         ]
 
     def _criar(self, corpo, m):
@@ -350,3 +356,52 @@ def test_pedido_mostra_entregador_codigo_e_agendado(ctx):
     texto = pg.detalhe.toPlainText()
     assert "CÓDIGO DE RETIRADA: 4821" in texto and "Entregador: Rui" in texto and "AGENDADO PARA 18/11 às 19:30" in texto
     assert not pg.btn_chamar.isEnabled()  # já tem entregador
+
+
+class _DialogoQueImprime:
+    """Substitui a prévia: aperta "Imprimir" na hora."""
+    titulos = []
+
+    def __init__(self, titulo, texto, parent=None, *, rodape="", acoes=None):
+        _DialogoQueImprime.titulos.append((titulo, texto))
+        self.acoes = acoes or []
+
+    def exec(self):
+        for rot, fn in self.acoes:
+            if rot == "Imprimir":
+                fn()
+
+
+def _cupons(ctx):
+    pasta = ctx.pasta / "cupons"
+    return "\n".join(f.read_text(encoding="utf-8") for f in sorted(pasta.glob("*.txt"))) if pasta.exists() else ""
+
+
+def test_relatorio_de_faturamento_por_data_e_operador_imprime(ctx, monkeypatch):
+    from apfood_pdv.ui.paginas import gestao
+
+    monkeypatch.setattr(gestao, "DialogoTexto", _DialogoQueImprime)
+    p = gestao.PaginaRelatorios(ctx)
+    p.atualizar()
+    assert p.inicio.displayFormat() == "dd/MM/yyyy" and p.operador.count() == 2  # Todos + quem trabalhou
+    p.imprimir_faturamento()
+    assert p.operador.count() == 3  # completou com a lista do relatório
+    assert "RELATORIO DE FATURAMENTO" in _cupons(ctx)
+    assert _DialogoQueImprime.titulos[-1][0].startswith("Faturamento ")
+
+
+def test_imprime_fechamento_de_um_ou_de_todos_os_operadores(ctx, monkeypatch):
+    from apfood_pdv.ui.paginas import gestao
+
+    monkeypatch.setattr(gestao, "DialogoTexto", _DialogoQueImprime)
+    d = gestao.DialogoFechamentos(ctx)
+    assert d.operador.itemText(0) == "Todos os operadores" and d.operador.count() == 2
+    assert "2 caixa(s)" in d.info.text()
+    assert d._params()["data"] == d.dia.date().toString("dd/MM/yyyy") and "usuario" not in d._params()
+    d.imprimir()
+    texto = _cupons(ctx)
+    assert "FECHAMENTO CAIXA 1" in texto and "FECHAMENTO CAIXA 2" in texto
+    d.operador.setCurrentIndex(1)
+    assert d._params()["usuario"] == "u1"
+    c = gestao.PaginaCaixa(ctx)
+    assert c.btn_reimprimir.text().startswith("Imprimir fechamento")

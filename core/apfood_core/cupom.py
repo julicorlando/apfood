@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .dinheiro import formatar
+from .enums import CanalVenda, FormaPagamento
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +242,64 @@ def fechamento_caixa(dados: dict, loja: dict, largura: int = 48) -> list[Linha]:
     situacao = dados.get("situacao") or ("SOBRA" if total > 0 else "QUEBRA" if total < 0 else "OK")
     out += [_sep(L), Linha(_dupla(f"RESULTADO: {situacao}", _r(total), L), negrito=True),
             Linha(), Linha("_" * min(30, L), alinhamento="centro"), Linha("Assinatura do operador", alinhamento="centro"),
+            Linha(), Linha(corte=True)]
+    return out
+
+
+def _rotulo(enum, valor: str) -> str:
+    try:
+        return enum(valor).rotulo
+    except ValueError:
+        return valor
+
+
+def relatorio_faturamento(dados: dict, loja: dict, largura: int = 48) -> list[Linha]:
+    """Relatório de faturamento do período (térmica). `dados` = resposta de /api/relatorios/faturamento/."""
+    L = largura
+    out = _cabecalho_loja(loja, L) + [_sep(L, "="), Linha("RELATÓRIO DE FATURAMENTO", negrito=True, alinhamento="centro"),
+                                      _sep(L, "=")]
+    ini, fim = dados["inicio"], dados["fim"]
+    out.append(Linha(f"Período: {ini:%d/%m/%Y}" + (f" a {fim:%d/%m/%Y}" if fim != ini else "")))
+    if dados.get("operador"):
+        out.append(Linha(f"Operador: {dados['operador']}"))
+    out.append(Linha(f"Emitido em: {dados['emitido_em']:%d/%m/%Y %H:%M}"))
+    r = dados["resumo"]
+    out += [_sep(L), Linha(_dupla("FATURAMENTO", formatar(r["faturamento_centavos"]), L), negrito=True)]
+    for rot, k in (("Pedidos concluídos", "pedidos"),):
+        out.append(Linha(_dupla(rot, str(r[k]), L)))
+    for rot, k in (("Ticket médio", "ticket_medio_centavos"), ("Subtotal dos itens", "subtotal_centavos"),
+                   ("Taxas de entrega", "taxas_entrega_centavos"), ("Acréscimos/serviço", "acrescimos_centavos"),
+                   ("Descontos", "descontos_centavos")):
+        if r.get(k) or k == "ticket_medio_centavos":
+            out.append(Linha(_dupla(rot, ("-" if k == "descontos_centavos" else "") + _r(r[k]), L)))
+    if r.get("cancelados"):
+        out.append(Linha(_dupla(f"Cancelados ({r['cancelados']})", _r(r["cancelados_centavos"]), L)))
+    formas = dados.get("por_forma") or []
+    if formas:
+        out += [_sep(L), Linha("RECEBIMENTOS POR FORMA", negrito=True)]
+        for f in formas:
+            out.append(Linha(_dupla(f"{_rotulo(FormaPagamento, f['forma'])} ({f['quantidade']})", _r(f["bruto_centavos"]), L)))
+        tot = dados["recebido"]
+        out.append(Linha(_dupla("Total recebido", formatar(tot["bruto_centavos"]), L), negrito=True))
+        if tot.get("taxas_centavos"):
+            out += [Linha(_dupla("Taxas (cartão/online)", "-" + _r(tot["taxas_centavos"]), L)),
+                    Linha(_dupla("Líquido", formatar(tot["liquido_centavos"]), L), negrito=True)]
+    canais = dados.get("por_canal") or []
+    if canais:
+        out += [_sep(L), Linha("VENDAS POR CANAL", negrito=True)]
+        for c in canais:
+            out.append(Linha(_dupla(f"{_rotulo(CanalVenda, c['canal'])} ({c['pedidos']})", _r(c["faturamento_centavos"]), L)))
+    ops = dados.get("por_operador") or []
+    if ops and not dados.get("operador"):
+        out += [_sep(L), Linha("RECEBIDO POR OPERADOR", negrito=True)]
+        for o in ops:
+            out.append(Linha(_dupla(f"{o['operador'][:L - 14]} ({o['quantidade']})", _r(o["bruto_centavos"]), L)))
+    dias = dados.get("por_dia") or []
+    if len(dias) > 1:
+        out += [_sep(L), Linha("POR DIA", negrito=True)]
+        for d in dias:
+            out.append(Linha(_dupla(f"{d['data']:%d/%m} ({d['pedidos']} ped.)", _r(d["faturamento_centavos"]), L)))
+    out += [_sep(L, "="), Linha(), Linha("_" * min(30, L), alinhamento="centro"), Linha("Responsável", alinhamento="centro"),
             Linha(), Linha(corte=True)]
     return out
 

@@ -48,6 +48,7 @@ const ROTAS = [
   ["/operadores", "Por operador", "🧑‍💼", "Relatórios", () => temLoja() && ehGerente(), "gestao", "operadores"],
   ["/avaliacoes", "Avaliações", "⭐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "avaliacoes"],
   ["/tempos", "Tempo por etapa", "⏱️", "Relatórios", () => temLoja() && ehGerente(), "novidades", "tempos"],
+  ["/faturamento", "Faturamento (imprimir)", "🧾", "Relatórios", () => temLoja() && ehGerente(), "novidades", "faturamento"],
   ["/rede", "Visão da rede", "🏬", "Relatórios", () => ehAdmin() && !ehMaster() && sessao.lojas.length > 1, "gestao", "rede"],
   ["/garcons", "Taxa de serviço por garçom", "🧾", "Relatórios", () => temLoja() && ehGerente(), "gestao", "garcons"],
   ["/fechamentos", "Fechamentos de caixa", "🔐", "Relatórios", () => temLoja() && ehGerente(), "gestao", "fechamentos"],
@@ -86,7 +87,7 @@ const ABAS_APP = [
   ["/caixa", "Caixa", "💵", temLoja],
   ["/operadores", "Resultados", "📊", () => temLoja() && ehGerente()],
 ];
-const ROTAS_APP = new Set([...ABAS_APP.map((a) => a[0]), "/relatorios"]);
+const ROTAS_APP = new Set([...ABAS_APP.map((a) => a[0]), "/relatorios", "/faturamento"]);
 const rotaPermitida = (r) => r[4]() && (!MODO_APP || ROTAS_APP.has(r[0]));
 
 function montarAbasApp() {

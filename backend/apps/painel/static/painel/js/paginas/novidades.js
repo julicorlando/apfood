@@ -1,5 +1,5 @@
 // Combos, importar cardápio (foto/PDF/texto), lista de compras pelo estoque mínimo e tempo por etapa.
-import { del, get, lista, post, put } from "../api.js";
+import { del, get, lista, post, put, sessao } from "../api.js";
 import {
   aviso, barras, botaoAcao, centavos, confirmar, dinheiro, erro, h, kpi, modal, reais, tabela, trocar,
 } from "../ui.js";
@@ -235,3 +235,136 @@ export function tempos() {
         ], r.mais_lentos)));
   });
 }
+
+// =============================================================================== relatório de faturamento
+/** Campo de data DD/MM/AAAA (com as barras automáticas). */
+export function campoData(valor = new Date()) {
+  const fmt = (d) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const i = h("input", { type: "text", inputmode: "numeric", placeholder: "DD/MM/AAAA", maxlength: "10", value: fmt(valor), class: "campo-data", "aria-label": "Data (DD/MM/AAAA)" });
+  i.addEventListener("input", () => {
+    const d = i.value.replace(/\D/g, "").slice(0, 8);
+    i.value = d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+  });
+  i.definir = (d) => { i.value = fmt(d); };
+  i.valida = () => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(i.value);
+    if (!m) return false;
+    const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    return d.getDate() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1;
+  };
+  return i;
+}
+
+export function faturamento() {
+  return {
+    titulo: "Relatório de faturamento",
+    async render(raiz) {
+      const { imprimirLinhas, cupomEl, qsLargura } = await import("./comum.js");
+      const ini = campoData(), fim = campoData();
+      const op = h("select", { "aria-label": "Operador" }, h("option", { value: "" }, "Todos os operadores"));
+      const area = h("div");
+      let atual = null;
+      const atalho = (rot, fn) => h("button", { type: "button", class: "botao botao-pequeno", onclick: () => { fn(); gerar(); } }, rot);
+      const hoje = () => new Date();
+      const menos = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+      trocar(raiz,
+        h("div", { class: "cartao nao-imprimir", style: { marginBottom: "16px" } },
+          h("div", { class: "barra-ferramentas", style: { flexWrap: "wrap" } },
+            h("label", { class: "campo", style: { maxWidth: "150px" } }, h("span", null, "De"), ini),
+            h("label", { class: "campo", style: { maxWidth: "150px" } }, h("span", null, "Até"), fim),
+            h("label", { class: "campo", style: { minWidth: "200px" } }, h("span", null, "Operador"), op),
+            botaoAcao("Gerar", () => gerar(), "botao botao-primario")),
+          h("div", { class: "acoes", style: { marginTop: "8px" } },
+            atalho("Hoje", () => { ini.definir(hoje()); fim.definir(hoje()); }),
+            atalho("Ontem", () => { ini.definir(menos(1)); fim.definir(menos(1)); }),
+            atalho("Últimos 7 dias", () => { ini.definir(menos(6)); fim.definir(hoje()); }),
+            atalho("Este mês", () => { const d = new Date(); ini.definir(new Date(d.getFullYear(), d.getMonth(), 1)); fim.definir(d); }),
+            atalho("Mês passado", () => { const d = new Date(); ini.definir(new Date(d.getFullYear(), d.getMonth() - 1, 1)); fim.definir(new Date(d.getFullYear(), d.getMonth(), 0)); }))),
+        area);
+
+      async function gerar() {
+        if (!ini.valida() || !fim.valida()) { erro("Digite as datas no formato DD/MM/AAAA."); return; }
+        trocar(area, h("div", { class: "carregando" }, "Carregando…"));
+        const q = new URLSearchParams({ inicio: ini.value, fim: fim.value });
+        if (op.value) q.set("operador", op.value);
+        try { atual = await get(`/api/relatorios/faturamento/?${q}&${qsLargura()}`); } catch (e) { trocar(area); throw e; }
+        if (op.options.length === 1) atual.operadores.forEach((o) => op.append(h("option", { value: o.id }, o.nome)));
+        desenhar();
+      }
+
+      function desenhar() {
+        const r = atual, rs = r.resumo;
+        const periodo = r.inicio === r.fim ? fmtData(r.inicio) : `${fmtData(r.inicio)} a ${fmtData(r.fim)}`;
+        trocar(area,
+          h("div", { class: "acoes nao-imprimir", style: { marginBottom: "12px" } },
+            botaoAcao("🖨️ Imprimir (térmica)", () => imprimirLinhas(r.linhas), "botao botao-primario"),
+            botaoAcao("📄 Imprimir A4 / PDF", () => imprimirA4(r, periodo), "botao")),
+          h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
+            kpi("Faturamento", dinheiro(rs.faturamento_centavos), `${periodo}${r.operador ? ` · ${r.operador}` : ""}`),
+            kpi("Pedidos", String(rs.pedidos), `ticket médio ${dinheiro(rs.ticket_medio_centavos)}`),
+            kpi("Recebido", dinheiro(r.recebido.bruto_centavos), r.recebido.taxas_centavos ? `líquido ${dinheiro(r.recebido.liquido_centavos)}` : ""),
+            kpi("Cancelados", String(rs.cancelados), rs.cancelados ? dinheiro(rs.cancelados_centavos) : "")),
+          h("div", { class: "grade grade-2" },
+            h("div", { class: "cartao" }, h("h2", null, "Recebimentos por forma"), tabela([
+              { rotulo: "Forma", valor: (f) => rotuloForma(f.forma) },
+              { rotulo: "Qtd", classe: "num", campo: "quantidade" },
+              { rotulo: "Bruto", classe: "num", valor: (f) => dinheiro(f.bruto_centavos) },
+              { rotulo: "Taxas", classe: "num", valor: (f) => dinheiro(f.taxas_centavos) },
+              { rotulo: "Líquido", classe: "num", valor: (f) => dinheiro(f.liquido_centavos) },
+            ], r.por_forma, { vazio: "Nenhum recebimento no período." })),
+            h("div", { class: "cartao" }, h("h2", null, "Prévia da impressão"), cupomEl(r.linhas))),
+          !r.operador && r.por_operador.length ? h("div", { class: "cartao", style: { marginTop: "16px" } }, h("h2", null, "Recebido por operador"), tabela([
+            { rotulo: "Operador", campo: "operador" },
+            { rotulo: "Recebimentos", classe: "num", campo: "quantidade" },
+            { rotulo: "Total", classe: "num", valor: (o) => dinheiro(o.bruto_centavos) },
+          ], r.por_operador)) : null,
+          r.por_dia.length > 1 ? h("div", { class: "cartao", style: { marginTop: "16px" } }, h("h2", null, "Por dia"), tabela([
+            { rotulo: "Dia", valor: (d) => fmtData(d.data) },
+            { rotulo: "Pedidos", classe: "num", campo: "pedidos" },
+            { rotulo: "Faturamento", classe: "num", valor: (d) => dinheiro(d.faturamento_centavos) },
+          ], r.por_dia)) : null);
+      }
+      await gerar();
+    },
+  };
+}
+
+const ROT_FORMA = { DINHEIRO: "Dinheiro", PIX: "Pix", CARTAO_CREDITO: "Cartão de crédito", CARTAO_DEBITO: "Cartão de débito",
+  VOUCHER: "Vale-refeição/alimentação", MARKETPLACE: "Marketplace", OUTRO: "Outro" };
+const ROT_CANAL = { ONLINE: "Cardápio online", BALCAO: "Balcão", DELIVERY: "Delivery", MESA: "Mesa", MARKETPLACE: "Marketplace" };
+const rotuloForma = (f) => ROT_FORMA[f] || f;
+const fmtData = (iso) => { const [a, m, d] = String(iso).slice(0, 10).split("-"); return `${d}/${m}/${a}`; };
+
+// A4 / PDF: página limpa com o relatório (no computador abre a janela de impressão; dá para salvar em PDF)
+async function imprimirA4(r, periodo) {
+  const rs = r.resumo;
+  const linha = (a, b, forte) => `<tr${forte ? ' class="forte"' : ""}><td>${a}</td><td class="n">${b}</td></tr>`;
+  const tab = (titulo, linhas) => (linhas.length ? `<h2>${titulo}</h2><table>${linhas.join("")}</table>` : "");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Faturamento ${periodo}</title><style>
+    @page { size: A4; margin: 15mm; } body { font-family: Arial, sans-serif; color: #111; font-size: 12px; }
+    h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 14px; margin: 18px 0 6px; border-bottom: 1px solid #999; padding-bottom: 3px; }
+    table { width: 100%; border-collapse: collapse; } td { padding: 4px 2px; border-bottom: 1px solid #eee; } .n { text-align: right; white-space: nowrap; }
+    .forte td { font-weight: bold; } .sub { color: #555; } .assin { margin-top: 50px; text-align: center; } .assin span { display: inline-block; border-top: 1px solid #000; padding-top: 4px; width: 260px; }
+  </style></head><body>
+    <h1>Relatório de faturamento</h1>
+    <div class="sub">${escapar(sessao.loja?.nome || "")} · Período: ${periodo}${r.operador ? ` · Operador: ${escapar(r.operador)}` : ""} · Emitido em ${new Date().toLocaleString("pt-BR")}</div>
+    ${tab("Resumo", [linha("Faturamento (pedidos concluídos)", dinheiro(rs.faturamento_centavos), true), linha("Pedidos", rs.pedidos),
+      linha("Ticket médio", dinheiro(rs.ticket_medio_centavos)), linha("Subtotal dos itens", dinheiro(rs.subtotal_centavos)),
+      linha("Taxas de entrega", dinheiro(rs.taxas_entrega_centavos)), linha("Acréscimos / serviço", dinheiro(rs.acrescimos_centavos)),
+      linha("Descontos", `- ${dinheiro(rs.descontos_centavos)}`), linha(`Cancelados (${rs.cancelados})`, dinheiro(rs.cancelados_centavos))])}
+    ${tab("Recebimentos por forma de pagamento", [...r.por_forma.map((f) => linha(`${rotuloForma(f.forma)} (${f.quantidade})`, `${dinheiro(f.bruto_centavos)}${f.taxas_centavos ? ` <span class="sub">(taxas ${dinheiro(f.taxas_centavos)})</span>` : ""}`)),
+      linha("Total recebido", dinheiro(r.recebido.bruto_centavos), true), ...(r.recebido.taxas_centavos ? [linha("Líquido (sem taxas)", dinheiro(r.recebido.liquido_centavos), true)] : [])])}
+    ${tab("Vendas por canal", r.por_canal.map((c) => linha(`${ROT_CANAL[c.canal] || c.canal} (${c.pedidos})`, dinheiro(c.faturamento_centavos))))}
+    ${r.operador ? "" : tab("Recebido por operador", r.por_operador.map((o) => linha(`${escapar(o.operador)} (${o.quantidade})`, dinheiro(o.bruto_centavos))))}
+    ${r.por_dia.length > 1 ? tab("Por dia", r.por_dia.map((d) => linha(`${fmtData(d.data)} (${d.pedidos} pedidos)`, dinheiro(d.faturamento_centavos)))) : ""}
+    <div class="assin"><span>Responsável</span></div>
+  </body></html>`;
+  const { app } = await import("./comum.js");
+  const b = app.bridge();
+  if (b) { await b.imprimirSistema(html, `Faturamento ${periodo}`); return; }
+  const f = h("iframe", { style: { position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0" } });
+  document.body.append(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); }, 300);
+}
+const escapar = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

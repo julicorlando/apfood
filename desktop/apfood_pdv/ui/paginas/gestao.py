@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QSpinBox, QTabWidget, QTableWidget, QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QSpinBox, QTabWidget, QTableWidget, QVBoxLayout, QWidget,
 )
 
 from ...api import SemConexao
@@ -20,6 +20,74 @@ def _titulo(texto: str) -> QLabel:
     t = QLabel(texto)
     t.setProperty("papel", "titulo")
     return t
+
+
+def _data(d: date) -> QDateEdit:
+    e = QDateEdit(QDate(d.year, d.month, d.day))
+    e.setCalendarPopup(True)
+    e.setDisplayFormat("dd/MM/yyyy")
+    return e
+
+
+def mostrar_e_imprimir(parent, ctx, titulo: str, linhas: list) -> None:
+    """Prévia do cupom com o botão Imprimir (térmica do caixa ou impressora do Windows configurada)."""
+    DialogoTexto(titulo, para_texto(linhas, ctx.cfg.largura_bobina), parent,
+                 acoes=[("Imprimir", lambda: seguro(parent, ctx.imprimir, linhas) is not None and ctx.status("Enviado para a impressora"))]).exec()
+
+
+class DialogoFechamentos(QDialog):
+    """Imprimir fechamento de caixa por dia. Operador: os próprios. Gerente/administrador: de um operador
+    ou de todos de uma vez (um cupom atrás do outro)."""
+
+    def __init__(self, ctx, parent=None):
+        super().__init__(parent)
+        self.ctx = ctx
+        self.setWindowTitle("Imprimir fechamento de caixa")
+        lay = QFormLayout(self)
+        self.dia = _data(date.today())
+        lay.addRow("Dia (DD/MM/AAAA)", self.dia)
+        self.operador = QComboBox()
+        self.operador.addItem("Todos os operadores", "")
+        self.info = QLabel("")
+        self.info.setWordWrap(True)
+        if ctx.eh_gerente:
+            lay.addRow("Operador", self.operador)
+            self.dia.dateChanged.connect(lambda *_: self._operadores())
+            self._operadores()
+        lay.addRow(self.info)
+        h = QHBoxLayout()
+        h.addWidget(botao("Visualizar / imprimir", self.imprimir, "primario"))
+        h.addWidget(botao("Fechar", self.reject))
+        lay.addRow(h)
+
+    def _params(self, **extra) -> dict:
+        p = {"data": self.dia.date().toString("dd/MM/yyyy"), "largura": self.ctx.cfg.largura_bobina, **extra}
+        if self.operador.currentData():
+            p["usuario"] = self.operador.currentData()
+        return p
+
+    def _operadores(self):
+        try:
+            r = self.ctx.api.get("/api/turnos/fechamentos/", **self._params())
+        except Exception:  # noqa: BLE001
+            return
+        atual = self.operador.currentData()
+        if self.operador.count() == 1:
+            for o in r.get("operadores", []):
+                self.operador.addItem(o["nome"], o["id"])
+            i = self.operador.findData(atual)
+            self.operador.setCurrentIndex(max(0, i))
+        n = len(r.get("turnos", []))
+        self.info.setText(f"{n} caixa(s) fechado(s) nesse dia." if n else "Nenhum caixa fechado nesse dia.")
+
+    def imprimir(self):
+        try:
+            r = self.ctx.api.get("/api/turnos/fechamentos/", **self._params(cupom=1))
+        except Exception as e:  # noqa: BLE001
+            erro(self, e)
+            return
+        quem = self.operador.currentText() if self.ctx.eh_gerente else self.ctx.usuario.get("nome", "")
+        mostrar_e_imprimir(self, self.ctx, f"Fechamento(s) — {self.dia.date().toString('dd/MM/yyyy')} — {quem}", r["linhas"])
 
 
 # =============================================================================
@@ -41,8 +109,9 @@ class PaginaCaixa(QWidget):
         self.btn_despesa = botao("Pagar despesa com a gaveta", self.despesa)
         self.btn_fechar = botao("Fechar caixa", self.fechar, "perigo")
         self.btn_relatorio = botao("Imprimir parcial (gerente)", self.parcial)
+        self.btn_reimprimir = botao("Imprimir fechamento (por dia)", lambda: DialogoFechamentos(self.ctx, self).exec())
         for i, b in enumerate((self.btn_abrir, self.btn_sangria, self.btn_suprimento, self.btn_despesa,
-                               self.btn_fechar, self.btn_relatorio)):
+                               self.btn_fechar, self.btn_relatorio, self.btn_reimprimir)):
             b.setMinimumHeight(54)
             g.addWidget(b, i // 3, i % 3)
         lay.addLayout(g)
@@ -332,15 +401,27 @@ class PaginaRelatorios(QWidget):
         self.periodo = QComboBox()
         for rot, v in (("Hoje", "dia"), ("Esta semana", "semana"), ("Este mês", "mes"), ("Personalizado", "")):
             self.periodo.addItem(rot, v)
-        self.inicio, self.fim = QDateEdit(date.today() - timedelta(days=7)), QDateEdit(date.today())
+        self.inicio, self.fim = _data(date.today() - timedelta(days=7)), _data(date.today())
+        self._ajustando = False
+        self.periodo.currentIndexChanged.connect(self._ajustar_datas)
         for d_ in (self.inicio, self.fim):
-            d_.setCalendarPopup(True)
-            d_.setDisplayFormat("dd/MM/yyyy")
+            d_.dateChanged.connect(self._personalizado)
+        self.operador = QComboBox()
+        self.operador.addItem("Todos os operadores", "")
         topo.addWidget(self.periodo)
+        topo.addWidget(QLabel("De"))
         topo.addWidget(self.inicio)
+        topo.addWidget(QLabel("até"))
         topo.addWidget(self.fim)
+        topo.addWidget(self.operador)
         topo.addWidget(botao("Gerar", self.atualizar, "primario"))
         lay.addLayout(topo)
+        self._ajustar_datas()
+        impr = QHBoxLayout()
+        impr.addStretch()
+        impr.addWidget(botao("🖨 Imprimir relatório de faturamento", self.imprimir_faturamento, "primario"))
+        impr.addWidget(botao("🖨 Imprimir fechamentos de caixa", lambda: DialogoFechamentos(self.ctx, self).exec()))
+        lay.addLayout(impr)
         self.cards = QHBoxLayout()
         self.lbl = {k: QLabel("—") for k in ("fat", "ped", "ticket", "canc")}
         for k, rot in (("fat", "Faturamento"), ("ped", "Pedidos"), ("ticket", "Ticket médio"), ("canc", "Cancelados")):
@@ -364,10 +445,46 @@ class PaginaRelatorios(QWidget):
         else:
             self.lbl["fat"].setText("restrito a gerentes")
 
+    def _personalizado(self, *_):
+        if not self._ajustando and self.periodo.currentData():
+            self.periodo.blockSignals(True)
+            self.periodo.setCurrentIndex(self.periodo.findData(""))
+            self.periodo.blockSignals(False)
+
+    def _ajustar_datas(self, *_):
+        """Escolher Hoje/Semana/Mês já preenche as datas (DD/MM/AAAA); mexer nas datas vira Personalizado."""
+        hoje = date.today()
+        v = self.periodo.currentData()
+        ini = {"dia": hoje, "semana": hoje - timedelta(days=hoje.weekday()), "mes": hoje.replace(day=1)}.get(v)
+        if ini:
+            self._ajustando = True
+            self.inicio.setDate(QDate(ini.year, ini.month, ini.day))
+            self.fim.setDate(QDate(hoje.year, hoje.month, hoje.day))
+            self._ajustando = False
+
     def _params(self) -> dict:
         if self.periodo.currentData():
             return {"periodo": self.periodo.currentData()}
         return {"inicio": self.inicio.date().toString("yyyy-MM-dd"), "fim": self.fim.date().toString("yyyy-MM-dd")}
+
+    def imprimir_faturamento(self):
+        """Relatório de faturamento do período (DD/MM/AAAA), de todos ou de um operador, na impressora do caixa."""
+        if not self.ctx.eh_gerente:
+            erro(self, "O relatório de faturamento é para gerente/administrador.")
+            return
+        p = {"inicio": self.inicio.date().toString("dd/MM/yyyy"), "fim": self.fim.date().toString("dd/MM/yyyy"),
+             "largura": self.ctx.cfg.largura_bobina}
+        if self.operador.currentData():
+            p["operador"] = self.operador.currentData()
+        r = seguro(self, self.ctx.api.get, "/api/relatorios/faturamento/", **p)
+        if r:
+            self._preencher_operadores(r.get("operadores", []))
+            mostrar_e_imprimir(self, self.ctx, f"Faturamento {p['inicio']} a {p['fim']}", r["linhas"])
+
+    def _preencher_operadores(self, ops):
+        for o in ops:
+            if self.operador.findData(o["id"]) < 0:
+                self.operador.addItem(o["nome"], o["id"])
 
     def atualizar(self):
         p = self._params()
@@ -375,6 +492,11 @@ class PaginaRelatorios(QWidget):
         v = seguro(self, api.get, "/api/relatorios/vendas/", **p)
         if not v:
             return
+        if self.operador.count() == 1 and self.ctx.eh_gerente:
+            try:
+                self._preencher_operadores(api.get("/api/turnos/fechamentos/", **p).get("operadores", []))
+            except Exception:  # noqa: BLE001
+                pass
         self.lbl["fat"].setText(reais(v["faturamento_centavos"]))
         self.lbl["ped"].setText(str(v["pedidos"]))
         self.lbl["ticket"].setText(reais(v["ticket_medio_centavos"]))
