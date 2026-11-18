@@ -299,7 +299,7 @@ async function abrirComanda(id, aoMudar) {
       aberta ? botaoAcao("+ Lançar itens", lancarItens, "botao botao-primario") : null,
       aberta && c.status === "ABERTA" ? botaoAcao("Pedir a conta", async () => { await post(`/api/comandas/${id}/pedir-conta/`); await recarregar(); aoMudar(); }) : null,
       c.status === "FECHANDO" ? botaoAcao("Reabrir", async () => { await post(`/api/comandas/${id}/reabrir/`); await recarregar(); aoMudar(); }) : null,
-      botaoAcao("Imprimir conta", async () => { const r = await get(`/api/comandas/${id}/cupom/`); imprimirLinhas(r.linhas); }),
+      botaoAcao("Imprimir conta", async () => { const { qsLargura } = await import("./comum.js"); const r = await get(`/api/comandas/${id}/cupom/?${qsLargura()}`); imprimirLinhas(r.linhas); }),
       aberta ? botaoAcao("Dividir", async () => {
         const n = await pedirTexto("Dividir a conta", { rotulo: "Em quantas pessoas?", valor: String(c.pessoas), tipo: "number" });
         if (!n) return;
@@ -540,6 +540,7 @@ export function caixa() {
         }
         const rep = await get("/api/repasses-entregador/").catch(() => null);
         if (rep) area.append(cartaoRepasses(rep, !!t, carregar));
+        area.append(await cartaoImprimirFechamento());
         if (ehGerente()) {
           const abertos = (await lista("/api/turnos/", { status: "ABERTO" })).filter((x) => x.loja === sessao.loja?.id && x.id !== t?.id);
           if (abertos.length) {
@@ -557,6 +558,55 @@ export function caixa() {
       await carregar();
     },
   };
+}
+
+// Imprimir fechamento: cada operador o(s) seu(s) do dia; o administrador escolhe um operador ou todos de uma vez
+async function cartaoImprimirFechamento() {
+  const { campoData } = await import("./novidades.js");
+  const { imprimirLinhas, qsLargura, app, configurarImpressoraApp } = await import("./comum.js");
+  const dia = campoData();
+  const op = h("select", { "aria-label": "Operador" }, h("option", { value: "" }, "Todos os operadores"));
+  const listaEl = h("div");
+  const gerente = ehGerente();
+  async function buscar(extra = "") {
+    if (!dia.valida()) { erro("Digite a data no formato DD/MM/AAAA."); return null; }
+    const q = new URLSearchParams({ data: dia.value });
+    if (gerente && op.value) q.set("usuario", op.value);
+    return get(`/api/turnos/fechamentos/?${q}${extra}&${qsLargura()}`);
+  }
+  async function listar() {
+    const r = await buscar();
+    if (!r) return;
+    if (gerente && op.options.length === 1) r.operadores.forEach((o) => op.append(h("option", { value: o.id }, o.nome)));
+    trocar(listaEl, r.turnos.length ? tabela([
+      { rotulo: "Operador", campo: "operador" },
+      { rotulo: "Aberto", valor: (x) => dataHora(x.aberto_em) },
+      { rotulo: "Fechado", valor: (x) => dataHora(x.fechado_em) },
+      { rotulo: "", classe: "acoes-linha", valor: (x) => botaoAcao("🖨️ Imprimir", async () => {
+        const c = await get(`/api/turnos/${x.id}/cupom/?${qsLargura()}`);
+        imprimirLinhas(c.linhas);
+      }, "botao botao-pequeno") },
+    ], r.turnos) : h("p", { class: "muted" }, gerente ? "Nenhum caixa fechado nesse dia." : "Você não fechou caixa nesse dia."));
+  }
+  dia.addEventListener("change", listar);
+  op.addEventListener("change", listar);
+  const imprimirTodos = botaoAcao(gerente ? "🖨️ Imprimir de uma vez" : "🖨️ Imprimir meus fechamentos", async () => {
+    const r = await buscar("&cupom=1");
+    if (r) imprimirLinhas(r.linhas);
+  }, "botao botao-primario");
+  const cartao = h("div", { class: "cartao", style: { marginTop: "16px" } },
+    h("div", { class: "pedido-topo" }, h("h2", { style: { margin: 0 } }, "🖨️ Imprimir fechamento de caixa"),
+      app.bridge() ? botaoAcao("⚙️ Impressora", () => configurarImpressoraApp(), "botao botao-pequeno") : null),
+    h("p", { class: "muted" }, gerente ? "Escolha o dia e o operador (ou todos os operadores, um cupom atrás do outro)."
+      : "Escolha o dia para reimprimir o seu fechamento."),
+    h("div", { class: "barra-ferramentas", style: { flexWrap: "wrap" } },
+      h("label", { class: "campo", style: { maxWidth: "150px" } }, h("span", null, "Dia"), dia),
+      gerente ? h("label", { class: "campo", style: { minWidth: "200px" } }, h("span", null, "Operador"), op) : null,
+      h("button", { type: "button", class: "botao", onclick: listar }, "Ver"), imprimirTodos),
+    listaEl,
+    gerente ? h("p", { style: { marginTop: "10px" } }, h("a", { href: "#/faturamento" }, "📊 Relatório de faturamento por período (imprimir) →")) : null);
+  listar().catch(() => {});
+  return cartao;
 }
 
 // Dinheiro que os entregadores cobraram na porta: o entregador informa o repasse, a loja confere digitando o que recebeu
@@ -696,7 +746,7 @@ function fechar(t, recarregar) {
             { rotulo: "Diferença", classe: "num", valor: (l) => h("span", { class: l.diferenca_centavos ? "etiqueta e-erro" : "" }, dinheiro(l.diferenca_centavos)) },
           ], r.conferencia || [])),
         rodape: [botaoAcao("Imprimir fechamento", async () => {
-          const c = await get(`/api/turnos/${t.id}/cupom/`);
+          const { qsLargura } = await import("./comum.js"); const c = await get(`/api/turnos/${t.id}/cupom/?${qsLargura()}`);
           imprimirLinhas(c.linhas);
         }), botaoAcao("Ver cupom", async () => { const c = await get(`/api/turnos/${t.id}/cupom/`); mostrarCupom(c.linhas, { titulo: "Fechamento de caixa" }); })],
         aoFechar: recarregar,

@@ -20,13 +20,33 @@ from apps.pedidos.models import ItemPedido, Pagamento, Pedido
 from . import serializers as s
 
 
+def ler_data(txt) -> date | None:
+    """AAAA-MM-DD ou DD/MM/AAAA."""
+    t = str(txt or "").strip()
+    if "/" in t:
+        try:
+            d, m, a = (int(x) for x in t.split("/"))
+            return date(a, m, d)
+        except (ValueError, TypeError):
+            return None
+    try:
+        return parse_date(t)
+    except ValueError:
+        return None
+
+
 def periodo(request) -> tuple[date, date]:
     q = request.query_params
     hoje = timezone.localdate()
+    if q.get("data"):
+        d = ler_data(q["data"])
+        if not d:
+            raise ValidationError({"periodo": ["data inválida (DD/MM/AAAA)"]})
+        return d, d
     if q.get("inicio") or q.get("fim"):
-        inicio, fim = parse_date(q.get("inicio") or ""), parse_date(q.get("fim") or "")
+        inicio, fim = ler_data(q.get("inicio") or q.get("fim")), ler_data(q.get("fim") or q.get("inicio"))
         if not inicio or not fim or fim < inicio:
-            raise ValidationError({"periodo": ["informe inicio e fim válidos (AAAA-MM-DD)"]})
+            raise ValidationError({"periodo": ["informe as datas no formato DD/MM/AAAA (a final depois da inicial)"]})
         if (fim - inicio).days > 366:
             raise ValidationError({"periodo": ["máximo de 1 ano por consulta"]})
         return inicio, fim
@@ -402,3 +422,101 @@ class RepassesEntregadorView(APIView):
                                      repasse_id=d.get("repasse_id") or None, entregador_id=d.get("entregador_id") or None,
                                      observacao=str(d.get("observacao") or ""))
         return Response(cobranca_entrega._repasse_out(r), status=201)
+
+
+def faturamento(loja, inicio, fim, operador=None) -> dict:
+    """Faturamento do período (pedidos concluídos por data de referência) e recebimentos (pagamentos
+    confirmados no período). Com `operador`: só o que esse operador recebeu e os pedidos dele."""
+    from django.db.models import Count
+
+    pgs = Pagamento.objects.filter(Q(pedido__loja=loja) | Q(comanda__loja=loja), status="CONFIRMADO",
+                                   confirmado_em__date__range=(inicio, fim))
+    pedidos = Pedido.objects.filter(loja=loja, status="CONCLUIDO", data_referencia__range=(inicio, fim))
+    cancel = Pedido.objects.filter(loja=loja, status__in=["CANCELADO", "RECUSADO"], data_referencia__range=(inicio, fim))
+    if operador is not None:
+        pgs = pgs.filter(recebido_por=operador)
+        ids = Pagamento.objects.filter(recebido_por=operador, status="CONFIRMADO", pedido__isnull=False) \
+            .values("pedido_id")
+        pedidos = pedidos.filter(pk__in=ids)
+        cancel = cancel.filter(historico__usuario=operador, historico__status_para__in=["CANCELADO", "RECUSADO"]).distinct()
+    t = pedidos.aggregate(fat=Sum("total_centavos"), n=Count("id"), sub=Sum("subtotal_centavos"), taxa=Sum("taxa_entrega_centavos"),
+                          desc=Sum("desconto_centavos"), acr=Sum("acrescimo_centavos"))
+    fat, n = t["fat"] or 0, t["n"] or 0
+    c = cancel.aggregate(n=Count("id"), v=Sum("total_centavos"))
+    formas = list(pgs.values("forma").annotate(bruto=Sum("valor_centavos"), taxas=Sum("taxa_centavos"), q=Count("id"))
+                  .order_by("-bruto"))
+    bruto = sum(f["bruto"] or 0 for f in formas)
+    taxas = sum(f["taxas"] or 0 for f in formas)
+    por_op = {}
+    for x in pgs.values("recebido_por_id", "recebido_por__first_name", "recebido_por__last_name", "recebido_por__username") \
+            .annotate(bruto=Sum("valor_centavos"), q=Count("id")):
+        nome = (f"{x['recebido_por__first_name'] or ''} {x['recebido_por__last_name'] or ''}".strip()
+                or x["recebido_por__username"] or "Online / app / entregador")
+        por_op[str(x["recebido_por_id"] or "")] = {"operador_id": str(x["recebido_por_id"] or "") or None, "operador": nome,
+                                                   "bruto_centavos": x["bruto"] or 0, "quantidade": x["q"]}
+    return {
+        "inicio": inicio, "fim": fim, "emitido_em": timezone.localtime(),
+        "operador": str(operador) if operador is not None else "",
+        "resumo": {"faturamento_centavos": fat, "pedidos": n, "ticket_medio_centavos": ticket_medio(fat, n),
+                   "subtotal_centavos": t["sub"] or 0, "taxas_entrega_centavos": t["taxa"] or 0,
+                   "descontos_centavos": t["desc"] or 0, "acrescimos_centavos": t["acr"] or 0,
+                   "cancelados": c["n"] or 0, "cancelados_centavos": c["v"] or 0},
+        "por_forma": [{"forma": f["forma"], "bruto_centavos": f["bruto"] or 0, "taxas_centavos": f["taxas"] or 0,
+                       "liquido_centavos": (f["bruto"] or 0) - (f["taxas"] or 0), "quantidade": f["q"]} for f in formas],
+        "recebido": {"bruto_centavos": bruto, "taxas_centavos": taxas, "liquido_centavos": bruto - taxas},
+        "por_canal": [{"canal": x["canal"], "pedidos": x["n"], "faturamento_centavos": x["fat"] or 0}
+                      for x in pedidos.values("canal").annotate(n=Count("id"), fat=Sum("total_centavos")).order_by("-fat")],
+        "por_operador": sorted(por_op.values(), key=lambda o: -o["bruto_centavos"]),
+        "por_dia": [{"data": x["data_referencia"], "pedidos": x["n"], "faturamento_centavos": x["fat"] or 0}
+                    for x in pedidos.values("data_referencia").annotate(n=Count("id"), fat=Sum("total_centavos"))
+                    .order_by("data_referencia")],
+    }
+
+
+def operadores_da_loja(loja) -> list[dict]:
+    """Quem trabalhou no caixa da loja (últimos 120 dias): para escolher no relatório."""
+    from apps.contas.models import Usuario
+
+    desde = timezone.now() - timedelta(days=120)
+    ids = set(TurnoCaixa.objects.filter(loja=loja, aberto_em__gte=desde).values_list("usuario_id", flat=True))
+    return [{"id": str(u.id), "nome": str(u)} for u in Usuario.objects.filter(pk__in=ids).order_by("first_name", "username")]
+
+
+class FaturamentoView(Relatorio):
+    """Relatório de faturamento por período (DD/MM/AAAA), geral ou de um operador, com as linhas
+    para imprimir na térmica (?largura=32 para 58 mm)."""
+
+    def get(self, request):
+        from apfood_core.cupom import relatorio_faturamento
+
+        from apps.contas.models import Usuario
+        from apps.fiscal.services import dados_loja, linhas_para_json
+
+        from .views import _largura
+
+        loja, inicio, fim = self.base(request)
+        operador = None
+        if oid := request.query_params.get("operador"):
+            operador = Usuario.objects.filter(pk=oid).first()
+            if operador is None:
+                raise ValidationError({"operador": ["operador não encontrado"]})
+        d = faturamento(loja, inicio, fim, operador)
+        linhas = linhas_para_json(relatorio_faturamento(d, dados_loja(loja), _largura(request)))
+        return Response({**d, "linhas": linhas, "operadores": operadores_da_loja(loja)})
+
+
+class ImpressaoEscposView(APIView):
+    """App Empresa (Android): converte as linhas do cupom em ESC/POS para a térmica de rede ou Bluetooth."""
+
+    permission_classes = [UsuarioLiberado]
+
+    def post(self, request):
+        import base64
+
+        from apfood_core.escpos import para_escpos
+
+        linhas = request.data.get("linhas")
+        if not isinstance(linhas, list) or not linhas:
+            raise ValidationError({"linhas": ["nada para imprimir"]})
+        dados = para_escpos(linhas[:3000], abrir_gaveta=bool(request.data.get("gaveta")))
+        return Response({"base64": base64.b64encode(dados).decode()})

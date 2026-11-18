@@ -129,6 +129,7 @@ export function operadores() {
     const r = await get(`/api/relatorios/operadores/?${q}`);
     const formas = (o) => Object.entries(o.por_forma || {}).map(([f, v]) => `${rotulo("FormaPagamento", f)} ${dinheiro(v)}`).join(" · ") || "—";
     trocar(area,
+      h("p", { class: "nao-imprimir" }, h("a", { class: "botao", href: "#/faturamento" }, "🧾 Relatório de faturamento por data (imprimir)")),
       h("div", { class: "grade grade-kpi", style: { marginBottom: "16px" } },
         kpi("Recebido pelos operadores", dinheiro(r.total_recebido_centavos), "pagamentos confirmados no caixa"),
         kpi("Pedidos efetivados", dinheiro(r.total_pedidos_centavos), "lançados por eles e concluídos"),
