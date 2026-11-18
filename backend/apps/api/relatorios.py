@@ -518,5 +518,27 @@ class ImpressaoEscposView(APIView):
         linhas = request.data.get("linhas")
         if not isinstance(linhas, list) or not linhas:
             raise ValidationError({"linhas": ["nada para imprimir"]})
-        dados = para_escpos(linhas[:3000], abrir_gaveta=bool(request.data.get("gaveta")))
+        logo = None
+        if any(isinstance(l, dict) and l.get("logo") for l in linhas):
+            from apps.lojas import logo_impressao
+
+            from .views import _largura
+
+            loja = loja_da_requisicao(request, obrigatoria=False)
+            d = logo_impressao.dados(loja, _largura(request)) if loja is not None else None
+            logo = d["escpos"] if d else None
+        dados = para_escpos(linhas[:3000], abrir_gaveta=bool(request.data.get("gaveta")), logo=logo)
         return Response({"base64": base64.b64encode(dados).decode()})
+
+
+class LogoImpressaoView(APIView):
+    """Logo da loja pronta para a impressora (PDV do PC guarda e usa até sem internet)."""
+
+    permission_classes = [UsuarioLiberado]
+
+    def get(self, request):
+        from apps.lojas import logo_impressao
+
+        from .views import _largura
+
+        return Response(logo_impressao.para_api(loja_da_requisicao(request), _largura(request)))

@@ -70,6 +70,26 @@ class Contexto:
         self.loja = loja
         self.api.loja_id = loja["id"]
         self.banco.gravar("loja", loja)
+        self.carregar_logo()
+
+    def carregar_logo(self) -> bool:
+        """Logo da loja para todos os cupons: baixa do servidor e guarda (vale sem internet)."""
+        import base64
+
+        from ..impressao import definir_logo
+
+        larg = self.cfg.largura_bobina
+        chave = f"logo_impressao:{self.loja.get('id')}:{larg}"
+        try:
+            d = self.api.get("/api/impressao/logo/", largura=larg)
+            self.banco.gravar(chave, d)
+        except Exception:  # noqa: BLE001 — sem internet: usa a guardada
+            d = self.banco.ler(chave)
+        if not d or not d.get("tem_logo"):
+            definir_logo(larg, None, None)
+            return False
+        definir_logo(larg, base64.b64decode(d.get("escpos_base64") or ""), base64.b64decode(d.get("png_base64") or ""))
+        return True
 
     def escolher_loja(self, parent) -> bool:
         from .janela import escolher_loja
@@ -113,8 +133,11 @@ class Contexto:
 
     # --- impressão local (sem internet): mesmo layout, sempre NÃO FISCAL ----
     def loja_para_cupom(self) -> dict:
+        from ..impressao import logo
+
         return {"nome": self.loja.get("nome", ""), "cnpj": self.loja.get("cnpj", ""),
-                "telefone": self.loja.get("telefone", ""), "endereco": self.loja.get("endereco", "")}
+                "telefone": self.loja.get("telefone", ""), "endereco": self.loja.get("endereco", ""),
+                "logo": "local" if logo(self.cfg.largura_bobina) else ""}
 
     def impressora_do_setor(self, setor_nome: str) -> str:
         for s_ in self.banco.listar("setores"):
@@ -132,7 +155,7 @@ class Contexto:
             grupos.setdefault(i.get("setor") or "", []).append(i)
         for setor, itens in grupos.items():
             imprimir(self.impressora_do_setor(setor), cupom.cupom_cozinha({**pedido, "itens": itens}, setor or "Cozinha",
-                                                                       self.cfg.largura_bobina),
+                                                                       self.cfg.largura_bobina, self.loja_para_cupom()),
                      largura=self.cfg.largura_bobina)
         return len(grupos)
 

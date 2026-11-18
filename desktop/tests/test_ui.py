@@ -405,3 +405,31 @@ def test_imprime_fechamento_de_um_ou_de_todos_os_operadores(ctx, monkeypatch):
     assert d._params()["usuario"] == "u1"
     c = gestao.PaginaCaixa(ctx)
     assert c.btn_reimprimir.text().startswith("Imprimir fechamento")
+
+
+def test_logo_da_loja_sai_em_todos_os_cupons_do_pc(ctx, monkeypatch):
+    import base64
+
+    from apfood_core import cupom
+
+    from apfood_pdv import impressao
+
+    raster = b"\x1dv0\x00" + bytes([2, 0, 2, 0]) + b"\xff" * 4
+    ctx.servidor.rotas.insert(0, ("GET", r"/api/impressao/logo/", lambda c, m: (200, {
+        "tem_logo": True, "versao": "v1", "escpos_base64": base64.b64encode(raster).decode(),
+        "png_base64": base64.b64encode(b"png").decode()})))
+    assert ctx.carregar_logo()
+    loja = ctx.loja_para_cupom()
+    assert loja["logo"] == "local"
+    linhas = cupom.comprovante_venda({"itens": [], "total_centavos": 0, "pagamentos": []}, loja, 48)
+    assert linhas[0].logo
+    dados = impressao.para_escpos(linhas, largura=48)
+    assert raster in dados and dados.index(raster) < dados.index(b"BURGER DEMO")
+    assert "png" not in impressao.para_texto(linhas)
+
+    # sem internet: usa a logo guardada
+    impressao.definir_logo(48, None, None)
+    ctx.servidor.online = False
+    assert ctx.carregar_logo() and impressao.logo(48)["escpos"] == raster
+    ctx.servidor.online = True
+    impressao.definir_logo(48, None, None)

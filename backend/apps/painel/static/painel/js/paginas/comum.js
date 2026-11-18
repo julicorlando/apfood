@@ -8,6 +8,13 @@ import {
 const CLASSE_ALINHAMENTO = { centro: "centro", direita: "direita" };
 
 function linhaCupom(doc, l) {
+  if (l.logo) {  // logo da loja no topo de todos os cupons
+    const img = doc.createElement("img");
+    img.alt = "";
+    img.className = "logo";
+    img.src = l.texto;
+    return img;
+  }
   if (l.qrcode) {
     const img = doc.createElement("img");
     img.alt = "QR Code";
@@ -40,7 +47,8 @@ body { margin: 0; font-family: "Courier New", monospace; font-size: 11px; color:
 .negrito { font-weight: bold; } .grande { font-size: 17px; font-weight: bold; }
 .centro { text-align: center; } .direita { text-align: right; }
 .corte { border-bottom: 1px dashed #000; margin: 4mm 0; page-break-after: always; }
-img { display: block; margin: 2mm auto; width: 34mm; height: 34mm; }`;
+img { display: block; margin: 2mm auto; width: 34mm; height: 34mm; }
+img.logo { width: auto; height: auto; max-width: 46mm; max-height: 24mm; object-fit: contain; filter: grayscale(1) contrast(1.4); }`;
 
 function htmlCupom(linhas) {
   const doc = document.implementation.createHTMLDocument("Cupom");
@@ -50,6 +58,7 @@ function htmlCupom(linhas) {
   for (const l of linhas) {
     const el = linhaCupom(doc, l);
     if (el.tagName === "IMG") el.src = new URL(el.getAttribute("src"), location.origin).href;
+    if (el.classList?.contains("logo")) el.style.cssText = "max-width:46mm;max-height:24mm;width:auto;height:auto";
     doc.body.append(el);
   }
   return "<!doctype html>" + doc.documentElement.outerHTML;

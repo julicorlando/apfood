@@ -110,8 +110,11 @@ def recibo(a: AcertoEntregador, largura: int = 48) -> list[dict]:
     def par(a_, b_):
         return l(a_ + " " * max(1, largura - len(a_) - len(b_)) + b_)
 
+    from apps.lojas.logo_impressao import url as url_logo
+
     saldo = a.ganhos_centavos - a.em_maos_centavos
-    return [
+    logo = [{**l(url_logo(a.loja), alinhamento="centro"), "logo": True}] if a.loja.logo else []
+    return logo + [
         l(a.loja.nome, negrito=True, alinhamento="centro"),
         l("RECIBO DE ACERTO — ENTREGADOR", negrito=True, alinhamento="centro"),
         l("-" * largura),

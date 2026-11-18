@@ -26,6 +26,7 @@ class Linha:
     alinhamento: str = "esquerda"  # esquerda | centro | direita
     corte: bool = False  # cortar o papel depois desta linha
     qrcode: bool = False  # imprime `texto` como QR Code
+    logo: bool = False  # imprime a logo da loja (`texto` = endereço da imagem); sem logo, a linha é ignorada
 
 
 def _r(c: int) -> str:
@@ -64,8 +65,12 @@ def _sep(largura: int, c: str = "-") -> Linha:
     return Linha(c * largura)
 
 
+def _logo(loja: dict | None) -> list[Linha]:
+    return [Linha(loja["logo"], logo=True, alinhamento="centro")] if loja and loja.get("logo") else []
+
+
 def _cabecalho_loja(loja: dict, largura: int) -> list[Linha]:
-    out = [Linha(loja.get("nome", "").upper(), negrito=True, alinhamento="centro")]
+    out = _logo(loja) + [Linha(loja.get("nome", "").upper(), negrito=True, alinhamento="centro")]
     for campo in ("razao_social", "endereco"):
         if loja.get(campo):
             out += [Linha(t, alinhamento="centro") for t in _quebrar(loja[campo], largura)]
@@ -195,11 +200,11 @@ def danfe_nfce(pedido: dict, loja: dict, nota: dict, largura: int = 48) -> list[
     return corpo[:fim] + fiscal + corpo[fim:]
 
 
-def cupom_cozinha(pedido: dict, setor: str = "", largura: int = 48) -> list[Linha]:
+def cupom_cozinha(pedido: dict, setor: str = "", largura: int = 48, loja: dict | None = None) -> list[Linha]:
     """Via de produção: número grande, itens grandes, observações em destaque, sem preços."""
     L = largura
     destino = pedido.get("mesa") and f"MESA {pedido['mesa']}" or (pedido.get("tipo_atendimento") or "").replace("_", " ")
-    out = [
+    out = _logo(loja) + [
         Linha(setor.upper() or "COZINHA", negrito=True, alinhamento="centro"),
         Linha(f"#{pedido.get('numero') or pedido.get('codigo_local', '')}", negrito=True, grande=True, alinhamento="centro"),
         Linha(destino.upper(), negrito=True, grande=True, alinhamento="centro"),
@@ -308,7 +313,7 @@ def para_texto(linhas: list[Linha], largura: int = 48) -> str:
     """Versão texto (pré-visualização, e-mail, log)."""
     saida = []
     for l in linhas:
-        if l.corte:
+        if l.corte or l.logo:
             continue
         t = l.texto
         if l.alinhamento == "centro":
