@@ -24,10 +24,25 @@ AVANCA_E_CORTA = ESC + b"d\x04" + GS + b"V\x42\x00"
 GAVETA = ESC + b"p\x00\x19\xfa"  # pulso no pino 2: abre a gaveta de dinheiro
 
 
+# Logo da loja (baixada do servidor e guardada no PDV): {largura: {"escpos": bytes, "png": bytes}}
+LOGO: dict[int, dict] = {}
+
+
+def definir_logo(largura: int, escpos: bytes | None, png: bytes | None) -> None:
+    if escpos or png:
+        LOGO[32 if largura == 32 else 48] = {"escpos": escpos or b"", "png": png or b""}
+    else:
+        LOGO.pop(32 if largura == 32 else 48, None)
+
+
+def logo(largura: int = 48) -> dict | None:
+    return LOGO.get(32 if largura == 32 else 48) or LOGO.get(48) or LOGO.get(32)
+
+
 def _linha(l) -> dict:
     return l if isinstance(l, dict) else {"texto": l.texto, "negrito": l.negrito, "grande": l.grande,
                                          "alinhamento": l.alinhamento, "corte": l.corte,
-                                         "qrcode": getattr(l, "qrcode", False)}
+                                         "qrcode": getattr(l, "qrcode", False), "logo": getattr(l, "logo", False)}
 
 
 def qrcode_escpos(conteudo: str, tamanho: int = 6) -> bytes:
@@ -41,14 +56,19 @@ def qrcode_escpos(conteudo: str, tamanho: int = 6) -> bytes:
             + GS + b"(k\x03\x001Q0")                     # imprime
 
 
-def para_escpos(linhas, *, abrir_gaveta: bool = False, codificacao: str = "cp860") -> bytes:
-    """`linhas`: Linha do apfood_core.cupom ou dicts vindos da API."""
+def para_escpos(linhas, *, abrir_gaveta: bool = False, codificacao: str = "cp860", largura: int = 48) -> bytes:
+    """`linhas`: Linha do apfood_core.cupom ou dicts vindos da API. Linha de logo → a logo guardada da loja."""
     out = bytearray(INICIAR + CODEPAGE_PT)
+    lg = logo(largura)
     if abrir_gaveta:
         out += GAVETA
     for l in map(_linha, linhas):
         if l.get("corte"):
             out += AVANCA_E_CORTA
+            continue
+        if l.get("logo"):
+            if lg and lg.get("escpos"):
+                out += ALINHA["centro"] + lg["escpos"] + b"\n"
             continue
         out += ALINHA.get(l.get("alinhamento", "esquerda"), ALINHA["esquerda"])
         if l.get("qrcode"):
@@ -63,7 +83,7 @@ def para_escpos(linhas, *, abrir_gaveta: bool = False, codificacao: str = "cp860
 def para_texto(linhas, largura: int = 48) -> str:
     saida = []
     for l in map(_linha, linhas):
-        if l.get("corte"):
+        if l.get("corte") or l.get("logo"):
             continue
         t = ("[QR Code] " if l.get("qrcode") else "") + (l.get("texto") or "")
         saida.append(t.center(largura).rstrip() if l.get("alinhamento") == "centro" else t)
@@ -117,7 +137,7 @@ def imprimir(destino: str, linhas, *, largura: int = 48, abrir_gaveta: bool = Fa
         from .impressao_qt import imprimir_driver
 
         return imprimir_driver(destino.removeprefix("windows:").strip(), linhas, largura)
-    return enviar(destino, para_escpos(linhas, abrir_gaveta=abrir_gaveta), texto=para_texto(linhas, largura))
+    return enviar(destino, para_escpos(linhas, abrir_gaveta=abrir_gaveta, largura=largura), texto=para_texto(linhas, largura))
 
 
 def descrever(destino: str) -> str:

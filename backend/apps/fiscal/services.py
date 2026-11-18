@@ -26,8 +26,10 @@ def dados_loja(loja) -> dict:
         end += f" - {loja.bairro}"
     if loja.cidade:
         end += f" - {loja.cidade}/{loja.uf}"
+    from apps.lojas.logo_impressao import url as url_logo
+
     return {"nome": loja.nome, "razao_social": loja.empresa.razao_social, "cnpj": loja.cnpj or loja.empresa.cnpj or "",
-            "endereco": end.strip(" -"), "telefone": loja.telefone}
+            "endereco": end.strip(" -"), "telefone": loja.telefone, "logo": url_logo(loja)}
 
 
 def dados_pedido(pedido) -> dict:
@@ -67,7 +69,7 @@ def dados_pedido(pedido) -> dict:
 
 def linhas_para_json(linhas) -> list[dict]:
     return [{"texto": l.texto, "negrito": l.negrito, "grande": l.grande, "alinhamento": l.alinhamento,
-             "corte": l.corte, "qrcode": l.qrcode} for l in linhas]
+             "corte": l.corte, "qrcode": l.qrcode, **({"logo": True} if l.logo else {})} for l in linhas]
 
 
 def dados_nota(nota) -> dict:
@@ -96,7 +98,8 @@ def cupons_cozinha(pedido, largura=48) -> list[dict]:
 
     impressoras = {s.nome: s.impressora for s in SetorProducao.objects.filter(loja=pedido.loja)}
     return [{"setor": setor, "impressora": impressoras.get(setor, ""),
-             "linhas": linhas_para_json(cupom.cupom_cozinha({**dados, "itens": itens}, setor or "Cozinha", largura))}
+             "linhas": linhas_para_json(cupom.cupom_cozinha({**dados, "itens": itens}, setor or "Cozinha", largura,
+                                                            dados_loja(pedido.loja)))}
             for setor, itens in por_setor.items()]
 
 

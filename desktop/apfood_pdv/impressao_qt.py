@@ -86,6 +86,26 @@ def _desenhar(nome: str, linhas, largura: int) -> str:
             if pendente_pagina:
                 pr.newPage()
                 y, pendente_pagina = 0.0, False
+            if l.get("logo"):
+                from PySide6.QtGui import QImage
+
+                from .impressao import logo
+
+                lg = logo(largura)
+                img = QImage.fromData(lg["png"]) if lg and lg.get("png") else None
+                if img is None or img.isNull():
+                    continue
+                w = larg_px * (0.55 if largura >= 48 else 0.6)
+                h_ = w * img.height() / max(1, img.width())
+                if h_ > alt_px * 0.18:
+                    h_ = alt_px * 0.18
+                    w = h_ * img.width() / max(1, img.height())
+                if y + h_ > alt_px:
+                    pr.newPage()
+                    y = 0.0
+                p.drawImage(QRectF((larg_px - w) / 2, y, w, h_), img)
+                y += h_ + QFontMetricsF(base, pr).lineSpacing() * 0.4
+                continue
             if l.get("qrcode"):
                 img = _qr(l.get("texto") or "")
                 if img is None:

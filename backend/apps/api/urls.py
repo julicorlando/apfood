@@ -69,6 +69,7 @@ urlpatterns = [
     path("relatorios/fechamentos/", relatorios.FechamentosView.as_view()),
     path("relatorios/faturamento/", relatorios.FaturamentoView.as_view()),
     path("impressao/escpos/", relatorios.ImpressaoEscposView.as_view()),
+    path("impressao/logo/", relatorios.LogoImpressaoView.as_view()),
     path("relatorios/fluxo-caixa/", relatorios.FluxoCaixaView.as_view()),
     path("plataforma/resumo/", relatorios.PlataformaResumoView.as_view()),
     # público (cardápio digital)
